@@ -64,3 +64,31 @@ test('a response without limits yields no quotas', () => {
     assert.deepEqual(quotas({}, now), []);
     assert.deepEqual(quotas(null, now), []);
 });
+
+test('a scoped quota named after a single reserved letter does not collapse into it', () => {
+    const data = payload();
+    data.limits[2].percent = 12;
+    data.limits[2].scope.model.display_name = 'S';
+    const [session, , scoped] = quotas(data, now);
+    assert.equal(session.short, 'S');
+    assert.notEqual(scoped.short, 'S');
+});
+
+test('two scoped quotas sharing an initial each get a distinct short', () => {
+    const data = payload();
+    data.limits[2].percent = 12;
+    data.limits[2].scope.model.display_name = 'Opus';
+    data.limits.push({
+        kind: 'weekly_scoped',
+        group: 'weekly',
+        percent: 8,
+        severity: 'normal',
+        resets_at: null,
+        scope: {model: {id: null, display_name: 'Owl'}, surface: null},
+        is_active: false,
+    });
+    const [, , first, second] = quotas(data, now);
+    assert.equal(first.name, 'Opus');
+    assert.equal(second.name, 'Owl');
+    assert.notEqual(first.short, second.short);
+});
