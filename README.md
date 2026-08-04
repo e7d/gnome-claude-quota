@@ -43,10 +43,20 @@ The extension reads your OAuth token from `~/.claude/.credentials.json` (read-on
 ## Install
 
 ```bash
-git clone https://github.com/e7d/claude-quota
-ln -s "$(pwd)/claude-quota" ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
+mkdir -p ~/.local/share/gnome-shell/extensions
+git clone https://github.com/e7d/claude-quota ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
 gnome-extensions enable claude-quota@e7d.io
 ```
+
+To keep the checkout elsewhere and symlink it instead, link the clone by absolute path:
+
+```bash
+git clone https://github.com/e7d/claude-quota
+mkdir -p ~/.local/share/gnome-shell/extensions
+ln -sfn "$(realpath claude-quota)" ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
+```
+
+Run that from the directory *containing* the clone, not from inside it — inside, `claude-quota` resolves against the repository itself and you get a symlink pointing at its own parent.
 
 On Wayland, a running shell session does not detect newly installed extensions until you log out and back in. If `gnome-extensions enable` reports `Extension "claude-quota@e7d.io" does not exist`, log out first — it is not a sign of a broken install.
 
