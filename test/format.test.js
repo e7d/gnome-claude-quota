@@ -36,6 +36,11 @@ test('absoluteTime adds the weekday on another day', () => {
     assert.match(text, /07:59/);
 });
 
+test('absoluteTime has no leading zero on the hour in a 12-hour locale', () => {
+    const text = absoluteTime(new Date('2026-08-04T14:00:00Z'), now, 'en-US');
+    assert.equal(text, '2:00 PM');
+});
+
 test('windowProgress measures elapsed time in the session window', () => {
     const value = windowProgress(new Date('2026-08-04T11:59:00Z'), now, WINDOW_LENGTH_MS.session);
     assert.equal(Math.round(value * 100), 17);
