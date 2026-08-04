@@ -1,6 +1,6 @@
 # claude-quota
 
-A GNOME Shell indicator showing your Claude API quota usage with per-window progress bars.
+A GNOME Shell indicator showing your Claude Code subscription quota usage — the 5-hour session window and the weekly window.
 
 ```
 Panel:  ✳ S 5% · W 37%
@@ -15,15 +15,17 @@ Popup:
   3d 22h left · sam. 09:59
 ```
 
+(Reset times are formatted in your system locale — the example shows French.)
+
 ## What the display means
 
-The panel shows your quota consumption as abbreviated bars:
+The panel shows your quota consumption as text labels (`S 5% · W 37%`) with a small icon:
 
 - **`S`** is your 5-hour session quota
 - **`W`** is your weekly quota
 - A model-scoped quota appears only when its usage is above 0%, labelled with the model's initial — `Opus`, `Sonnet`, `Fable` display as `O`, `So`, `F` respectively (a second letter is added if initials collide)
 
-Each bar visualizes usage within its time window:
+Each quota's bar in the popup visualizes usage within its time window:
 
 - The fill shows how much quota you've used
 - The thin tick mark shows how far the current window has run (e.g., 1 hour into a 5-hour session)
@@ -33,7 +35,7 @@ The popup displays the remaining time until each quota resets.
 
 ## Requirements
 
-- **GNOME Shell 50** or later
+- **GNOME Shell 50**
 - **Claude Code** signed in via OAuth
 
 The extension reads your OAuth token from `~/.claude/.credentials.json` (read-only). It never writes to this file and never refreshes the token. If your token expires, the popup will show `Token expired — run Claude Code once` to refresh it.
