@@ -12,9 +12,9 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {absoluteTime, relativeDuration} from './lib/format.js';
 import {quotas} from './lib/model.js';
+import {blockedUntil, isBlocked, markExpired, nextPollSeconds, shouldFetchOnOpen} from './lib/policy.js';
 import {UsageClient} from './lib/usage.js';
 
-const POLL_SECONDS = 60;
 const LEGEND = 'tick: window elapsed · red: over pace';
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
@@ -48,13 +48,13 @@ class QuotaBlock extends St.BoxLayout {
 
     update(quota, now, scheme) {
         this._name.text = quota.name;
-        this._percent.text = `${quota.percent}%`;
-        this._percent.style_class = severityClass('cq-percent', quota.severity, scheme);
-        this._bar.value = quota.percent / 100;
-        this._bar.overdriveStart = quota.windowProgress ?? 1;
+        this._percent.text = quota.expired ? '—' : `${quota.percent}%`;
+        this._percent.style_class = severityClass('cq-percent', quota.expired ? 'normal' : quota.severity, scheme);
+        this._bar.value = quota.expired ? 0 : quota.percent / 100;
+        this._bar.overdriveStart = quota.expired ? 1 : (quota.windowProgress ?? 1);
         this._setBarScheme(scheme);
-        this._caption.visible = quota.resetsAt !== null;
-        if (quota.resetsAt)
+        this._caption.visible = !quota.expired && quota.resetsAt !== null;
+        if (!quota.expired && quota.resetsAt)
             this._caption.text = `${relativeDuration(quota.resetsAt, now)} left · ${absoluteTime(quota.resetsAt, now)}`;
     }
 
@@ -79,6 +79,9 @@ class Indicator extends PanelMenu.Button {
         this._quotas = [];
         this._blocks = [];
         this._error = null;
+        this._fetchedAt = null;
+        this._blockedUntil = null;
+        this._timerId = null;
         const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         box.add_child(new St.Icon({
             style_class: 'system-status-icon',
@@ -106,38 +109,43 @@ class Indicator extends PanelMenu.Button {
             if (!open)
                 return;
             this._render();
-            this._refresh();
+            if (shouldFetchOnOpen(this._fetchedAt, new Date(), this._blockedUntil))
+                this._refresh();
         });
         this.connect('destroy', () => this._onDestroy());
         this._render();
         this._refresh();
-        this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, POLL_SECONDS, () => {
-            this._refresh();
-            return GLib.SOURCE_CONTINUE;
-        });
     }
 
     get _scheme() {
         return Main.getStyleVariant() === 'light' ? 'light' : 'dark';
     }
 
+    _scheduleNext(seconds) {
+        if (this._timerId) {
+            GLib.Source.remove(this._timerId);
+            this._timerId = null;
+        }
+        this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, seconds, () => {
+            this._refresh();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     async _refresh() {
+        const now = new Date();
+        if (isBlocked(this._blockedUntil, now)) {
+            this._scheduleNext(nextPollSeconds((this._blockedUntil - now) / 1000));
+            this._render();
+            return;
+        }
         const cancellable = new Gio.Cancellable();
         this._cancellable?.cancel();
         this._cancellable = cancellable;
-        let result;
-        try {
-            result = {payload: await this._client.fetch(cancellable), error: null};
-        } catch (error) {
-            if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                return;
-            result = {payload: null, error: error.message};
-        }
-        if (this._destroyed || this._cancellable !== cancellable)
+        const result = await this._fetchResult(cancellable);
+        if (result === null || this._destroyed || this._cancellable !== cancellable)
             return;
-        if (result.error === null)
-            this._quotas = quotas(result.payload, new Date());
-        this._error = result.error;
+        this._applyResult(result);
         try {
             this._render();
         } catch (error) {
@@ -145,37 +153,72 @@ class Indicator extends PanelMenu.Button {
         }
     }
 
+    async _fetchResult(cancellable) {
+        try {
+            return {payload: await this._client.fetch(cancellable), error: null, retryAfter: null};
+        } catch (error) {
+            if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                return null;
+            return {payload: null, error: error.message, retryAfter: error.retryAfter ?? null};
+        }
+    }
+
+    _applyResult(result) {
+        if (result.error === null) {
+            this._quotas = quotas(result.payload, new Date());
+            this._error = null;
+            this._blockedUntil = null;
+            this._fetchedAt = new Date();
+            this._scheduleNext(nextPollSeconds(null));
+            return;
+        }
+        this._error = result.error;
+        this._blockedUntil = blockedUntil(result.retryAfter, new Date());
+        this._scheduleNext(nextPollSeconds(result.retryAfter));
+    }
+
+    _composeMessage(now) {
+        if (this._error === null)
+            return null;
+        if (this._fetchedAt === null)
+            return this._error;
+        if (isBlocked(this._blockedUntil, now))
+            return `Rate limited — retrying at ${absoluteTime(this._blockedUntil, now)} · values from ${absoluteTime(this._fetchedAt, now)}`;
+        return `${this._error} · values from ${absoluteTime(this._fetchedAt, now)}`;
+    }
+
     _render() {
         const now = new Date();
         const scheme = this._scheme;
-        this._renderPanel(scheme);
-        if (this._blocks.length !== this._quotas.length) {
+        const quotaViews = markExpired(this._quotas, now);
+        this._renderPanel(quotaViews, scheme);
+        if (this._blocks.length !== quotaViews.length) {
             this._blockBox.destroy_all_children();
-            this._blocks = this._quotas.map(() => {
+            this._blocks = quotaViews.map(() => {
                 const block = new QuotaBlock();
                 this._blockBox.add_child(block);
                 return block;
             });
         }
-        this._quotas.forEach((quota, index) => this._blocks[index].update(quota, now, scheme));
-        const hasQuotas = this._quotas.length > 0;
-        const hasWindowProgress = this._quotas.some(quota => quota.windowProgress !== null);
+        quotaViews.forEach((quota, index) => this._blocks[index].update(quota, now, scheme));
+        const hasQuotas = quotaViews.length > 0;
+        const hasWindowProgress = quotaViews.some(quota => !quota.expired && quota.windowProgress !== null);
         this._body.visible = hasQuotas;
         this._legend.visible = hasQuotas && hasWindowProgress;
         this._message.visible = !hasQuotas || this._error !== null;
-        this._message.label.text = this._error ?? 'Loading…';
+        this._message.label.text = this._composeMessage(now) ?? 'Loading…';
     }
 
-    _renderPanel(scheme) {
+    _renderPanel(quotaViews, scheme) {
         this._panelQuotas.destroy_all_children();
-        if (!this._quotas.length) {
+        if (!quotaViews.length) {
             this._panelQuotas.add_child(new St.Label({
                 text: this._error ? '—' : '…',
                 y_align: Clutter.ActorAlign.CENTER,
             }));
             return;
         }
-        this._quotas.forEach((quota, index) => {
+        quotaViews.forEach((quota, index) => {
             if (index > 0) {
                 this._panelQuotas.add_child(new St.Label({
                     text: '·',
@@ -184,8 +227,8 @@ class Indicator extends PanelMenu.Button {
                 }));
             }
             this._panelQuotas.add_child(new St.Label({
-                text: `${quota.short} ${quota.percent}%`,
-                style_class: severityClass('cq-panel-quota', quota.severity, scheme),
+                text: quota.expired ? `${quota.short} —` : `${quota.short} ${quota.percent}%`,
+                style_class: severityClass('cq-panel-quota', quota.expired ? 'normal' : quota.severity, scheme),
                 y_align: Clutter.ActorAlign.CENTER,
             }));
         });

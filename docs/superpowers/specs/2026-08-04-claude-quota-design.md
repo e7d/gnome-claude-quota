@@ -6,7 +6,7 @@
 - **What:** panel indicator reading `S 5% · W 37%` (plus `F 12%` when a scoped quota is non-zero), click for a popup recapping each quota's name, usage, reset time, and window progress.
 - **Data:** `GET https://api.anthropic.com/api/oauth/usage`, bearer token read from `~/.claude/.credentials.json`. Read-only — never written back.
 - **Key design move:** one `BarLevel` per quota with `overdriveStart = windowProgress`. The shell natively draws a tick at that point and paints the fill red past it, so "burning quota faster than the clock" is a color, not a calculation.
-- **Shape:** ~240 lines across four files. Two of them are GI-free and unit-tested with `node --test`.
+- **Shape:** ~240 lines across five files. Three of them are GI-free and unit-tested with `node --test`.
 - **Out of scope:** preferences UI, gettext, OAuth token refresh.
 
 ## Context
@@ -54,17 +54,19 @@ windowProgress = 1 - (resetsAt - now) / windowLength
 
 ```
 metadata.json
-extension.js            St widgets, 60s timer, severity classes      ~120 lines
-lib/usage.js            Soup request, token read, error mapping        ~50
-lib/model.js            limits[] → view model                         ~40   GI-free
-lib/format.js           durations, absolute times, window progress     ~30   GI-free
+extension.js            St widgets, self-rescheduling poll, severity classes   ~160 lines
+lib/usage.js            Soup request, token read, error + retry-after mapping    ~55
+lib/model.js            limits[] → view model                                   ~40   GI-free
+lib/format.js           durations, absolute times, window progress               ~30   GI-free
+lib/policy.js           poll interval, backoff, staleness rules                  ~30   GI-free
 stylesheet.css
 icons/claude-quota-symbolic.svg
 test/model.test.js      node --test
 test/format.test.js     node --test
+test/policy.test.js     node --test
 ```
 
-`model.js` and `format.js` import nothing from `gi://`, so `node --test` runs them directly. They hold every piece of logic that can be silently wrong — quota selection, scoped-quota visibility, duration rendering, window arithmetic. The GI-touching layers stay thin enough to verify by eye in a live shell.
+`model.js`, `format.js` and `policy.js` import nothing from `gi://`, so `node --test` runs them directly. They hold every piece of logic that can be silently wrong — quota selection, scoped-quota visibility, duration rendering, window arithmetic, and now the polling/backoff/staleness rules. The GI-touching layers stay thin enough to verify by eye in a live shell.
 
 ### View model
 
@@ -139,15 +141,32 @@ Severity colours are the only literal values in the stylesheet, and they exist t
 | --- | --- | --- |
 | First load | `✳ …` | `Loading…` |
 | Loaded | percentages | quota blocks |
-| Request failed | last known values retained | the failure reason |
-| `401` | last known values retained | `Token expired — run Claude Code once` |
+| Request failed, values cached | last known values retained | failure reason · `values from <time>` |
+| `429`, values cached | last known values retained | `Rate limited — retrying at <time> · values from <time>` |
+| `401` | last known values retained | `Token expired — run Claude Code once` (with `· values from <time>` once something has been cached) |
 | Credentials unreadable | last known values retained (`✳ —` only if this happens before any poll has ever succeeded) | `Cannot read ~/.claude/.credentials.json` |
 | Scoped quota at 0% | omitted | omitted |
 | `resets_at: null`, percent > 0 | shown | bar without tick, no caption |
+| Cached quota's window has rolled over (`resetsAt <= now`) | `—` | `—`, bar at 0 with no tick, no caption |
+
+## Polling, backoff, and cached fallback
+
+Measured against the live endpoint with the extension disabled: a `429` carries `retry-after: 119` (essentially two minutes), and 139 seconds of subsequent silence was enough for the same allowance to answer `200` again with real data. The original 60-second poll sits *inside* that window, so a single `429` used to be permanent — every following poll landed inside the retry window, re-armed it, and the popup showed the rate-limit message forever. Neighbouring Claude extensions installed on this machine poll at 300 s and 600 s against the same allowance, which is the evidence behind the new interval below.
+
+`lib/policy.js` is GI-free and holds every rule:
+
+- `POLL_SECONDS = 300` — the steady-state interval, comfortably outside the measured 119 s window.
+- `OPEN_REFRESH_SECONDS = 60` — opening the popup only forces a refresh when the cached data is older than this; a popup opened seconds after a poll does not re-fetch.
+- `nextPollSeconds(retryAfterSeconds)` — `POLL_SECONDS` normally, or `retryAfterSeconds + 5` when the server asks for longer. The 5-second margin exists because retrying exactly at the boundary re-burns the slot.
+- `blockedUntil` / `isBlocked` — the block window derived from the same `retryAfterSeconds + 5`, checked before every fetch.
+- `shouldFetchOnOpen` — false while blocked, true when there is no cached fetch yet, true once the cache is older than `OPEN_REFRESH_SECONDS`, false otherwise.
+- `markExpired` — flags a cached quota whose `resetsAt` has rolled over, so a stale percentage from before a window reset is never shown as current.
+
+`extension.js` drives a self-rescheduling one-shot timer (`_scheduleNext`, `GLib.timeout_add_seconds(GLib.PRIORITY_LOW, seconds, …)` returning `GLib.SOURCE_REMOVE`) instead of a fixed repeating interval, so the delay can change after every poll. `_refresh()` checks `isBlocked` first and skips the network entirely while inside a backoff window — this is the fix for the self-perpetuation, since a poll that never reaches the server can never re-arm the 429. On failure the previously fetched quotas stay on screen; only the message line changes, naming the time the cached values are from (and, while blocked, the time the next retry is due).
 
 ## Interaction
 
-Click toggles the popup and triggers an immediate refresh, so an open popup is never a minute stale. A 60-second `GLib.timeout_add_seconds` at low priority drives the rest, and is removed in `disable()`. Captions are recomputed on each poll and on open — no second timer for clock drift.
+Click toggles the popup, re-renders immediately from cache, and only triggers a network refresh when `shouldFetchOnOpen` says the cache is stale and no backoff is in effect — so a popup opened right after a poll does not double-fetch, and one opened during a 429 backoff does not re-arm it. The background timer reschedules itself after every poll (300 s steady state, longer under backoff) and is removed in `disable()`. Captions are recomputed on each render, including renders driven purely by a popup open with no new fetch.
 
 No buttons, no activatable rows, no scroll handling. Motion is whatever the shell already does when a popup opens.
 
@@ -163,7 +182,7 @@ Absolute times via `Intl.DateTimeFormat` in the system locale: `13:59` when the 
 
 ## Testing
 
-`node --test test/` over `lib/model.js` and `lib/format.js`:
+`node --test` (bare, no path argument) over `lib/model.js`, `lib/format.js` and `lib/policy.js`:
 
 - quota selection and ordering from a captured API response
 - scoped quota hidden at 0%, shown above 0%
@@ -171,8 +190,12 @@ Absolute times via `Intl.DateTimeFormat` in the system locale: `13:59` when the 
 - window progress for both window lengths, including a reset in the past
 - duration rendering at each threshold boundary
 - absolute time rendering for today and another day
+- `nextPollSeconds` at, below, and above the steady-state interval, and with no retry-after
+- `blockedUntil` / `isBlocked` around the boundary
+- `shouldFetchOnOpen` for never-fetched, fresh, stale, and blocked cache states
+- `markExpired` for a past, future, and null `resetsAt`, and non-mutation of its input
 
-Fixtures come from a real captured response with identifying fields removed. `extension.js` and `lib/usage.js` are verified by running the extension in a live shell — a nested session (`dbus-run-session -- gnome-shell --nested --wayland`) makes that a fast loop.
+Fixtures come from a real captured response with identifying fields removed. `extension.js` and `lib/usage.js` are verified by running the extension in a live shell — a nested session (`dbus-run-session -- gnome-shell --nested --wayland`, or `--headless --wayland --virtual-monitor` on GNOME 50 where `--nested` was removed) makes that a fast loop.
 
 ## Out of scope
 
