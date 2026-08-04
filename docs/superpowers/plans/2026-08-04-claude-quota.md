@@ -486,17 +486,17 @@ git commit -S -m "feat: read the OAuth usage endpoint"
 
 - [ ] **Step 2: Write `icons/claude-quota-symbolic.svg`**
 
-Twelve tapered rays as six rounded capsules rotated about the centre. The `-symbolic.svg` suffix is what makes St recolour it with the panel foreground; renaming the file breaks the recolouring.
+Eight rays as four rounded capsules rotated about the centre. The `-symbolic.svg` suffix is what makes St recolour it with the panel foreground; renaming the file breaks the recolouring.
+
+This is a generic asterisk, deliberately not a reproduction of Anthropic's mark — that one is their trademark and does not belong in a third-party extension. Two reasons converge on eight rays: it is visibly its own glyph rather than an imitation, and it survives the panel's actual 16px. A twelve-ray version was rendered first and collapsed into a dark blob, the rays leaving sub-pixel gaps. Each candidate was checked with `rsvg-convert -w 16` and inspected magnified.
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
   <g fill="#000000" transform="translate(8,8)">
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(30)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(60)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(90)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(120)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(150)"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(45)"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(90)"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(135)"/>
   </g>
 </svg>
 ```

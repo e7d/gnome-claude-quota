@@ -89,7 +89,7 @@ Visibility rule: `session` and `weekly_all` always render. Any other entry rende
 
 One `St.Label` per quota inside a horizontal `St.BoxLayout`, separated by dim `·` labels. Per-quota labels rather than one concatenated string, because severity colours one quota at a time.
 
-- 16px symbolic SVG asterisk, recoloured by the theme like any other panel icon.
+- 16px symbolic SVG asterisk, recoloured by the theme like any other panel icon. Eight rays, drawn here — a generic glyph, not a reproduction of Anthropic's twelve-ray mark, which is their trademark. Eight also happens to be the count that stays legible at 16px; twelve renders as a blob.
 - No attempt at tabular figures. Cantarell's digits are already uniform width, so the only width change comes from a digit being added (9% → 10%), which no font feature fixes. GNOME's own clock behaves the same way.
 - Severity: `normal` inherits the panel foreground; `warning` and `critical` apply a class. Both colours are chosen per colour scheme, read from `St.Settings.colorScheme` — no single amber clears 4.5:1 against both a dark and a light panel.
 
