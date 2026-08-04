@@ -60,7 +60,7 @@ lib/model.js            limits[] → view model                                 
 lib/format.js           durations, absolute times, window progress               ~30   GI-free
 lib/policy.js           poll interval, backoff, staleness rules                  ~30   GI-free
 stylesheet.css
-icons/claude-quota-symbolic.svg
+icons/claude-quota.svg
 test/model.test.js      node --test
 test/format.test.js     node --test
 test/policy.test.js     node --test
@@ -91,7 +91,8 @@ Visibility rule: `session` and `weekly_all` always render. Any other entry rende
 
 One `St.Label` per quota inside a horizontal `St.BoxLayout`, separated by dim `·` labels. Per-quota labels rather than one concatenated string, because severity colours one quota at a time.
 
-- 16px symbolic SVG asterisk, recoloured by the theme like any other panel icon. Eight rays, drawn here — a generic glyph, not a reproduction of Anthropic's twelve-ray mark, which is their trademark. Eight also happens to be the count that stays legible at 16px; twelve renders as a blob.
+- 16px SVG asterisk, eight rays, drawn here — a generic glyph, not a reproduction of Anthropic's twelve-ray mark, which is their trademark and whose press-kit assets carry no reuse licence. Eight is also the count that stays legible at 16px; twelve renders as a blob.
+- The file is `icons/claude-quota.svg`, deliberately **not** `-symbolic.svg`: St recolours symbolic icons with the panel foreground and would discard the fill. It is painted `#c6613f`, which measures 3.83:1 on a dark panel and 3.88:1 on a light one — both clear the 3:1 that WCAG asks of a graphical object. Renaming the file back to `-symbolic.svg` would silently turn the colour off.
 - No attempt at tabular figures. Cantarell's digits are already uniform width, so the only width change comes from a digit being added (9% → 10%), which no font feature fixes. GNOME's own clock behaves the same way.
 - Severity: `normal` inherits the panel foreground; `warning` and `critical` apply a class. Both colours are chosen per colour scheme, read from `St.Settings.colorScheme` — no single amber clears 4.5:1 against both a dark and a light panel.
 

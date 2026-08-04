@@ -491,11 +491,11 @@ git commit -S -m "feat: read the OAuth usage endpoint"
 
 **Files:**
 - Create: `metadata.json`
-- Create: `icons/claude-quota-symbolic.svg`
+- Create: `icons/claude-quota.svg`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: the extension UUID `claude-quota@e7d.io`, consumed by Task 6's install path, and the icon path `icons/claude-quota-symbolic.svg`, consumed by Task 5.
+- Produces: the extension UUID `claude-quota@e7d.io`, consumed by Task 6's install path, and the icon path `icons/claude-quota.svg`, consumed by Task 5.
 
 - [ ] **Step 1: Write `metadata.json`**
 
@@ -509,7 +509,7 @@ git commit -S -m "feat: read the OAuth usage endpoint"
 }
 ```
 
-- [ ] **Step 2: Write `icons/claude-quota-symbolic.svg`**
+- [ ] **Step 2: Write `icons/claude-quota.svg`**
 
 Eight rays as four rounded capsules rotated about the centre. The `-symbolic.svg` suffix is what makes St recolour it with the panel foreground; renaming the file breaks the recolouring.
 
@@ -517,7 +517,7 @@ This is a generic asterisk, deliberately not a reproduction of Anthropic's mark 
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-  <g fill="#000000" transform="translate(8,8)">
+  <g fill="#c6613f" transform="translate(8,8)">
     <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75"/>
     <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(45)"/>
     <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(90)"/>
@@ -528,14 +528,14 @@ This is a generic asterisk, deliberately not a reproduction of Anthropic's mark 
 
 - [ ] **Step 3: Verify both files**
 
-Run: `jq -e . metadata.json > /dev/null && echo "metadata ok" && xmllint --noout --nonet icons/claude-quota-symbolic.svg && echo "svg ok"`
+Run: `jq -e . metadata.json > /dev/null && echo "metadata ok" && xmllint --noout --nonet icons/claude-quota.svg && echo "svg ok"`
 
 Expected: `metadata ok` then `svg ok`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add metadata.json icons/claude-quota-symbolic.svg
+git add metadata.json icons/claude-quota.svg
 git commit -S -m "feat: extension manifest and panel icon"
 ```
 
@@ -796,7 +796,7 @@ class Indicator extends PanelMenu.Button {
 
 export default class ClaudeQuotaExtension extends Extension {
     enable() {
-        this._indicator = new Indicator(`${this.path}/icons/claude-quota-symbolic.svg`);
+        this._indicator = new Indicator(`${this.path}/icons/claude-quota.svg`);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }
 

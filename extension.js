@@ -248,7 +248,7 @@ class Indicator extends PanelMenu.Button {
 
 export default class ClaudeQuotaExtension extends Extension {
     enable() {
-        this._indicator = new Indicator(`${this.path}/icons/claude-quota-symbolic.svg`);
+        this._indicator = new Indicator(`${this.path}/icons/claude-quota.svg`);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }
 
