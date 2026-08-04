@@ -371,7 +371,7 @@ export function quotas(payload, now) {
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `TZ=UTC node --test test/`
+Run: `TZ=UTC node --test`
 
 Expected: PASS, 18 tests across both files.
 
@@ -784,7 +784,7 @@ export default class ClaudeQuotaExtension extends Extension {
 
 - [ ] **Step 3: Verify the whole tree still parses**
 
-Run: `TZ=UTC node --test test/ && gjs -c "print('gjs ok')"`
+Run: `TZ=UTC node --test && gjs -c "print('gjs ok')"`
 
 Expected: 18 tests pass, then `gjs ok`. `extension.js` cannot be imported outside the shell — Task 6 is its real test.
 
@@ -896,7 +896,7 @@ Contents, in this order:
 2. What each part means: `S` session, `W` weekly, a letter per scoped model shown only above 0%; the tick marks how far the window has run; fill past the tick is red because usage is outrunning the clock.
 3. Requirements: GNOME Shell 50, Claude Code signed in (the extension reads `~/.claude/.credentials.json` read-only and never writes to it).
 4. Install: `git clone` then `ln -s` into `~/.local/share/gnome-shell/extensions/claude-quota@e7d.io`, then `gnome-extensions enable claude-quota@e7d.io`.
-5. Tests: `TZ=UTC node --test test/`, and why `TZ` is pinned (`Intl` uses the system zone).
+5. Tests: `TZ=UTC node --test`, and why `TZ` is pinned (`Intl` uses the system zone).
 6. A "Not affiliated with Anthropic" line, matching what comparable extensions state.
 
 No badges, no feature-bullet marketing, no roadmap.
