@@ -1,0 +1,58 @@
+.cq-panel {
+    spacing: 6px;
+}
+
+.cq-body {
+    spacing: 10px;
+}
+
+.cq-block {
+    spacing: 4px;
+    min-width: 260px;
+}
+
+.cq-name,
+.cq-percent {
+    font-weight: 500;
+}
+
+.cq-bar {
+    -barlevel-height: 6px;
+    -barlevel-overdrive-separator-width: 2px;
+}
+
+.cq-bar-dark {
+    -barlevel-background-color: rgba(255, 255, 255, 0.1);
+    -barlevel-active-background-color: -st-accent-color;
+    -barlevel-overdrive-color: #c01c28;
+}
+
+.cq-bar-light {
+    -barlevel-background-color: rgba(34, 34, 38, 0.1);
+    -barlevel-active-background-color: -st-accent-color;
+    -barlevel-overdrive-color: #e01b24;
+}
+
+.cq-caption {
+    font-size: 0.9em;
+}
+
+.cq-legend {
+    font-size: 0.85em;
+}
+
+.cq-warning-dark {
+    color: #f5c211;
+}
+
+.cq-critical-dark {
+    color: #ff7b63;
+}
+
+.cq-warning-light {
+    color: #a6600a;
+}
+
+.cq-critical-light {
+    color: #c01c28;
+}

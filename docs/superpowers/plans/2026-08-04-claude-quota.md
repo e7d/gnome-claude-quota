@@ -167,7 +167,7 @@ export function absoluteTime(target, now, locale = undefined) {
     const sameDay = target.getFullYear() === now.getFullYear() &&
         target.getMonth() === now.getMonth() &&
         target.getDate() === now.getDate();
-    const options = {hour: '2-digit', minute: '2-digit'};
+    const options = {hour: 'numeric', minute: '2-digit'};
     if (!sameDay)
         options.weekday = 'short';
     return new Intl.DateTimeFormat(locale, options).format(target);
@@ -371,7 +371,7 @@ export function quotas(payload, now) {
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `TZ=UTC node --test test/`
+Run: `TZ=UTC node --test`
 
 Expected: PASS, 18 tests across both files.
 
@@ -416,7 +416,13 @@ function accessToken() {
     } catch {
         throw new Error('Cannot read ~/.claude/.credentials.json');
     }
-    const token = JSON.parse(new TextDecoder().decode(contents))?.claudeAiOauth?.accessToken;
+    let data;
+    try {
+        data = JSON.parse(new TextDecoder().decode(contents));
+    } catch {
+        throw new Error('Cannot parse ~/.claude/.credentials.json');
+    }
+    const token = data?.claudeAiOauth?.accessToken;
     if (!token)
         throw new Error('No Claude token in ~/.claude/.credentials.json');
     return token;
@@ -428,6 +434,8 @@ export class UsageClient {
     }
 
     destroy() {
+        if (!this._session)
+            return;
         this._session.abort();
         this._session = null;
     }
@@ -436,16 +444,33 @@ export class UsageClient {
         const message = Soup.Message.new('GET', ENDPOINT);
         message.request_headers.append('Authorization', `Bearer ${accessToken()}`);
         message.request_headers.append('anthropic-beta', 'oauth-2025-04-20');
-        const bytes = await this._session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, cancellable);
-        const status = message.get_status();
+        let bytes;
+        try {
+            bytes = await this._session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, cancellable);
+        } catch (error) {
+            if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                throw error;
+            throw new Error('Cannot reach api.anthropic.com');
+        }
+        const status = message.status_code;
         if (status === Soup.Status.UNAUTHORIZED)
             throw new Error('Token expired — run Claude Code once');
+        if (status === 429)
+            throw new Error('Rate limited — try again in a few minutes');
         if (status !== Soup.Status.OK)
             throw new Error(`Usage request failed (HTTP ${status})`);
-        return JSON.parse(new TextDecoder().decode(bytes.get_data()));
+        try {
+            return JSON.parse(new TextDecoder().decode(bytes.get_data()));
+        } catch {
+            throw new Error('Unexpected response from the usage endpoint');
+        }
     }
 }
 ```
+
+Every rejection carries user-facing text, because the popup prints `error.message` verbatim. Three of these were missing in an earlier draft and a review caught them: a network failure rejects with a `Gio_ResolverError` that is not even `instanceof Error` and whose message is raw resolver output; a malformed credentials file rejects with SpiderMonkey's parser message; and `destroy()` threw on a second call, which GNOME can make across reloads.
+
+The cancellation re-throw is load-bearing: `extension.js` recognises a cancelled request by `error.matches(Gio.IOErrorEnum, CANCELLED)`, so converting it to a friendly `Error` would make every refresh that overtakes a previous one display "Cannot reach api.anthropic.com".
 
 - [ ] **Step 2: Verify the module parses**
 
@@ -486,17 +511,17 @@ git commit -S -m "feat: read the OAuth usage endpoint"
 
 - [ ] **Step 2: Write `icons/claude-quota-symbolic.svg`**
 
-Twelve tapered rays as six rounded capsules rotated about the centre. The `-symbolic.svg` suffix is what makes St recolour it with the panel foreground; renaming the file breaks the recolouring.
+Eight rays as four rounded capsules rotated about the centre. The `-symbolic.svg` suffix is what makes St recolour it with the panel foreground; renaming the file breaks the recolouring.
+
+This is a generic asterisk, deliberately not a reproduction of Anthropic's mark — that one is their trademark and does not belong in a third-party extension. Two reasons converge on eight rays: it is visibly its own glyph rather than an imitation, and it survives the panel's actual 16px. A twelve-ray version was rendered first and collapsed into a dark blob, the rays leaving sub-pixel gaps. Each candidate was checked with `rsvg-convert -w 16` and inspected magnified.
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
   <g fill="#000000" transform="translate(8,8)">
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(30)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(60)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(90)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(120)"/>
-    <rect x="-0.85" y="-6.6" width="1.7" height="13.2" rx="0.85" transform="rotate(150)"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(45)"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(90)"/>
+    <rect x="-0.75" y="-6.8" width="1.5" height="13.6" rx="0.75" transform="rotate(135)"/>
   </g>
 </svg>
 ```
@@ -528,7 +553,7 @@ git commit -S -m "feat: extension manifest and panel icon"
 
 Two mechanics were verified against the Shell 50 source and must not be "simplified" away:
 
-- `BarLevel._init` spreads `...params` **after** `style_class: 'barlevel'`, so passing `style_class` at construction **replaces** it and loses every theme default. Add the class afterwards with `add_style_class_name()`.
+- `BarLevel._init` spreads `...params` **after** `style_class: 'barlevel'`, so passing `style_class` at construction **replaces** it. `add_style_class_name()` keeps the `barlevel` class alongside ours instead — but that class carries no colours of its own (the shipped theme declares `-barlevel-*` only under `.slider` and `.osd-window .level`), so the three `-barlevel-*` properties must be declared by this extension's own class, not assumed to come free.
 - The popup is not a descendant of the panel button in the actor tree, so a colour-scheme class on the button cannot style the menu. Severity classes therefore carry the scheme in their own name (`cq-warning-dark`), with no ancestor dependency.
 
 - [ ] **Step 1: Write `stylesheet.css`**
@@ -784,7 +809,7 @@ export default class ClaudeQuotaExtension extends Extension {
 
 - [ ] **Step 3: Verify the whole tree still parses**
 
-Run: `TZ=UTC node --test test/ && gjs -c "print('gjs ok')"`
+Run: `TZ=UTC node --test && gjs -c "print('gjs ok')"`
 
 Expected: 18 tests pass, then `gjs ok`. `extension.js` cannot be imported outside the shell — Task 6 is its real test.
 
@@ -896,7 +921,7 @@ Contents, in this order:
 2. What each part means: `S` session, `W` weekly, a letter per scoped model shown only above 0%; the tick marks how far the window has run; fill past the tick is red because usage is outrunning the clock.
 3. Requirements: GNOME Shell 50, Claude Code signed in (the extension reads `~/.claude/.credentials.json` read-only and never writes to it).
 4. Install: `git clone` then `ln -s` into `~/.local/share/gnome-shell/extensions/claude-quota@e7d.io`, then `gnome-extensions enable claude-quota@e7d.io`.
-5. Tests: `TZ=UTC node --test test/`, and why `TZ` is pinned (`Intl` uses the system zone).
+5. Tests: `TZ=UTC node --test`, and why `TZ` is pinned (`Intl` uses the system zone).
 6. A "Not affiliated with Anthropic" line, matching what comparable extensions state.
 
 No badges, no feature-bullet marketing, no roadmap.

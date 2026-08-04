@@ -72,7 +72,7 @@ test/format.test.js     node --test
 
 | Field | Value |
 | --- | --- |
-| `short` | `S` for session, `W` for weekly, otherwise the scope model's first letter — plus its second letter in lowercase when the first would collide with `S` or `W` (`Sonnet` → `So`, `Fable` → `F`) |
+| `short` | `S` for session, `W` for weekly, otherwise the scope model's first letter — plus its second, third, … letter in lowercase, one at a time, for as long as the label still collides with one already assigned (`Sonnet` → `So`, `Fable` → `F`). If every letter of the name is exhausted and it still collides, a numeric suffix is appended instead (`S`, `S2`, `S3`, …) |
 | `name` | `Session`, `Weekly`, or the scope model's display name |
 | `percent` | 0–100 |
 | `severity` | `normal` \| `warning` \| `critical` — any other value the API returns is treated as `normal` |
@@ -89,7 +89,7 @@ Visibility rule: `session` and `weekly_all` always render. Any other entry rende
 
 One `St.Label` per quota inside a horizontal `St.BoxLayout`, separated by dim `·` labels. Per-quota labels rather than one concatenated string, because severity colours one quota at a time.
 
-- 16px symbolic SVG asterisk, recoloured by the theme like any other panel icon.
+- 16px symbolic SVG asterisk, recoloured by the theme like any other panel icon. Eight rays, drawn here — a generic glyph, not a reproduction of Anthropic's twelve-ray mark, which is their trademark. Eight also happens to be the count that stays legible at 16px; twelve renders as a blob.
 - No attempt at tabular figures. Cantarell's digits are already uniform width, so the only width change comes from a digit being added (9% → 10%), which no font feature fixes. GNOME's own clock behaves the same way.
 - Severity: `normal` inherits the panel foreground; `warning` and `critical` apply a class. Both colours are chosen per colour scheme, read from `St.Settings.colorScheme` — no single amber clears 4.5:1 against both a dark and a light panel.
 
@@ -115,13 +115,15 @@ Each block is a vertical `St.BoxLayout`: name with right-aligned percentage, the
 
 `BarLevel` from `resource:///org/gnome/shell/ui/barLevel.js`, with `value = percent / 100`, `maximumValue = 1`, `overdriveStart = windowProgress`.
 
-Its `vfunc_repaint` draws a separator whenever `overdriveStart !== maximumValue`, in the foreground colour while `value <= overdriveStart` and in the bar background colour past it — visible on both sides without intervention. Fill beyond the separator uses `-barlevel-overdrive-color` (`#c01c28` in the shipped theme).
+Its `vfunc_repaint` draws a separator whenever `overdriveStart !== maximumValue`, in the foreground colour while `value <= overdriveStart` and in the bar background colour past it — visible on both sides without intervention. Fill beyond the separator uses `-barlevel-overdrive-color`. The shipped theme declares that property (and `-barlevel-background-color`, `-barlevel-active-background-color`) only under `.slider` and `.osd-window .level` — `.barlevel`, the class `BarLevel` actually carries, has none of them. This extension declares its own `.cq-bar-dark` / `.cq-bar-light` rules mirroring the shipped theme's own `.slider` values per colour scheme (`#c01c28` dark, `#e01b24` light), since a single hardcoded red is not correct in both.
 
 The result: the tick marks how far the window has run, and the bar turns red exactly when usage outruns it. No custom drawing, natively themed, accent-aware.
 
 `overdriveStart` is omitted when `windowProgress` is `null`, which suppresses the tick.
 
 `barLevel.js` is internal shell API, not a documented extension API — the single upstream coupling in this design. It has been stable across many releases and is roughly 30 lines of cairo to inline if it ever breaks.
+
+The `overdrive-start` ParamSpec upstream is declared over `[1, 2]`, with a default of `1` — the property exists for volume-style over-amplification, where `1.0` is 100% and up to `2.0` is 200%. This extension drives it over `[0, 1]` instead (`windowProgress`), which is outside the range upstream itself exercises. The JS accessor's own setter only rejects a value greater than `maximumValue`, so nothing enforces the ParamSpec's stated minimum, and the paint math (which works in ratios of `value` / `maximumValue`) is unaffected by operating below `1`.
 
 ## Styling
 
@@ -139,7 +141,7 @@ Severity colours are the only literal values in the stylesheet, and they exist t
 | Loaded | percentages | quota blocks |
 | Request failed | last known values retained | the failure reason |
 | `401` | last known values retained | `Token expired — run Claude Code once` |
-| Credentials unreadable | `✳ —` | `Cannot read ~/.claude/.credentials.json` |
+| Credentials unreadable | last known values retained (`✳ —` only if this happens before any poll has ever succeeded) | `Cannot read ~/.claude/.credentials.json` |
 | Scoped quota at 0% | omitted | omitted |
 | `resets_at: null`, percent > 0 | shown | bar without tick, no caption |
 
