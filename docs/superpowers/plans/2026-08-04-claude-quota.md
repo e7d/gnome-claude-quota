@@ -167,7 +167,7 @@ export function absoluteTime(target, now, locale = undefined) {
     const sameDay = target.getFullYear() === now.getFullYear() &&
         target.getMonth() === now.getMonth() &&
         target.getDate() === now.getDate();
-    const options = {hour: '2-digit', minute: '2-digit'};
+    const options = {hour: 'numeric', minute: '2-digit'};
     if (!sameDay)
         options.weekday = 'short';
     return new Intl.DateTimeFormat(locale, options).format(target);
@@ -452,9 +452,11 @@ export class UsageClient {
                 throw error;
             throw new Error('Cannot reach api.anthropic.com');
         }
-        const status = message.get_status();
+        const status = message.status_code;
         if (status === Soup.Status.UNAUTHORIZED)
             throw new Error('Token expired — run Claude Code once');
+        if (status === 429)
+            throw new Error('Rate limited — try again in a few minutes');
         if (status !== Soup.Status.OK)
             throw new Error(`Usage request failed (HTTP ${status})`);
         try {
