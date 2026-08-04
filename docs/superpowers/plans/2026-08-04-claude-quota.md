@@ -416,7 +416,13 @@ function accessToken() {
     } catch {
         throw new Error('Cannot read ~/.claude/.credentials.json');
     }
-    const token = JSON.parse(new TextDecoder().decode(contents))?.claudeAiOauth?.accessToken;
+    let data;
+    try {
+        data = JSON.parse(new TextDecoder().decode(contents));
+    } catch {
+        throw new Error('Cannot parse ~/.claude/.credentials.json');
+    }
+    const token = data?.claudeAiOauth?.accessToken;
     if (!token)
         throw new Error('No Claude token in ~/.claude/.credentials.json');
     return token;
@@ -428,6 +434,8 @@ export class UsageClient {
     }
 
     destroy() {
+        if (!this._session)
+            return;
         this._session.abort();
         this._session = null;
     }
@@ -436,16 +444,31 @@ export class UsageClient {
         const message = Soup.Message.new('GET', ENDPOINT);
         message.request_headers.append('Authorization', `Bearer ${accessToken()}`);
         message.request_headers.append('anthropic-beta', 'oauth-2025-04-20');
-        const bytes = await this._session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, cancellable);
+        let bytes;
+        try {
+            bytes = await this._session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, cancellable);
+        } catch (error) {
+            if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                throw error;
+            throw new Error('Cannot reach api.anthropic.com');
+        }
         const status = message.get_status();
         if (status === Soup.Status.UNAUTHORIZED)
             throw new Error('Token expired — run Claude Code once');
         if (status !== Soup.Status.OK)
             throw new Error(`Usage request failed (HTTP ${status})`);
-        return JSON.parse(new TextDecoder().decode(bytes.get_data()));
+        try {
+            return JSON.parse(new TextDecoder().decode(bytes.get_data()));
+        } catch {
+            throw new Error('Unexpected response from the usage endpoint');
+        }
     }
 }
 ```
+
+Every rejection carries user-facing text, because the popup prints `error.message` verbatim. Three of these were missing in an earlier draft and a review caught them: a network failure rejects with a `Gio_ResolverError` that is not even `instanceof Error` and whose message is raw resolver output; a malformed credentials file rejects with SpiderMonkey's parser message; and `destroy()` threw on a second call, which GNOME can make across reloads.
+
+The cancellation re-throw is load-bearing: `extension.js` recognises a cancelled request by `error.matches(Gio.IOErrorEnum, CANCELLED)`, so converting it to a friendly `Error` would make every refresh that overtakes a previous one display "Cannot reach api.anthropic.com".
 
 - [ ] **Step 2: Verify the module parses**
 
