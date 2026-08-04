@@ -16,7 +16,6 @@ import {quotas} from './lib/model.js';
 import {blockedUntil, isBlocked, markExpired, nextPollSeconds, shouldFetchOnOpen} from './lib/policy.js';
 import {UsageClient} from './lib/usage.js';
 
-const LEGEND = 'tick: window elapsed · red: over pace';
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
 
@@ -100,12 +99,8 @@ class Indicator extends PanelMenu.Button {
             x_expand: true,
         });
         this._body.add_child(this._blockBox);
-        this._legend = new PopupMenu.PopupMenuItem(LEGEND, {reactive: false});
-        this._legend.label.style_class = 'cq-legend';
-        this._legend.opacity = CAPTION_OPACITY;
         this.menu.addMenuItem(this._message);
         this.menu.addMenuItem(this._body);
-        this.menu.addMenuItem(this._legend);
         this._schemeId = this._settings.connect('notify::color-scheme', () => this._render());
         this.menu.connect('open-state-changed', (menu, open) => {
             if (!open)
@@ -241,9 +236,7 @@ class Indicator extends PanelMenu.Button {
         }
         quotaViews.forEach((quota, index) => this._blocks[index].update(quota, now, scheme));
         const hasQuotas = quotaViews.length > 0;
-        const hasWindowProgress = quotaViews.some(quota => !quota.expired && quota.windowProgress !== null);
         this._body.visible = hasQuotas;
-        this._legend.visible = hasQuotas && hasWindowProgress;
         this._message.visible = !hasQuotas || this._error !== null;
         this._message.label.text = this._composeMessage(now) ?? 'Loading…';
     }

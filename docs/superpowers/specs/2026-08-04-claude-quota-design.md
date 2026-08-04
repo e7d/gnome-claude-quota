@@ -108,11 +108,11 @@ Width ~280px, one block per visible quota. Blocks are separated by spacing rathe
   Weekly                      37%
   ▓▓▓▓▓▓▓▓▓▓▓╵▓░░░░░░░░░░░░░░░░░░
   3d 22h left · sam. 09:59
-
-  tick: window elapsed · red: over pace
 ```
 
-Each block is a vertical `St.BoxLayout`: name with right-aligned percentage, then the bar, then a dim caption. One legend line for the whole popup, not per block.
+Each block is a vertical `St.BoxLayout`: name with right-aligned percentage, then the bar, then a dim caption. Nothing else — there is no legend.
+
+An earlier version carried one (`tick: window elapsed · red: over pace`). It was cut because it is permanent furniture explaining a fact you learn once: red reads as "too fast" without being told, and the tick is a position marker you decode by watching it move. A popup that has to caption its own symbols is one symbol too clever or one caption too many; here it was the caption.
 
 ### The bar
 
