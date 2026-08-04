@@ -553,7 +553,7 @@ git commit -S -m "feat: extension manifest and panel icon"
 
 Two mechanics were verified against the Shell 50 source and must not be "simplified" away:
 
-- `BarLevel._init` spreads `...params` **after** `style_class: 'barlevel'`, so passing `style_class` at construction **replaces** it and loses every theme default. Add the class afterwards with `add_style_class_name()`.
+- `BarLevel._init` spreads `...params` **after** `style_class: 'barlevel'`, so passing `style_class` at construction **replaces** it. `add_style_class_name()` keeps the `barlevel` class alongside ours instead — but that class carries no colours of its own (the shipped theme declares `-barlevel-*` only under `.slider` and `.osd-window .level`), so the three `-barlevel-*` properties must be declared by this extension's own class, not assumed to come free.
 - The popup is not a descendant of the panel button in the actor tree, so a colour-scheme class on the button cannot style the menu. Severity classes therefore carry the scheme in their own name (`cq-warning-dark`), with no ancestor dependency.
 
 - [ ] **Step 1: Write `stylesheet.css`**

@@ -21,6 +21,18 @@
     -barlevel-overdrive-separator-width: 2px;
 }
 
+.cq-bar-dark {
+    -barlevel-background-color: rgba(255, 255, 255, 0.1);
+    -barlevel-active-background-color: -st-accent-color;
+    -barlevel-overdrive-color: #c01c28;
+}
+
+.cq-bar-light {
+    -barlevel-background-color: rgba(34, 34, 38, 0.1);
+    -barlevel-active-background-color: -st-accent-color;
+    -barlevel-overdrive-color: #e01b24;
+}
+
 .cq-caption {
     font-size: 0.9em;
 }

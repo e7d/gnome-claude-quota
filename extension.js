@@ -39,6 +39,7 @@ class QuotaBlock extends St.BoxLayout {
         header.add_child(this._percent);
         this._bar = new BarLevel({x_expand: true});
         this._bar.add_style_class_name('cq-bar');
+        this._barScheme = null;
         this._caption = new St.Label({style_class: 'cq-caption', opacity: CAPTION_OPACITY});
         this.add_child(header);
         this.add_child(this._bar);
@@ -51,9 +52,19 @@ class QuotaBlock extends St.BoxLayout {
         this._percent.style_class = severityClass('cq-percent', quota.severity, scheme);
         this._bar.value = quota.percent / 100;
         this._bar.overdriveStart = quota.windowProgress ?? 1;
+        this._setBarScheme(scheme);
         this._caption.visible = quota.resetsAt !== null;
         if (quota.resetsAt)
             this._caption.text = `${relativeDuration(quota.resetsAt, now)} left · ${absoluteTime(quota.resetsAt, now)}`;
+    }
+
+    _setBarScheme(scheme) {
+        if (this._barScheme === scheme)
+            return;
+        if (this._barScheme)
+            this._bar.remove_style_class_name(`cq-bar-${this._barScheme}`);
+        this._bar.add_style_class_name(`cq-bar-${scheme}`);
+        this._barScheme = scheme;
     }
 });
 
@@ -64,6 +75,7 @@ class Indicator extends PanelMenu.Button {
         this._client = new UsageClient();
         this._settings = St.Settings.get();
         this._cancellable = null;
+        this._destroyed = false;
         this._quotas = [];
         this._blocks = [];
         this._error = null;
@@ -106,22 +118,31 @@ class Indicator extends PanelMenu.Button {
     }
 
     get _scheme() {
-        return this._settings.color_scheme === St.SystemColorScheme.PREFER_DARK ? 'dark' : 'light';
+        return Main.getStyleVariant() === 'light' ? 'light' : 'dark';
     }
 
     async _refresh() {
+        const cancellable = new Gio.Cancellable();
         this._cancellable?.cancel();
-        this._cancellable = new Gio.Cancellable();
+        this._cancellable = cancellable;
+        let result;
         try {
-            const payload = await this._client.fetch(this._cancellable);
-            this._quotas = quotas(payload, new Date());
-            this._error = null;
+            result = {payload: await this._client.fetch(cancellable), error: null};
         } catch (error) {
             if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
                 return;
-            this._error = error.message;
+            result = {payload: null, error: error.message};
         }
-        this._render();
+        if (this._destroyed || this._cancellable !== cancellable)
+            return;
+        if (result.error === null)
+            this._quotas = quotas(result.payload, new Date());
+        this._error = result.error;
+        try {
+            this._render();
+        } catch (error) {
+            logError(error);
+        }
     }
 
     _render() {
@@ -138,8 +159,9 @@ class Indicator extends PanelMenu.Button {
         }
         this._quotas.forEach((quota, index) => this._blocks[index].update(quota, now, scheme));
         const hasQuotas = this._quotas.length > 0;
+        const hasWindowProgress = this._quotas.some(quota => quota.windowProgress !== null);
         this._body.visible = hasQuotas;
-        this._legend.visible = hasQuotas;
+        this._legend.visible = hasQuotas && hasWindowProgress;
         this._message.visible = !hasQuotas || this._error !== null;
         this._message.label.text = this._error ?? 'Loading…';
     }
@@ -170,6 +192,7 @@ class Indicator extends PanelMenu.Button {
     }
 
     _onDestroy() {
+        this._destroyed = true;
         if (this._timerId) {
             GLib.Source.remove(this._timerId);
             this._timerId = null;

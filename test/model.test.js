@@ -65,6 +65,24 @@ test('a response without limits yields no quotas', () => {
     assert.deepEqual(quotas(null, now), []);
 });
 
+test('limits present but not an array yields no quotas rather than throwing', () => {
+    assert.deepEqual(quotas({limits: {}}, now), []);
+});
+
+test('a blank display_name does not produce an empty short', () => {
+    const data = payload();
+    data.limits[2].percent = 12;
+    data.limits[2].scope.model.display_name = '';
+    const scoped = quotas(data, now).at(-1);
+    assert.notEqual(scoped.short, '');
+});
+
+test('a percent above 100 passes through unclamped', () => {
+    const data = payload();
+    data.limits[0].percent = 101;
+    assert.equal(quotas(data, now)[0].percent, 101);
+});
+
 test('a scoped quota named after a single reserved letter does not collapse into it', () => {
     const data = payload();
     data.limits[2].percent = 12;
