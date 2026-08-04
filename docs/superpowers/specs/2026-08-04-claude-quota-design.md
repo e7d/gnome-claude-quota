@@ -72,7 +72,7 @@ test/format.test.js     node --test
 
 | Field | Value |
 | --- | --- |
-| `short` | `S`, `W`, or the scope model's first letter |
+| `short` | `S` for session, `W` for weekly, otherwise the scope model's first letter — plus its second letter in lowercase when the first would collide with `S` or `W` (`Sonnet` → `So`, `Fable` → `F`) |
 | `name` | `Session`, `Weekly`, or the scope model's display name |
 | `percent` | 0–100 |
 | `severity` | `normal` \| `warning` \| `critical` — any other value the API returns is treated as `normal` |
@@ -89,13 +89,13 @@ Visibility rule: `session` and `weekly_all` always render. Any other entry rende
 
 One `St.Label` per quota inside a horizontal `St.BoxLayout`, separated by dim `·` labels. Per-quota labels rather than one concatenated string, because severity colours one quota at a time.
 
-- `font-feature-settings: "tnum"` on the percentage labels. Without tabular figures the indicator changes width as digits change, and the whole panel shifts.
 - 16px symbolic SVG asterisk, recoloured by the theme like any other panel icon.
+- No attempt at tabular figures. Cantarell's digits are already uniform width, so the only width change comes from a digit being added (9% → 10%), which no font feature fixes. GNOME's own clock behaves the same way.
 - Severity: `normal` inherits the panel foreground; `warning` and `critical` apply a class. Both colours are chosen per colour scheme, read from `St.Settings.colorScheme` — no single amber clears 4.5:1 against both a dark and a light panel.
 
 ## Popup
 
-Width ~280px. One block per visible quota, separated by the shell's own separator item.
+Width ~280px, one block per visible quota. Blocks are separated by spacing rather than separator items — with at most three blocks, rules add weight without adding structure.
 
 ```
   Session                      5%
@@ -127,7 +127,9 @@ The result: the tick marks how far the window has run, and the bar turns red exa
 
 No palette is invented. GNOME 50 exposes `-st-accent-color`, `-st-accent-fg-color`, and the `st-mix()` / `st-lighten()` / `st-transparentize()` functions to extension stylesheets, which covers light, dark, and the user's accent.
 
-Caption text sits at 0.7 alpha, not the 0.5 used in places by the shipped theme, so it clears 4.5:1 against the popup background.
+Dimming is actor opacity (180 of 255, ≈0.7 alpha) rather than a hardcoded `rgba()`, so it modulates whatever foreground the active theme provides instead of assuming a dark one. That also keeps captions clear of 4.5:1, where the 0.5 alpha used in places by the shipped theme would not.
+
+Severity colours are the only literal values in the stylesheet, and they exist twice — `cq-warning-dark` / `cq-warning-light` — because no single amber clears 4.5:1 against both a dark and a light panel. The popup is not a descendant of the panel button in the actor tree, so the scheme is carried in the class name rather than by an ancestor class.
 
 ## States
 
