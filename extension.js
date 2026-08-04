@@ -10,6 +10,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import {deserialize, serialize} from './lib/cache.js';
 import {absoluteTime, relativeDuration} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {blockedUntil, isBlocked, markExpired, nextPollSeconds, shouldFetchOnOpen} from './lib/policy.js';
@@ -82,6 +83,7 @@ class Indicator extends PanelMenu.Button {
         this._fetchedAt = null;
         this._blockedUntil = null;
         this._timerId = null;
+        this._limits = [];
         const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         box.add_child(new St.Icon({
             style_class: 'system-status-icon',
@@ -113,8 +115,43 @@ class Indicator extends PanelMenu.Button {
                 this._refresh();
         });
         this.connect('destroy', () => this._onDestroy());
+        this._loadCache();
         this._render();
         this._refresh();
+    }
+
+    _cachePath() {
+        return GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-quota', 'usage.json']);
+    }
+
+    _loadCache() {
+        let contents;
+        try {
+            [, contents] = Gio.File.new_for_path(this._cachePath()).load_contents(null);
+        } catch {
+            return;
+        }
+        const cached = deserialize(new TextDecoder().decode(contents));
+        if (cached === null)
+            return;
+        this._limits = cached.limits;
+        this._quotas = quotas({limits: cached.limits}, new Date());
+        this._fetchedAt = cached.fetchedAt;
+    }
+
+    _saveCache() {
+        const file = Gio.File.new_for_path(this._cachePath());
+        try {
+            file.get_parent().make_directory_with_parents(null);
+        } catch {
+        }
+        try {
+            file.replace_contents(
+                new TextEncoder().encode(serialize(this._limits, this._fetchedAt)),
+                null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+        } catch (error) {
+            logError(error);
+        }
     }
 
     get _scheme() {
@@ -165,10 +202,12 @@ class Indicator extends PanelMenu.Button {
 
     _applyResult(result) {
         if (result.error === null) {
+            this._limits = Array.isArray(result.payload?.limits) ? result.payload.limits : [];
             this._quotas = quotas(result.payload, new Date());
             this._error = null;
             this._blockedUntil = null;
             this._fetchedAt = new Date();
+            this._saveCache();
             this._scheduleNext(nextPollSeconds(null));
             return;
         }
