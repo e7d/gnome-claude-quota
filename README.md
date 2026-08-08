@@ -33,6 +33,40 @@ Each quota's bar in the popup visualizes usage within its time window:
 
 The popup displays the remaining time until each quota resets.
 
+## Refreshing
+
+The extension polls every 5 minutes, and again when you open the popup if the cached data is more than a minute old. `Refresh now` forces a poll and leaves the popup open, so you can watch the numbers land. Its label doubles as the reason it is unavailable:
+
+| Label | State |
+|---|---|
+| `Refresh now` | the data is older than a minute; clicking polls |
+| `Refreshing…` | a poll is in flight |
+| `Up to date` | the data is younger than a minute, so a poll would return the same numbers |
+| `Refresh at 11:27 PM` | a `429` is in force, and this is the earliest retry it allowed |
+
+The button obeys the same staleness rule as opening the popup, because the `429` allowance is shared with every other Claude extension on the machine. Nothing in either response reports how much of it is left, so the extension declines to be what spends it.
+
+`Claude status` opens [status.claude.com](https://status.claude.com/) and appears only once something has actually failed.
+
+## Service problems
+
+When a usage request comes back `5xx`, the extension appends an emoji after the quotas in the panel and a matching one-line status at the foot of the popup, beside `Claude status`. A single failure is enough to raise it — there is no failure counter to wait out.
+
+| Line | What it means |
+|---|---|
+| 🐢 Degraded performance | status.claude.com reports Claude Code as `degraded_performance` |
+| ⚠️ Partial outage | reported as `partial_outage` |
+| 🔴 Major outage | reported as `major_outage` |
+| 🚧 Under maintenance | reported as `under_maintenance` |
+| ❗ Service error | the request failed, but the status page reads operational, is unreachable, or answers something unrecognised |
+
+The wording comes from the Claude Code component on [status.claude.com](https://status.claude.com/); the *decision to show anything at all* comes from your own failed request. Two consequences follow:
+
+- A degraded status page with no local failures shows nothing. If your requests all succeed, you are not in the outage.
+- `429` is not a failure. The service is working and refusing you, so it raises no status, and `Claude status` stays hidden — the status page cannot explain a spent allowance. The refresh action names the retry time instead.
+
+The status page is only fetched **after** a `5xx`, so the ordinary 5-minute poll stays a single request and a status.claude.com outage cannot slow it down.
+
 ## Requirements
 
 - **GNOME Shell 50**
