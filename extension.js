@@ -2,6 +2,7 @@ import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {BarLevel} from 'resource:///org/gnome/shell/ui/barLevel.js';
@@ -23,6 +24,36 @@ function severityClass(base, severity, scheme) {
     return severity === 'normal' ? base : `${base} cq-${severity}-${scheme}`;
 }
 
+function quotaClass(base, quota, scheme) {
+    if (quota.modelScoped)
+        return `${base} cq-model`;
+    return severityClass(base, quota.expired ? 'normal' : quota.severity, scheme);
+}
+
+const PaceBar = GObject.registerClass(
+class PaceBar extends BarLevel {
+    vfunc_repaint() {
+        super.vfunc_repaint();
+        if (this.overdriveStart >= this.maximumValue)
+            return;
+        const themeNode = this.get_theme_node();
+        const [width, height] = this.get_surface_size();
+        const barHeight = themeNode.get_length('-barlevel-height');
+        const tickWidth = themeNode.get_length('-barlevel-overdrive-separator-width');
+        const radius = Math.min(width, barHeight) / 2;
+        let ratio = this.overdriveStart / this.maximumValue;
+        if (this.get_text_direction() === Clutter.TextDirection.RTL)
+            ratio = 1 - ratio;
+        const cr = this.get_context();
+        cr.rectangle(
+            radius + (width - 2 * radius) * ratio - tickWidth / 2,
+            (height - barHeight) / 2, tickWidth, barHeight);
+        cr.setSourceColor(themeNode.get_foreground_color());
+        cr.fill();
+        cr.$dispose();
+    }
+});
+
 const QuotaBlock = GObject.registerClass(
 class QuotaBlock extends St.BoxLayout {
     _init() {
@@ -32,12 +63,13 @@ class QuotaBlock extends St.BoxLayout {
             x_expand: true,
         });
         this._name = new St.Label({style_class: 'cq-name'});
+        this._name.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._percent = new St.Label({style_class: 'cq-percent'});
         const header = new St.BoxLayout({x_expand: true});
         header.add_child(this._name);
         header.add_child(new St.Widget({x_expand: true}));
         header.add_child(this._percent);
-        this._bar = new BarLevel({x_expand: true});
+        this._bar = new PaceBar({x_expand: true});
         this._bar.add_style_class_name('cq-bar');
         this._barScheme = null;
         this._caption = new St.Label({style_class: 'cq-caption', opacity: CAPTION_OPACITY});
@@ -48,8 +80,8 @@ class QuotaBlock extends St.BoxLayout {
 
     update(quota, now, scheme) {
         this._name.text = quota.name;
-        this._percent.text = quota.expired ? '—' : `${quota.percent}%`;
-        this._percent.style_class = severityClass('cq-percent', quota.expired ? 'normal' : quota.severity, scheme);
+        this._percent.text = quota.expired ? '-' : `${quota.percent}%`;
+        this._percent.style_class = quotaClass('cq-percent', quota, scheme);
         this._bar.value = quota.expired ? 0 : quota.percent / 100;
         this._bar.overdriveStart = quota.expired ? 1 : (quota.windowProgress ?? 1);
         this._setBarScheme(scheme);
@@ -91,7 +123,29 @@ class Indicator extends PanelMenu.Button {
         this._panelQuotas = new St.BoxLayout({style_class: 'cq-panel'});
         box.add_child(this._panelQuotas);
         this.add_child(box);
-        this._message = new PopupMenu.PopupMenuItem('Loading…', {reactive: false});
+        this._message = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        this._messageBox = new St.BoxLayout({
+            style_class: 'cq-message',
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true,
+        });
+        this._metaBox = new St.BoxLayout({
+            style_class: 'cq-meta',
+            orientation: Clutter.Orientation.VERTICAL,
+            opacity: CAPTION_OPACITY,
+            x_expand: true,
+        });
+        this._refreshLabel = new St.Label();
+        this._nextLabel = new St.Label();
+        this._metaBox.add_child(this._refreshLabel);
+        this._metaBox.add_child(this._nextLabel);
+        this._messageLabel = new St.Label();
+        this._messageLabel.clutter_text.line_wrap = true;
+        this._messageLabel.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        this._messageLabel.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        this._messageBox.add_child(this._metaBox);
+        this._messageBox.add_child(this._messageLabel);
+        this._message.add_child(this._messageBox);
         this._body = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         this._blockBox = new St.BoxLayout({
             style_class: 'cq-body',
@@ -99,8 +153,8 @@ class Indicator extends PanelMenu.Button {
             x_expand: true,
         });
         this._body.add_child(this._blockBox);
-        this.menu.addMenuItem(this._message);
         this.menu.addMenuItem(this._body);
+        this.menu.addMenuItem(this._message);
         this._schemeId = this._settings.connect('notify::color-scheme', () => this._render());
         this.menu.connect('open-state-changed', (menu, open) => {
             if (!open)
@@ -212,13 +266,35 @@ class Indicator extends PanelMenu.Button {
     }
 
     _composeMessage(now) {
-        if (this._error === null)
+        if (this._error === null || isBlocked(this._blockedUntil, now))
             return null;
+        return this._error;
+    }
+
+    _composeRefresh(now) {
         if (this._fetchedAt === null)
-            return this._error;
-        if (isBlocked(this._blockedUntil, now))
-            return `Rate limited — retrying at ${absoluteTime(this._blockedUntil, now)} · values from ${absoluteTime(this._fetchedAt, now)}`;
-        return `${this._error} · values from ${absoluteTime(this._fetchedAt, now)}`;
+            return null;
+        return `Last refresh: ${absoluteTime(this._fetchedAt, now)}`;
+    }
+
+    _composeNext(now) {
+        if (!isBlocked(this._blockedUntil, now))
+            return null;
+        return `Next refresh: ${absoluteTime(this._blockedUntil, now)}`;
+    }
+
+    _renderMessage(now, hasQuotas) {
+        const refresh = this._composeRefresh(now);
+        const next = this._composeNext(now);
+        const message = this._composeMessage(now) ?? (hasQuotas ? '' : 'Loading…');
+        this._refreshLabel.text = refresh ?? '';
+        this._refreshLabel.visible = refresh !== null;
+        this._nextLabel.text = next ?? '';
+        this._nextLabel.visible = next !== null;
+        this._metaBox.visible = refresh !== null || next !== null;
+        this._messageLabel.text = message;
+        this._messageLabel.visible = message !== '';
+        this._message.visible = !hasQuotas || this._error !== null;
     }
 
     _render() {
@@ -237,15 +313,14 @@ class Indicator extends PanelMenu.Button {
         quotaViews.forEach((quota, index) => this._blocks[index].update(quota, now, scheme));
         const hasQuotas = quotaViews.length > 0;
         this._body.visible = hasQuotas;
-        this._message.visible = !hasQuotas || this._error !== null;
-        this._message.label.text = this._composeMessage(now) ?? 'Loading…';
+        this._renderMessage(now, hasQuotas);
     }
 
     _renderPanel(quotaViews, scheme) {
         this._panelQuotas.destroy_all_children();
         if (!quotaViews.length) {
             this._panelQuotas.add_child(new St.Label({
-                text: this._error ? '—' : '…',
+                text: this._error ? '-' : '…',
                 y_align: Clutter.ActorAlign.CENTER,
             }));
             return;
@@ -259,8 +334,8 @@ class Indicator extends PanelMenu.Button {
                 }));
             }
             this._panelQuotas.add_child(new St.Label({
-                text: quota.expired ? `${quota.short} —` : `${quota.short} ${quota.percent}%`,
-                style_class: severityClass('cq-panel-quota', quota.expired ? 'normal' : quota.severity, scheme),
+                text: quota.expired ? `${quota.short} -` : `${quota.short} ${quota.percent}%`,
+                style_class: quotaClass('cq-panel-quota', quota, scheme),
                 y_align: Clutter.ActorAlign.CENTER,
             }));
         });

@@ -1,5 +1,10 @@
 .cq-panel {
     spacing: 6px;
+    padding-right: 10px;
+}
+
+.cq-model {
+    color: #c6613f;
 }
 
 .cq-body {
@@ -8,7 +13,19 @@
 
 .cq-block {
     spacing: 4px;
-    min-width: 260px;
+    min-width: 280px;
+    max-width: 280px;
+}
+
+.cq-message {
+    spacing: 6px;
+    min-width: 280px;
+    max-width: 280px;
+}
+
+.cq-meta {
+    spacing: 2px;
+    font-size: 0.9em;
 }
 
 .cq-name,
@@ -22,15 +39,17 @@
 }
 
 .cq-bar-dark {
+    color: #ffffff;
     -barlevel-background-color: rgba(255, 255, 255, 0.1);
     -barlevel-active-background-color: -st-accent-color;
-    -barlevel-overdrive-color: #c01c28;
+    -barlevel-overdrive-color: -st-accent-color;
 }
 
 .cq-bar-light {
+    color: #000000;
     -barlevel-background-color: rgba(34, 34, 38, 0.1);
     -barlevel-active-background-color: -st-accent-color;
-    -barlevel-overdrive-color: #e01b24;
+    -barlevel-overdrive-color: -st-accent-color;
 }
 
 .cq-caption {

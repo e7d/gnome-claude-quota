@@ -34,6 +34,15 @@ test('a scoped quota renders once it is above zero, named after its model', () =
     assert.equal(Math.round(scoped.windowProgress * 100), 43);
 });
 
+test('only model-scoped quotas are flagged as such', () => {
+    const data = payload();
+    data.limits[2].percent = 12;
+    const [session, weekly, scoped] = quotas(data, now);
+    assert.equal(session.modelScoped, false);
+    assert.equal(weekly.modelScoped, false);
+    assert.equal(scoped.modelScoped, true);
+});
+
 test('a scoped short label takes a second lowercase letter when it would collide', () => {
     const data = payload();
     data.limits[2].percent = 12;
