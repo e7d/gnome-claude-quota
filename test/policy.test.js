@@ -4,10 +4,12 @@ import {test} from 'node:test';
 import {
     OPEN_REFRESH_SECONDS,
     POLL_SECONDS,
+    SERVICE_ERROR,
     blockedUntil,
     isBlocked,
     markExpired,
     nextPollSeconds,
+    serviceIssue,
     shouldFetchOnOpen,
 } from '../lib/policy.js';
 
@@ -74,6 +76,32 @@ test('shouldFetchOnOpen refuses while blocked, even with stale data', () => {
     const fetchedAt = new Date(now.getTime() - (OPEN_REFRESH_SECONDS + 1) * 1000);
     const until = new Date(now.getTime() + 60_000);
     assert.equal(shouldFetchOnOpen(fetchedAt, now, until), false);
+});
+
+test('serviceIssue reports nothing without a service status', () => {
+    assert.equal(serviceIssue(null), null);
+    assert.equal(serviceIssue(undefined), null);
+});
+
+test('serviceIssue maps each status the status page publishes', () => {
+    assert.deepEqual(serviceIssue('degraded_performance'), {emoji: '🐢', text: 'Degraded performance'});
+    assert.deepEqual(serviceIssue('partial_outage'), {emoji: '⚠️', text: 'Partial outage'});
+    assert.deepEqual(serviceIssue('major_outage'), {emoji: '🔴', text: 'Major outage'});
+    assert.deepEqual(serviceIssue('under_maintenance'), {emoji: '🚧', text: 'Under maintenance'});
+});
+
+test('serviceIssue keeps the warning glyph in emoji presentation', () => {
+    const points = [...serviceIssue('partial_outage').emoji].map(char => char.codePointAt(0));
+    assert.deepEqual(points, [0x26A0, 0xFE0F]);
+});
+
+test('serviceIssue falls back to the generic error when the page reads operational', () => {
+    assert.deepEqual(serviceIssue('operational'), SERVICE_ERROR);
+});
+
+test('serviceIssue falls back to the generic error for an unknown status', () => {
+    assert.deepEqual(serviceIssue('unknown'), SERVICE_ERROR);
+    assert.deepEqual(serviceIssue('some_future_status'), SERVICE_ERROR);
 });
 
 test('markExpired flags a quota whose reset time has passed', () => {

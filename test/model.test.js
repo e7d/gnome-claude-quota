@@ -2,13 +2,40 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-import {quotas} from '../lib/model.js';
+import {claudeCodeStatus, quotas} from '../lib/model.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
 
 function payload() {
     return JSON.parse(readFileSync(new URL('./fixtures/usage.json', import.meta.url), 'utf8'));
 }
+
+function statusPayload() {
+    return JSON.parse(readFileSync(new URL('./fixtures/status.json', import.meta.url), 'utf8'));
+}
+
+test('claudeCodeStatus reads the Claude Code component, not the page-wide indicator', () => {
+    assert.equal(claudeCodeStatus(statusPayload()), 'degraded_performance');
+});
+
+test('claudeCodeStatus ignores a sibling component in a worse state', () => {
+    const page = statusPayload();
+    assert.equal(page.components.find(entry => entry.id === 'k8w3r06qmzrp').status, 'major_outage');
+    assert.equal(claudeCodeStatus(page), 'degraded_performance');
+});
+
+test('claudeCodeStatus returns null when the component is absent', () => {
+    const page = statusPayload();
+    page.components = page.components.filter(entry => entry.id !== 'yyzkbfz2thpt');
+    assert.equal(claudeCodeStatus(page), null);
+});
+
+test('claudeCodeStatus returns null for a malformed or empty payload', () => {
+    assert.equal(claudeCodeStatus(null), null);
+    assert.equal(claudeCodeStatus({}), null);
+    assert.equal(claudeCodeStatus({components: 'nope'}), null);
+    assert.equal(claudeCodeStatus({components: [{id: 'yyzkbfz2thpt'}]}), null);
+});
 
 test('session and weekly always render, a scoped quota at zero does not', () => {
     assert.deepEqual(quotas(payload(), now).map(quota => quota.name), ['Session', 'Weekly']);
@@ -58,6 +85,26 @@ test('a quota without a reset time has no window progress', () => {
     data.limits[2].percent = 12;
     assert.equal(quotas(data, now).at(-1).resetsAt, null);
     assert.equal(quotas(data, now).at(-1).windowProgress, null);
+});
+
+test('a quota spending in step with its window is not ahead of pace', () => {
+    const [session] = quotas(payload(), now);
+    assert.equal(session.aheadOfPace, false);
+});
+
+test('a quota is ahead of pace only once it passes the window by more than the margin', () => {
+    const behind = payload();
+    behind.limits[0].percent = 27;
+    assert.equal(quotas(behind, now)[0].aheadOfPace, false);
+    const ahead = payload();
+    ahead.limits[0].percent = 28;
+    assert.equal(quotas(ahead, now)[0].aheadOfPace, true);
+});
+
+test('a quota without a reset time is never ahead of pace', () => {
+    const data = payload();
+    data.limits[2].percent = 99;
+    assert.equal(quotas(data, now).at(-1).aheadOfPace, false);
 });
 
 test('severity passes through when known and degrades to normal otherwise', () => {

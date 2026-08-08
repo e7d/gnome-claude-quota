@@ -1,0 +1,19 @@
+{
+  "page": {
+    "id": "hg4nhb4bt7q3",
+    "name": "Anthropic",
+    "url": "https://status.claude.com",
+    "updated_at": "2026-08-08T20:48:16Z"
+  },
+  "components": [
+    {"id": "rwppv331jlwc", "name": "claude.ai", "status": "operational"},
+    {"id": "0qbwn08sd68x", "name": "Claude Console (platform.claude.com)", "status": "operational"},
+    {"id": "k8w3r06qmzrp", "name": "Claude API (api.anthropic.com)", "status": "major_outage"},
+    {"id": "yyzkbfz2thpt", "name": "Claude Code", "status": "degraded_performance"},
+    {"id": "bpp5gb3hpjcl", "name": "Claude Cowork", "status": "operational"},
+    {"id": "0scnb50nvy53", "name": "Claude for Government", "status": "operational"}
+  ],
+  "incidents": [],
+  "scheduled_maintenances": [],
+  "status": {"indicator": "minor", "description": "Degraded Performance"}
+}

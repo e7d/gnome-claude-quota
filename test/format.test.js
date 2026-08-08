@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {WINDOW_LENGTH_MS, absoluteTime, refreshLine, relativeDuration, windowProgress} from '../lib/format.js';
+import {WINDOW_LENGTH_MS, absoluteTime, captionLine, refreshLine, relativeDuration, windowProgress} from '../lib/format.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
+
+test('captionLine pairs the remaining time with the reset time', () => {
+    const quota = {resetsAt: new Date('2026-08-04T11:59:00Z')};
+    assert.equal(captionLine(quota, now, 'en-US'), '4h 08m left · 11:59 AM');
+});
 
 test('relativeDuration renders days and hours past a day', () => {
     assert.equal(relativeDuration(new Date('2026-08-08T07:59:00Z'), now), '4d 0h');
