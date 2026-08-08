@@ -27,13 +27,30 @@ function unwrapInactive(item) {
     return item;
 }
 
+const BRAND_ON_DARK = '#d97757';
+const BRAND_ON_LIGHT = '#c6613f';
+
+function relativeLuminance(color) {
+    const channel = value => {
+        const part = value / 255;
+        return part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue);
+}
+
+// The top bar keeps its own background whatever the desktop scheme is, and an
+// extension can repaint it, so the label colour the theme resolved is the only
+// honest answer to what the icon sits on.
+function brandOnPanel() {
+    const foreground = Main.panel.get_theme_node().get_foreground_color();
+    return relativeLuminance(foreground) > 0.5 ? BRAND_ON_DARK : BRAND_ON_LIGHT;
+}
+
 function severityClass(base, severity, scheme) {
     return severity === 'normal' ? base : `${base} cq-${severity}-${scheme}`;
 }
 
 function quotaClass(base, quota, scheme) {
-    if (quota.modelScoped)
-        return `${base} cq-model`;
     return severityClass(base, quota.expired ? 'normal' : quota.severity, scheme);
 }
 
@@ -123,10 +140,11 @@ class Indicator extends PanelMenu.Button {
         this._timerId = null;
         this._limits = [];
         const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
-        box.add_child(new St.Icon({
+        this._icon = new St.Icon({
             style_class: 'system-status-icon',
             gicon: Gio.icon_new_for_string(iconPath),
-        }));
+        });
+        box.add_child(this._icon);
         this._panelQuotas = new St.BoxLayout({style_class: 'cq-panel'});
         box.add_child(this._panelQuotas);
         this.add_child(box);
@@ -308,7 +326,7 @@ class Indicator extends PanelMenu.Button {
         const now = new Date();
         const scheme = this._scheme;
         const quotaViews = markExpired(this._quotas, now);
-        this._renderPanel(quotaViews, scheme);
+        this._renderPanel(quotaViews);
         if (this._blocks.length !== quotaViews.length) {
             this._blockBox.destroy_all_children();
             this._blocks = quotaViews.map(() => {
@@ -323,7 +341,8 @@ class Indicator extends PanelMenu.Button {
         this._renderMessage(now, hasQuotas);
     }
 
-    _renderPanel(quotaViews, scheme) {
+    _renderPanel(quotaViews) {
+        this._icon.style = `color: ${brandOnPanel()};`;
         this._panelQuotas.destroy_all_children();
         if (!quotaViews.length) {
             this._panelQuotas.add_child(new St.Label({
@@ -342,7 +361,7 @@ class Indicator extends PanelMenu.Button {
             }
             this._panelQuotas.add_child(new St.Label({
                 text: quota.expired ? `${quota.short} -` : `${quota.short} ${quota.percent}%`,
-                style_class: quotaClass('cq-panel-quota', quota, scheme),
+                style_class: quotaClass('cq-panel-quota', quota, 'dark'),
                 y_align: Clutter.ActorAlign.CENTER,
             }));
         });
@@ -362,7 +381,7 @@ class Indicator extends PanelMenu.Button {
 
 export default class ClaudeQuotaExtension extends Extension {
     enable() {
-        this._indicator = new Indicator(`${this.path}/icons/claude-quota.svg`);
+        this._indicator = new Indicator(`${this.path}/icons/claude-quota-symbolic.svg`);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }
 
