@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {WINDOW_LENGTH_MS, absoluteTime, relativeDuration, windowProgress} from '../lib/format.js';
+import {WINDOW_LENGTH_MS, absoluteTime, refreshLine, relativeDuration, windowProgress} from '../lib/format.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
 
@@ -39,6 +39,14 @@ test('absoluteTime adds the weekday on another day', () => {
 test('absoluteTime has no leading zero on the hour in a 12-hour locale', () => {
     const text = absoluteTime(new Date('2026-08-04T14:00:00Z'), now, 'en-US');
     assert.equal(text, '2:00 PM');
+});
+
+test('refreshLine names the time of the last fetch', () => {
+    assert.equal(refreshLine(new Date('2026-08-04T07:44:00Z'), now, 'en-GB'), 'Last refresh: 7:44');
+});
+
+test('refreshLine still reports before any fetch has landed', () => {
+    assert.equal(refreshLine(null, now, 'en-GB'), 'Last refresh: never');
 });
 
 test('windowProgress measures elapsed time in the session window', () => {

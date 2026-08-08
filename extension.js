@@ -12,13 +12,20 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {deserialize, serialize} from './lib/cache.js';
-import {absoluteTime, relativeDuration} from './lib/format.js';
+import {absoluteTime, refreshLine, relativeDuration} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {blockedUntil, isBlocked, markExpired, nextPollSeconds, shouldFetchOnOpen} from './lib/policy.js';
 import {UsageClient} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
+
+// The insensitive pseudo-class the shipped theme paints at 50% alpha is what a
+// non-reactive item gets, and every child label inherits it.
+function unwrapInactive(item) {
+    item.remove_style_class_name('popup-inactive-menu-item');
+    return item;
+}
 
 function severityClass(base, severity, scheme) {
     return severity === 'normal' ? base : `${base} cq-${severity}-${scheme}`;
@@ -123,7 +130,12 @@ class Indicator extends PanelMenu.Button {
         this._panelQuotas = new St.BoxLayout({style_class: 'cq-panel'});
         box.add_child(this._panelQuotas);
         this.add_child(box);
-        this._message = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        this._message = unwrapInactive(new PopupMenu.PopupBaseMenuItem({
+            reactive: true,
+            activate: false,
+            hover: false,
+            can_focus: false,
+        }));
         this._messageBox = new St.BoxLayout({
             style_class: 'cq-message',
             orientation: Clutter.Orientation.VERTICAL,
@@ -146,7 +158,12 @@ class Indicator extends PanelMenu.Button {
         this._messageBox.add_child(this._metaBox);
         this._messageBox.add_child(this._messageLabel);
         this._message.add_child(this._messageBox);
-        this._body = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        this._body = unwrapInactive(new PopupMenu.PopupBaseMenuItem({
+            reactive: true,
+            activate: false,
+            hover: false,
+            can_focus: false,
+        }));
         this._blockBox = new St.BoxLayout({
             style_class: 'cq-body',
             orientation: Clutter.Orientation.VERTICAL,
@@ -271,12 +288,6 @@ class Indicator extends PanelMenu.Button {
         return this._error;
     }
 
-    _composeRefresh(now) {
-        if (this._fetchedAt === null)
-            return null;
-        return `Last refresh: ${absoluteTime(this._fetchedAt, now)}`;
-    }
-
     _composeNext(now) {
         if (!isBlocked(this._blockedUntil, now))
             return null;
@@ -284,17 +295,13 @@ class Indicator extends PanelMenu.Button {
     }
 
     _renderMessage(now, hasQuotas) {
-        const refresh = this._composeRefresh(now);
         const next = this._composeNext(now);
         const message = this._composeMessage(now) ?? (hasQuotas ? '' : 'Loading…');
-        this._refreshLabel.text = refresh ?? '';
-        this._refreshLabel.visible = refresh !== null;
+        this._refreshLabel.text = refreshLine(this._fetchedAt, now);
         this._nextLabel.text = next ?? '';
         this._nextLabel.visible = next !== null;
-        this._metaBox.visible = refresh !== null || next !== null;
         this._messageLabel.text = message;
         this._messageLabel.visible = message !== '';
-        this._message.visible = !hasQuotas || this._error !== null;
     }
 
     _render() {
