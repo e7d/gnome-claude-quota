@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+UUID='claude-quota@e7d.io'
+MONITOR='1400x900'
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT="$ROOT/preview"
+RUN="$(mktemp -d)"
+CFG="$RUN/config"
+BUS_FILE="$RUN/bus"
+PID_FILE="$RUN/pid"
+LOG="$RUN/shell.log"
+
+cleanup() {
+    if [ -s "$PID_FILE" ]; then
+        kill "$(cat "$PID_FILE")" 2>/dev/null || true
+        sleep 1
+    fi
+    rm -rf "$RUN"
+}
+
+die() {
+    echo "preview: $1" >&2
+    [ -s "$LOG" ] && tail -5 "$LOG" >&2
+    exit 1
+}
+
+# The nested shell shares the user's dconf unless we hand it a private copy, and
+# its extensions write to whatever they are given, including enabled-extensions.
+isolate_dconf() {
+    mkdir -p "$CFG/dconf"
+    cp "${XDG_CONFIG_HOME:-$HOME/.config}/dconf/user" "$CFG/dconf/user"
+    local list
+    list="$(XDG_CONFIG_HOME="$CFG" dconf read /org/gnome/shell/enabled-extensions || true)"
+    case "$list" in
+        *"'$UUID'"*) return 0 ;;
+        ''|'@as []'|'[]') list="['$UUID']" ;;
+        *) list="${list%]}, '$UUID']" ;;
+    esac
+    XDG_CONFIG_HOME="$CFG" dconf write /org/gnome/shell/enabled-extensions "$list"
+}
+
+# GNOME 50 dropped the nested backend; --devkit is the replacement, and runs even
+# though its viewer binary is unpackaged. --unsafe-mode is what unlocks Eval.
+start_shell() {
+    # The inner shell must expand these itself, so the body stays single-quoted.
+    # shellcheck disable=SC2016
+    XDG_CONFIG_HOME="$CFG" dbus-run-session -- bash -c '
+        echo "$DBUS_SESSION_BUS_ADDRESS" > "$1"
+        echo $$ > "$2"
+        exec gnome-shell --devkit --virtual-monitor "$3" --unsafe-mode
+    ' _ "$BUS_FILE" "$PID_FILE" "$MONITOR" >"$LOG" 2>&1 &
+    for _ in $(seq 60); do
+        [ -s "$BUS_FILE" ] && break
+        sleep 1
+    done
+    [ -s "$BUS_FILE" ] || die 'shell never published a bus address'
+    DBUS_SESSION_BUS_ADDRESS="$(cat "$BUS_FILE")"
+    export DBUS_SESSION_BUS_ADDRESS
+}
+
+shell_eval() {
+    gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+        --method org.gnome.Shell.Eval "$1" 2>/dev/null
+}
+
+# Eval answers (false, '') both when it is locked down and when the script is
+# wrong, so treat anything but a true reply as not-ready rather than as an error.
+wait_for_indicator() {
+    for _ in $(seq 60); do
+        case "$(shell_eval "Object.keys(Main.panel.statusArea).includes('$UUID').toString()")" in
+            "(true, '\"true\"')"|"(true, 'true')") return 0 ;;
+        esac
+        sleep 1
+    done
+    die "indicator $UUID never appeared"
+}
+
+# Every state below is fabricated, so the real endpoint must never answer over the
+# top of it. Stubbing the instance method also spares the shared API rate limit.
+freeze() {
+    shell_eval "Main.panel.statusArea['$UUID']._refresh = () => {}; 'ok'" >/dev/null
+}
+
+set_theme() {
+    XDG_CONFIG_HOME="$CFG" gsettings set org.gnome.desktop.interface color-scheme "prefer-$1"
+    sleep 2
+}
+
+unwrap() {
+    sed -n "s/^(true, '\(.*\)')\$/\1/p" | tr -d '"'
+}
+
+# Spans the panel button and the popup so the button's hover pill is never clipped.
+shot_box() {
+    shell_eval "const i = Main.panel.statusArea['$UUID'];
+        const [bx, by] = i.get_transformed_position();
+        const [bw, bh] = i.get_transformed_size();
+        const m = i.menu.actor;
+        const [mx, my] = m.get_transformed_position();
+        const [mw, mh] = m.get_transformed_size();
+        const x0 = Math.max(0, Math.round(Math.min(bx, mx)) - 12);
+        const x1 = Math.round(Math.max(bx + bw, mx + mw)) + 12;
+        [x0, 0, x1 - x0, Math.round(my + mh) + 12].join(' ')" | unwrap
+}
+
+QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => ({
+    short, name, percent, severity,
+    modelScoped: !['Session', 'Weekly'].includes(name),
+    resetsAt: new Date(Date.now() + leftMin * 60000),
+    windowProgress: Math.min(1, Math.max(0, 1 - leftMin / winMin)),
+});
+const SESSION = 300, WEEK = 10080;"
+
+setup_for() {
+    case "$1" in
+        normal) echo "i._quotas = [q('S','Session',7,'normal',270,SESSION), q('W','Weekly',12,'normal',9000,WEEK)];" ;;
+        over-pace) echo "i._quotas = [q('S','Session',68,'normal',240,SESSION), q('W','Weekly',55,'normal',7000,WEEK)];" ;;
+        warning) echo "i._quotas = [q('S','Session',78,'warning',90,SESSION), q('W','Weekly',80,'warning',2000,WEEK)];" ;;
+        critical) echo "i._quotas = [q('S','Session',96,'critical',20,SESSION), q('W','Weekly',94,'critical',400,WEEK)];" ;;
+        full) echo "i._quotas = [q('S','Session',100,'critical',5,SESSION), q('W','Weekly',100,'critical',60,WEEK)];" ;;
+        zero) echo "i._quotas = [q('S','Session',0,'normal',300,SESSION), q('W','Weekly',0,'normal',WEEK,WEEK)];" ;;
+        expired) echo "i._quotas = [q('S','Session',40,'normal',-5,SESSION), q('W','Weekly',60,'normal',-5,WEEK)];" ;;
+        model-scoped) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), q('O','Opus',72,'warning',200,SESSION)];" ;;
+        long-name) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('So','Sonnet with a very long display name',61,'normal',200,SESSION)];" ;;
+        rate-limited) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'HTTP 429'; i._blockedUntil = new Date(Date.now() + 180000);" ;;
+        error) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Error resolving api.anthropic.com: Name or service not known';" ;;
+        token-expired) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION)]; i._error = 'Token expired, run Claude Code once';" ;;
+        loading) echo "i._fetchedAt = null;" ;;
+        no-data) echo "i._fetchedAt = null; i._error = 'Error resolving api.anthropic.com: Name or service not known';" ;;
+        *) die "unknown scenario $1" ;;
+    esac
+}
+
+capture() {
+    local name="$1" box rect
+    shell_eval "const i = Main.panel.statusArea['$UUID'];
+        $QUOTA
+        i._quotas = []; i._error = null; i._blockedUntil = null; i._fetchedAt = new Date();
+        $(setup_for "$2")
+        i.menu.open(false); i._render(); 'ok'" >/dev/null
+    sleep 1
+    box="$(shot_box)"
+    [ -n "$box" ] || die "could not measure the popup for $name"
+    read -r -a rect <<<"$box"
+    gdbus call --session --dest org.gnome.Shell.Screenshot \
+        --object-path /org/gnome/Shell/Screenshot \
+        --method org.gnome.Shell.Screenshot.ScreenshotArea \
+        "${rect[@]}" false "$OUT/$name.png" >/dev/null || die "screenshot failed for $name"
+    shell_eval "Main.panel.statusArea['$UUID'].menu.close(false); 'ok'" >/dev/null
+    SHOTS+=("$OUT/$name.png")
+    echo "  $OUT/$name.png"
+}
+
+overview() {
+    if ! command -v montage >/dev/null; then
+        echo 'preview: montage missing, skipping overview' >&2
+        return 0
+    fi
+    montage -background '#101014' -fill '#b9b9c0' -pointsize 22 -label '%t' \
+        -tile 7x -geometry '+12+12' \
+        "${SHOTS[@]}" "$OUT/overview.png"
+    echo "  $OUT/overview.png"
+}
+
+SCENARIOS=(normal over-pace warning critical full zero expired model-scoped
+           long-name rate-limited error token-expired loading no-data)
+SHOTS=()
+
+main() {
+    command -v gnome-shell >/dev/null || die 'gnome-shell not found'
+    trap cleanup EXIT
+    mkdir -p "$OUT"
+    rm -f "$OUT"/*.png
+    isolate_dconf
+    start_shell
+    wait_for_indicator
+    freeze
+    for theme in dark light; do
+        set_theme "$theme"
+        echo "$theme:"
+        for scenario in "${SCENARIOS[@]}"; do
+            capture "$theme-$scenario" "$scenario"
+        done
+    done
+    overview
+}
+
+main "$@"
