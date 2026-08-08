@@ -107,18 +107,39 @@ shot_box() {
         [x0, 0, x1 - x0, Math.round(my + mh) + 12].join(' ')" | unwrap
 }
 
-QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => ({
-    short, name, percent, severity,
-    modelScoped: !['Session', 'Weekly'].includes(name),
-    resetsAt: new Date(Date.now() + leftMin * 60000),
-    windowProgress: Math.min(1, Math.max(0, 1 - leftMin / winMin)),
-});
+QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => {
+    const progress = Math.min(1, Math.max(0, 1 - leftMin / winMin));
+    return {
+        short, name, percent, severity,
+        modelScoped: !['Session', 'Weekly'].includes(name),
+        resetsAt: new Date(Date.now() + leftMin * 60000),
+        windowProgress: progress,
+        aheadOfPace: percent / 100 - progress > 0.1,
+    };
+};
 const SESSION = 300, WEEK = 10080;"
+
+# The scenario name carries the component status the status page would publish, so
+# the emoji mapping is never restated here — the extension resolves it at render.
+service_status() {
+    case "$1" in
+        service-degraded) echo 'degraded_performance' ;;
+        service-partial) echo 'partial_outage' ;;
+        service-major) echo 'major_outage' ;;
+        service-maintenance) echo 'under_maintenance' ;;
+        service-error) echo 'unknown' ;;
+        *) die "unknown service scenario $1" ;;
+    esac
+}
+
+setup_quotas() {
+    echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)];"
+}
 
 setup_for() {
     case "$1" in
         normal) echo "i._quotas = [q('S','Session',7,'normal',270,SESSION), q('W','Weekly',12,'normal',9000,WEEK)];" ;;
-        over-pace) echo "i._quotas = [q('S','Session',68,'normal',240,SESSION), q('W','Weekly',55,'normal',7000,WEEK)];" ;;
+        over-pace) echo "i._quotas = [q('S','Session',68,'normal',240,SESSION), q('W','Weekly',20,'normal',2000,WEEK)];" ;;
         warning) echo "i._quotas = [q('S','Session',78,'warning',90,SESSION), q('W','Weekly',80,'warning',2000,WEEK)];" ;;
         critical) echo "i._quotas = [q('S','Session',96,'critical',20,SESSION), q('W','Weekly',94,'critical',400,WEEK)];" ;;
         full) echo "i._quotas = [q('S','Session',100,'critical',5,SESSION), q('W','Weekly',100,'critical',60,WEEK)];" ;;
@@ -126,11 +147,14 @@ setup_for() {
         expired) echo "i._quotas = [q('S','Session',40,'normal',-5,SESSION), q('W','Weekly',60,'normal',-5,WEEK)];" ;;
         model-scoped) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), q('O','Opus',72,'warning',200,SESSION)];" ;;
         long-name) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('So','Sonnet with a very long display name',61,'normal',200,SESSION)];" ;;
-        rate-limited) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'HTTP 429'; i._blockedUntil = new Date(Date.now() + 180000);" ;;
-        error) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Error resolving api.anthropic.com: Name or service not known';" ;;
+        rate-limited) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Rate limited'; i._blockedUntil = new Date(Date.now() + 180000);" ;;
+        error) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Cannot reach api.anthropic.com';" ;;
         token-expired) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION)]; i._error = 'Token expired, run Claude Code once';" ;;
         loading) echo "i._fetchedAt = null;" ;;
-        no-data) echo "i._fetchedAt = null; i._error = 'Error resolving api.anthropic.com: Name or service not known';" ;;
+        refreshing) echo "$(setup_quotas) i._refreshing = true;" ;;
+        fresh) echo "$(setup_quotas) i._fetchedAt = new Date();" ;;
+        no-data) echo "i._fetchedAt = null; i._error = 'Cannot reach api.anthropic.com';" ;;
+        service-*) echo "$(setup_quotas) i._error = 'Usage request failed (HTTP 503)'; i._serviceStatus = '$(service_status "$1")';" ;;
         *) die "unknown scenario $1" ;;
     esac
 }
@@ -139,7 +163,7 @@ capture() {
     local name="$1" box rect
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         $QUOTA
-        i._quotas = []; i._error = null; i._blockedUntil = null; i._fetchedAt = new Date();
+        i._quotas = []; i._error = null; i._serviceStatus = null; i._blockedUntil = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000);
         $(setup_for "$2")
         i.menu.open(false); i._render(); 'ok'" >/dev/null
     sleep 1
@@ -167,7 +191,9 @@ overview() {
 }
 
 SCENARIOS=(normal over-pace warning critical full zero expired model-scoped
-           long-name rate-limited error token-expired loading no-data)
+           long-name rate-limited error token-expired loading refreshing fresh no-data
+           service-degraded service-partial service-major service-maintenance
+           service-error)
 SHOTS=()
 
 main() {

@@ -12,38 +12,35 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {deserialize, serialize} from './lib/cache.js';
-import {absoluteTime, refreshLine, relativeDuration} from './lib/format.js';
+import {absoluteTime, captionLine, refreshLine} from './lib/format.js';
 import {quotas} from './lib/model.js';
-import {blockedUntil, isBlocked, markExpired, nextPollSeconds, shouldFetchOnOpen} from './lib/policy.js';
-import {UsageClient} from './lib/usage.js';
+import {brandColor, schemeForForeground} from './lib/theme.js';
+import {blockedUntil, isBlocked, markExpired, nextPollSeconds, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
+import {StatusClient, UsageClient} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
+const UNKNOWN_SERVICE = 'unknown';
+const STATUS_URL = 'https://status.claude.com/';
 
 // The insensitive pseudo-class the shipped theme paints at 50% alpha is what a
 // non-reactive item gets, and every child label inherits it.
-function unwrapInactive(item) {
+function displayItem() {
+    const item = new PopupMenu.PopupBaseMenuItem({
+        reactive: true,
+        activate: false,
+        hover: false,
+        can_focus: false,
+    });
     item.remove_style_class_name('popup-inactive-menu-item');
     return item;
 }
 
-const BRAND_ON_DARK = '#d97757';
-const BRAND_ON_LIGHT = '#c6613f';
-
-function relativeLuminance(color) {
-    const channel = value => {
-        const part = value / 255;
-        return part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue);
-}
-
 // The top bar keeps its own background whatever the desktop scheme is, and an
 // extension can repaint it, so the label colour the theme resolved is the only
-// honest answer to what the icon sits on.
-function brandOnPanel() {
-    const foreground = Main.panel.get_theme_node().get_foreground_color();
-    return relativeLuminance(foreground) > 0.5 ? BRAND_ON_DARK : BRAND_ON_LIGHT;
+// honest answer to what the icon and the quota numbers sit on.
+function panelScheme() {
+    return schemeForForeground(Main.panel.get_theme_node().get_foreground_color());
 }
 
 function severityClass(base, severity, scheme) {
@@ -52,6 +49,11 @@ function severityClass(base, severity, scheme) {
 
 function quotaClass(base, quota, scheme) {
     return severityClass(base, quota.expired ? 'normal' : quota.severity, scheme);
+}
+
+function barClass(quota, scheme) {
+    const ahead = quota.aheadOfPace && !quota.expired;
+    return `cq-bar cq-bar-${scheme}${ahead ? ` cq-bar-ahead-${scheme}` : ''}`;
 }
 
 const PaceBar = GObject.registerClass(
@@ -94,8 +96,6 @@ class QuotaBlock extends St.BoxLayout {
         header.add_child(new St.Widget({x_expand: true}));
         header.add_child(this._percent);
         this._bar = new PaceBar({x_expand: true});
-        this._bar.add_style_class_name('cq-bar');
-        this._barScheme = null;
         this._caption = new St.Label({style_class: 'cq-caption', opacity: CAPTION_OPACITY});
         this.add_child(header);
         this.add_child(this._bar);
@@ -108,19 +108,17 @@ class QuotaBlock extends St.BoxLayout {
         this._percent.style_class = quotaClass('cq-percent', quota, scheme);
         this._bar.value = quota.expired ? 0 : quota.percent / 100;
         this._bar.overdriveStart = quota.expired ? 1 : (quota.windowProgress ?? 1);
-        this._setBarScheme(scheme);
+        this._bar.style_class = barClass(quota, scheme);
         this._caption.visible = !quota.expired && quota.resetsAt !== null;
-        if (!quota.expired && quota.resetsAt)
-            this._caption.text = `${relativeDuration(quota.resetsAt, now)} left · ${absoluteTime(quota.resetsAt, now)}`;
+        if (this._caption.visible)
+            this._caption.text = captionLine(quota, now);
     }
+});
 
-    _setBarScheme(scheme) {
-        if (this._barScheme === scheme)
-            return;
-        if (this._barScheme)
-            this._bar.remove_style_class_name(`cq-bar-${this._barScheme}`);
-        this._bar.add_style_class_name(`cq-bar-${scheme}`);
-        this._barScheme = scheme;
+const RefreshItem = GObject.registerClass(
+class RefreshItem extends PopupMenu.PopupMenuItem {
+    activate(event) {
+        this.emit('activate', event);
     }
 });
 
@@ -129,12 +127,15 @@ class Indicator extends PanelMenu.Button {
     _init(iconPath) {
         super._init(0.5, 'Claude Quota');
         this._client = new UsageClient();
+        this._status = new StatusClient();
         this._settings = St.Settings.get();
         this._cancellable = null;
         this._destroyed = false;
         this._quotas = [];
         this._blocks = [];
         this._error = null;
+        this._serviceStatus = null;
+        this._refreshing = false;
         this._fetchedAt = null;
         this._blockedUntil = null;
         this._timerId = null;
@@ -148,17 +149,7 @@ class Indicator extends PanelMenu.Button {
         this._panelQuotas = new St.BoxLayout({style_class: 'cq-panel'});
         box.add_child(this._panelQuotas);
         this.add_child(box);
-        this._message = unwrapInactive(new PopupMenu.PopupBaseMenuItem({
-            reactive: true,
-            activate: false,
-            hover: false,
-            can_focus: false,
-        }));
-        this._messageBox = new St.BoxLayout({
-            style_class: 'cq-message',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_expand: true,
-        });
+        this._meta = displayItem();
         this._metaBox = new St.BoxLayout({
             style_class: 'cq-meta',
             orientation: Clutter.Orientation.VERTICAL,
@@ -166,30 +157,40 @@ class Indicator extends PanelMenu.Button {
             x_expand: true,
         });
         this._refreshLabel = new St.Label();
-        this._nextLabel = new St.Label();
         this._metaBox.add_child(this._refreshLabel);
-        this._metaBox.add_child(this._nextLabel);
+        this._meta.add_child(this._metaBox);
+        this._message = displayItem();
+        this._messageBox = new St.BoxLayout({
+            style_class: 'cq-message',
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true,
+        });
         this._messageLabel = new St.Label();
         this._messageLabel.clutter_text.line_wrap = true;
         this._messageLabel.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         this._messageLabel.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this._messageBox.add_child(this._metaBox);
         this._messageBox.add_child(this._messageLabel);
         this._message.add_child(this._messageBox);
-        this._body = unwrapInactive(new PopupMenu.PopupBaseMenuItem({
-            reactive: true,
-            activate: false,
-            hover: false,
-            can_focus: false,
-        }));
+        this._body = displayItem();
         this._blockBox = new St.BoxLayout({
             style_class: 'cq-body',
             orientation: Clutter.Orientation.VERTICAL,
             x_expand: true,
         });
         this._body.add_child(this._blockBox);
+        this._refreshItem = new RefreshItem('Refresh now');
+        this._refreshItem.connect('activate', () => this._refresh());
+        this._statusItem = new PopupMenu.PopupMenuItem('Claude status');
+        this._statusItem.connect('activate', () => Gio.AppInfo.launch_default_for_uri(STATUS_URL, null));
+        this._bodySeparator = new PopupMenu.PopupSeparatorMenuItem();
+        this._messageSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this.menu.addMenuItem(this._body);
+        this.menu.addMenuItem(this._bodySeparator);
+        this.menu.addMenuItem(this._meta);
+        this.menu.addMenuItem(this._refreshItem);
+        this.menu.addMenuItem(this._messageSeparator);
         this.menu.addMenuItem(this._message);
+        this.menu.addMenuItem(this._statusItem);
         this._schemeId = this._settings.connect('notify::color-scheme', () => this._render());
         this.menu.connect('open-state-changed', (menu, open) => {
             if (!open)
@@ -263,10 +264,38 @@ class Indicator extends PanelMenu.Button {
         const cancellable = new Gio.Cancellable();
         this._cancellable?.cancel();
         this._cancellable = cancellable;
+        this._refreshing = true;
+        this._renderSafely();
+        await this._fetchCycle(cancellable);
+        if (this._destroyed || this._cancellable !== cancellable)
+            return;
+        this._refreshing = false;
+        this._renderSafely();
+    }
+
+    async _fetchCycle(cancellable) {
         const result = await this._fetchResult(cancellable);
         if (result === null || this._destroyed || this._cancellable !== cancellable)
             return;
         this._applyResult(result);
+        this._renderSafely();
+        if (!result.serverError)
+            return;
+        await this._refreshServiceStatus(cancellable);
+        if (this._destroyed || this._cancellable !== cancellable)
+            return;
+        this._renderSafely();
+    }
+
+    async _refreshServiceStatus(cancellable) {
+        try {
+            this._serviceStatus = await this._status.fetch(cancellable) ?? UNKNOWN_SERVICE;
+        } catch {
+            this._serviceStatus = UNKNOWN_SERVICE;
+        }
+    }
+
+    _renderSafely() {
         try {
             this._render();
         } catch (error) {
@@ -276,11 +305,17 @@ class Indicator extends PanelMenu.Button {
 
     async _fetchResult(cancellable) {
         try {
-            return {payload: await this._client.fetch(cancellable), error: null, retryAfter: null};
+            const payload = await this._client.fetch(cancellable);
+            return {payload, error: null, retryAfter: null, serverError: false};
         } catch (error) {
             if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
                 return null;
-            return {payload: null, error: error.message, retryAfter: error.retryAfter ?? null};
+            return {
+                payload: null,
+                error: error.message,
+                retryAfter: error.retryAfter ?? null,
+                serverError: error.serverError ?? false,
+            };
         }
     }
 
@@ -289,6 +324,7 @@ class Indicator extends PanelMenu.Button {
             this._limits = Array.isArray(result.payload?.limits) ? result.payload.limits : [];
             this._quotas = quotas(result.payload, new Date());
             this._error = null;
+            this._serviceStatus = null;
             this._blockedUntil = null;
             this._fetchedAt = new Date();
             this._saveCache();
@@ -296,6 +332,9 @@ class Indicator extends PanelMenu.Button {
             return;
         }
         this._error = result.error;
+        // Named before status.claude.com has answered, so the line appears with the
+        // first failed poll and is only ever refined, never introduced late.
+        this._serviceStatus = result.serverError ? UNKNOWN_SERVICE : null;
         this._blockedUntil = blockedUntil(result.retryAfter, new Date());
         this._scheduleNext(nextPollSeconds(result.retryAfter));
     }
@@ -303,29 +342,40 @@ class Indicator extends PanelMenu.Button {
     _composeMessage(now) {
         if (this._error === null || isBlocked(this._blockedUntil, now))
             return null;
-        return this._error;
-    }
-
-    _composeNext(now) {
-        if (!isBlocked(this._blockedUntil, now))
-            return null;
-        return `Next refresh: ${absoluteTime(this._blockedUntil, now)}`;
+        const issue = serviceIssue(this._serviceStatus);
+        return issue ? `${issue.emoji} ${issue.text}` : this._error;
     }
 
     _renderMessage(now, hasQuotas) {
-        const next = this._composeNext(now);
         const message = this._composeMessage(now) ?? (hasQuotas ? '' : 'Loading…');
         this._refreshLabel.text = refreshLine(this._fetchedAt, now);
-        this._nextLabel.text = next ?? '';
-        this._nextLabel.visible = next !== null;
         this._messageLabel.text = message;
-        this._messageLabel.visible = message !== '';
+        this._message.visible = message !== '';
+        this._messageSeparator.visible = message !== '';
+    }
+
+    _renderActions(now) {
+        const stale = shouldFetchOnOpen(this._fetchedAt, now, this._blockedUntil);
+        this._refreshItem.label.text = this._refreshLabelText(now, stale);
+        this._refreshItem.setSensitive(!this._refreshing && stale);
+        this._statusItem.visible = this._error !== null && !isBlocked(this._blockedUntil, now);
+    }
+
+    _refreshLabelText(now, stale) {
+        if (this._refreshing)
+            return 'Refreshing…';
+        if (isBlocked(this._blockedUntil, now))
+            return `Refresh at ${absoluteTime(this._blockedUntil, now)}`;
+        if (!stale)
+            return 'Up to date';
+        return 'Refresh now';
     }
 
     _render() {
         const now = new Date();
         const scheme = this._scheme;
         const quotaViews = markExpired(this._quotas, now);
+        this._renderActions(now);
         this._renderPanel(quotaViews);
         if (this._blocks.length !== quotaViews.length) {
             this._blockBox.destroy_all_children();
@@ -338,33 +388,46 @@ class Indicator extends PanelMenu.Button {
         quotaViews.forEach((quota, index) => this._blocks[index].update(quota, now, scheme));
         const hasQuotas = quotaViews.length > 0;
         this._body.visible = hasQuotas;
+        this._bodySeparator.visible = hasQuotas;
         this._renderMessage(now, hasQuotas);
     }
 
+    _panelSeparator() {
+        return new St.Label({
+            text: '·',
+            y_align: Clutter.ActorAlign.CENTER,
+            opacity: SEPARATOR_OPACITY,
+        });
+    }
+
     _renderPanel(quotaViews) {
-        this._icon.style = `color: ${brandOnPanel()};`;
+        const scheme = panelScheme();
+        this._icon.style = `color: ${brandColor(scheme)};`;
         this._panelQuotas.destroy_all_children();
         if (!quotaViews.length) {
             this._panelQuotas.add_child(new St.Label({
                 text: this._error ? '-' : '…',
                 y_align: Clutter.ActorAlign.CENTER,
             }));
-            return;
         }
         quotaViews.forEach((quota, index) => {
-            if (index > 0) {
-                this._panelQuotas.add_child(new St.Label({
-                    text: '·',
-                    y_align: Clutter.ActorAlign.CENTER,
-                    opacity: SEPARATOR_OPACITY,
-                }));
-            }
+            if (index > 0)
+                this._panelQuotas.add_child(this._panelSeparator());
             this._panelQuotas.add_child(new St.Label({
                 text: quota.expired ? `${quota.short} -` : `${quota.short} ${quota.percent}%`,
-                style_class: quotaClass('cq-panel-quota', quota, 'dark'),
+                style_class: quotaClass('cq-panel-quota', quota, scheme),
                 y_align: Clutter.ActorAlign.CENTER,
             }));
         });
+        const issue = serviceIssue(this._serviceStatus);
+        if (!issue)
+            return;
+        this._panelQuotas.add_child(this._panelSeparator());
+        this._panelQuotas.add_child(new St.Label({
+            text: issue.emoji,
+            style_class: 'cq-panel-issue',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
     }
 
     _onDestroy() {
@@ -376,6 +439,7 @@ class Indicator extends PanelMenu.Button {
         this._settings.disconnect(this._schemeId);
         this._cancellable?.cancel();
         this._client.destroy();
+        this._status.destroy();
     }
 });
 

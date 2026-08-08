@@ -3,6 +3,12 @@
     padding-right: 10px;
 }
 
+/* Colour emoji render taller than the text beside them, so an uncapped glyph
+   grows the whole top bar row. */
+.cq-panel-issue {
+    font-size: 0.85em;
+}
+
 .cq-body {
     spacing: 10px;
 }
@@ -37,15 +43,23 @@
 .cq-bar-dark {
     color: #ffffff;
     -barlevel-background-color: rgba(255, 255, 255, 0.1);
-    -barlevel-active-background-color: -st-accent-color;
-    -barlevel-overdrive-color: -st-accent-color;
+    -barlevel-active-background-color: #d97757;
+    -barlevel-overdrive-color: #d97757;
 }
 
 .cq-bar-light {
     color: #000000;
     -barlevel-background-color: rgba(34, 34, 38, 0.1);
-    -barlevel-active-background-color: -st-accent-color;
-    -barlevel-overdrive-color: -st-accent-color;
+    -barlevel-active-background-color: #c6613f;
+    -barlevel-overdrive-color: #c6613f;
+}
+
+.cq-bar-ahead-dark {
+    -barlevel-overdrive-color: #ff7b63;
+}
+
+.cq-bar-ahead-light {
+    -barlevel-overdrive-color: #c01c28;
 }
 
 .cq-caption {
