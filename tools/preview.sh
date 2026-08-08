@@ -30,26 +30,29 @@ die() {
 isolate_dconf() {
     mkdir -p "$CFG/dconf"
     cp "${XDG_CONFIG_HOME:-$HOME/.config}/dconf/user" "$CFG/dconf/user"
-    local list
-    list="$(XDG_CONFIG_HOME="$CFG" dconf read /org/gnome/shell/enabled-extensions || true)"
-    case "$list" in
-        *"'$UUID'"*) return 0 ;;
-        ''|'@as []'|'[]') list="['$UUID']" ;;
-        *) list="${list%]}, '$UUID']" ;;
-    esac
-    XDG_CONFIG_HOME="$CFG" dconf write /org/gnome/shell/enabled-extensions "$list"
 }
 
 # GNOME 50 dropped the nested backend; --devkit is the replacement, and runs even
 # though its viewer binary is unpackaged. --unsafe-mode is what unlocks Eval.
+#
+# Every dconf write lives inside this dbus-run-session, and nowhere else in the
+# script. XDG_CONFIG_HOME does NOT sandbox dconf: writes travel over the session
+# bus to the dconf service, which reads its own environment, so a write issued
+# before the private bus exists lands in the live session's database. That is how
+# the user's enabled-extensions list got replaced with a single entry — twice.
+# The list is replaced rather than appended to, so no other extension's indicator
+# lands in the panel next to this one, and the font is pinned so a shot reads the
+# same whatever the host happens to run (Cantarell ships with gnome-shell).
 start_shell() {
     # The inner shell must expand these itself, so the body stays single-quoted.
     # shellcheck disable=SC2016
     XDG_CONFIG_HOME="$CFG" dbus-run-session -- bash -c '
         echo "$DBUS_SESSION_BUS_ADDRESS" > "$1"
         echo $$ > "$2"
+        dconf write /org/gnome/shell/enabled-extensions "['"'"'$4'"'"']"
+        gsettings set org.gnome.desktop.interface font-name "Cantarell 11"
         exec gnome-shell --devkit --virtual-monitor "$3" --unsafe-mode
-    ' _ "$BUS_FILE" "$PID_FILE" "$MONITOR" >"$LOG" 2>&1 &
+    ' _ "$BUS_FILE" "$PID_FILE" "$MONITOR" "$UUID" >"$LOG" 2>&1 &
     for _ in $(seq 60); do
         [ -s "$BUS_FILE" ] && break
         sleep 1
@@ -157,7 +160,7 @@ overview() {
         echo 'preview: montage missing, skipping overview' >&2
         return 0
     fi
-    montage -background '#101014' -fill '#b9b9c0' -pointsize 22 -label '%t' \
+    montage -background '#101014' -fill '#b9b9c0' -font DejaVu-Sans -pointsize 22 -label '%t' \
         -tile 7x -geometry '+12+12' \
         "${SHOTS[@]}" "$OUT/overview.png"
     echo "  $OUT/overview.png"
