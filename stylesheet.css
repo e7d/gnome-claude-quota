@@ -9,14 +9,14 @@
 
 .cq-block {
     spacing: 4px;
-    min-width: 280px;
-    max-width: 280px;
+    min-width: 260px;
+    max-width: 260px;
 }
 
 .cq-message {
     spacing: 6px;
-    min-width: 280px;
-    max-width: 280px;
+    min-width: 260px;
+    max-width: 260px;
 }
 
 .cq-meta {
