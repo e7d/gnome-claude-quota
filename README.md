@@ -1,6 +1,6 @@
 # claude-quota
 
-A GNOME Shell indicator showing your Claude Code subscription quota usage — the 5-hour session window and the weekly window.
+A GNOME Shell indicator showing your Claude Code subscription quota usage: the 5-hour session window and the weekly window.
 
 ```
 Panel:  ✳ S 5% · W 37%
@@ -15,7 +15,7 @@ Popup:
   3d 22h left · sam. 09:59
 ```
 
-(Reset times are formatted in your system locale — the example shows French.)
+(Reset times are formatted in your system locale. The example shows French.)
 
 ## What the display means
 
@@ -23,13 +23,13 @@ The panel shows your quota consumption as text labels (`S 5% · W 37%`) with a s
 
 - **`S`** is your 5-hour session quota
 - **`W`** is your weekly quota
-- A model-scoped quota appears only when its usage is above 0%, labelled with the model's initial — `Opus`, `Sonnet`, `Fable` display as `O`, `So`, `F` respectively (a second letter is added if initials collide)
+- A model-scoped quota appears only when its usage is above 0%, labelled with the model's initial. `Opus`, `Sonnet`, `Fable` display as `O`, `So`, `F` respectively (a second letter is added if initials collide)
 
 Each quota's bar in the popup visualizes usage within its time window:
 
 - The fill shows how much quota you've used
 - The thin tick mark shows how far the current window has run (e.g., 1 hour into a 5-hour session)
-- Any fill beyond the tick renders red — that means you're spending quota faster than the clock is running
+- Fill past the tick means you're spending quota faster than the clock is running
 
 The popup displays the remaining time until each quota resets.
 
@@ -38,7 +38,7 @@ The popup displays the remaining time until each quota resets.
 - **GNOME Shell 50**
 - **Claude Code** signed in via OAuth
 
-The extension reads your OAuth token from `~/.claude/.credentials.json` (read-only). It never writes to this file and never refreshes the token. If your token expires, the popup will show `Token expired — run Claude Code once` to refresh it.
+The extension reads your OAuth token from `~/.claude/.credentials.json` (read-only). It never writes to this file and never refreshes the token. If your token expires, the popup will show `Token expired, run Claude Code once` to refresh it.
 
 ## Install
 
@@ -56,9 +56,9 @@ mkdir -p ~/.local/share/gnome-shell/extensions
 ln -sfn "$(realpath claude-quota)" ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
 ```
 
-Run that from the directory *containing* the clone, not from inside it — inside, `claude-quota` resolves against the repository itself and you get a symlink pointing at its own parent.
+Run that from the directory *containing* the clone, not from inside it. Inside, `claude-quota` resolves against the repository itself and you get a symlink pointing at its own parent.
 
-On Wayland, a running shell session does not detect newly installed extensions until you log out and back in. If `gnome-extensions enable` reports `Extension "claude-quota@e7d.io" does not exist`, log out first — it is not a sign of a broken install.
+On Wayland, a running shell session does not detect newly installed extensions until you log out and back in. If `gnome-extensions enable` reports `Extension "claude-quota@e7d.io" does not exist`, log out first. It is not a sign of a broken install.
 
 ## Tests
 
