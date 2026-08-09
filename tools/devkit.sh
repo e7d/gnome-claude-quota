@@ -56,8 +56,10 @@ require_install() {
 }
 
 isolate_dconf() {
+    local live="${XDG_CONFIG_HOME:-$HOME/.config}/dconf/user"
     mkdir -p "$CFG/dconf"
-    cp "${XDG_CONFIG_HOME:-$HOME/.config}/dconf/user" "$CFG/dconf/user"
+    [ -f "$live" ] && cp "$live" "$CFG/dconf/user"
+    return 0
 }
 
 # --headless starts with no monitor at all, where --devkit brings its own; giving
@@ -151,3 +153,5 @@ hide_overview() {
 unwrap() {
     sed -n "s/^(true, '\(.*\)')\$/\1/p" | tr -d '"'
 }
+
+trap cleanup EXIT INT TERM

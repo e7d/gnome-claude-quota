@@ -7,14 +7,48 @@ DEVKIT_HEADLESS=1
 # shellcheck source=tools/devkit.sh
 . "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
 
+SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-reset
+           long-name rate-limited error token-expired loading refreshing fresh no-data
+           service-degraded service-partial service-major service-maintenance
+           service-error)
+SHOTS=()
 THEMES=(dark light)
 PICKED=()
+
+usage() {
+    cat <<USAGE
+Usage: tools/preview.sh [options]
+
+Shoots preview/<theme>-<scenario>.png in a throwaway nested GNOME shell, each one
+stacking the panel button resting, hovered, then pressed with the popup open, plus
+an overview.png contact sheet of them all.
+
+Options:
+  --headless           Run with no window, driven over D-Bus (default)
+  --windowed           Show the session in a Mutter devkit window
+  --dark-only          Shoot the dark theme only
+  --light-only         Shoot the light theme only
+  --scenario=<name>    Shoot one scenario; repeat the flag for several
+  -h, --help           Show this message
+
+A full run takes a few minutes; a subset run takes seconds and leaves the
+screenshots it did not shoot alone.
+
+Scenarios:
+  ${SCENARIOS[*]}
+
+Needs magick, and gnome-shell with this checkout symlinked at
+$INSTALLED
+USAGE
+}
+
 for arg in "$@"; do
     devkit_flag "$arg" && continue
     case "$arg" in
         --dark-only) THEMES=(dark) ;;
         --light-only) THEMES=(light) ;;
         --scenario=*) PICKED+=("${arg#*=}") ;;
+        -h|--help) usage; exit 0 ;;
         *) die "unknown option $arg" ;;
     esac
 done
@@ -128,27 +162,41 @@ setup_for() {
     esac
 }
 
-capture() {
-    local name="$1" box rect
+render_state() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         $QUOTA
         i._quotas = []; i._error = null; i._serviceStatus = null; i._blockedUntil = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000);
-        $(setup_for "$2")
+        $(setup_for "$1")
         i.menu.open(false); i._render(); 'ok'" >/dev/null
-    point_at pill
     sleep 1
+}
+
+close_menu() {
+    shell_eval "Main.panel.statusArea['$UUID'].menu.close(false); 'ok'" >/dev/null
+    sleep 1
+}
+
+open_menu() {
+    shell_eval "Main.panel.statusArea['$UUID'].menu.open(false); 'ok'" >/dev/null
+    sleep 1
+}
+
+capture() {
+    local name="$1" box rect panel
+    render_state "$2"
     box="$(popup_box)"
     [ -n "$box" ] || die "could not measure the popup for $name"
     read -r -a rect <<<"$box"
-    shoot "$RUN/open.png" "${rect[@]}"
-    local panel
     panel="$(panel_height)"
-    shell_eval "Main.panel.statusArea['$UUID'].menu.close(false); 'ok'" >/dev/null
-    sleep 1
-    shoot "$RUN/hovered.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
+    close_menu
     point_at away
     sleep 1
     shoot "$RUN/closed.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
+    point_at pill
+    sleep 1
+    shoot "$RUN/hovered.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
+    open_menu
+    shoot "$RUN/open.png" "${rect[@]}"
     magick "$RUN/closed.png" "$RUN/hovered.png" "$RUN/open.png" \
         -background none -smush 8 "$OUT/$name.png"
     SHOTS+=("$OUT/$name.png")
@@ -169,6 +217,12 @@ overview() {
         echo 'preview: montage missing, skipping overview' >&2
         return 0
     fi
+    local fonts
+    fonts="$(magick -list font)"
+    if ! grep -qE '^ *Font: DejaVu-Sans$' <<<"$fonts"; then
+        echo 'preview: DejaVu-Sans missing, skipping overview' >&2
+        return 0
+    fi
     local tiles=() shot name
     for shot in "${SHOTS[@]}"; do
         name="$(basename "$shot" .png)"
@@ -180,12 +234,6 @@ overview() {
         "${tiles[@]}" "$OUT/overview.png"
     echo "  $OUT/overview.png"
 }
-
-SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-reset
-           long-name rate-limited error token-expired loading refreshing fresh no-data
-           service-degraded service-partial service-major service-maintenance
-           service-error)
-SHOTS=()
 
 select_scenarios() {
     local want found
@@ -205,7 +253,6 @@ subset() {
 }
 
 main() {
-    trap cleanup EXIT INT TERM
     require_install
     require_commands magick
     select_scenarios

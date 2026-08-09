@@ -30,8 +30,11 @@ function targets(args) {
 
 const TRANSIENT_PANEL_PILL_SURFACES = ['#474747', '#bdbdbf', '#2b2b2b', '#d5d5d7'];
 
+const CI_PANEL_PILL_SURFACES = ['#5e5e61', '#46464a'];
+
 function accepted(finding) {
-    return TRANSIENT_PANEL_PILL_SURFACES.some(surface => near(finding.background, surface));
+    return [...TRANSIENT_PANEL_PILL_SURFACES, ...CI_PANEL_PILL_SURFACES]
+        .some(surface => near(finding.background, surface));
 }
 
 function near(color, hex) {

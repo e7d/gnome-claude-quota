@@ -8,12 +8,37 @@ DEVKIT_HEADLESS=0
 
 WATCH=0
 SCHEME=''
+
+usage() {
+    cat <<USAGE
+Usage: tools/dev.sh [options]
+
+Runs this checkout, and nothing else, in a throwaway nested GNOME shell. Your own
+session, its dconf database and its extensions are untouched.
+
+Options:
+  --watch        Restart the shell whenever a source file changes
+  --windowed     Show the session in a Mutter devkit window (default)
+  --headless     Run with no window, driven over D-Bus
+  --dark         Force prefer-dark
+  --light        Force prefer-light
+  -h, --help     Show this message
+
+Without --dark or --light the colour scheme, wallpaper and accent colour reset to
+the GNOME defaults, so a session looks the same on any machine.
+
+Needs gnome-shell with this checkout symlinked at
+$INSTALLED
+USAGE
+}
+
 for arg in "$@"; do
     devkit_flag "$arg" && continue
     case "$arg" in
         --watch) WATCH=1 ;;
         --dark) SCHEME='prefer-dark' ;;
         --light) SCHEME='prefer-light' ;;
+        -h|--help) usage; exit 0 ;;
         *) die "unknown option $arg" ;;
     esac
 done
@@ -43,8 +68,6 @@ launch() {
     echo "dev: bus $DBUS_SESSION_BUS_ADDRESS"
     echo "dev: log $LOG"
 }
-
-trap cleanup EXIT INT TERM
 
 require_install
 if [ "$WATCH" -eq 1 ]; then

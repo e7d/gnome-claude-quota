@@ -6,7 +6,6 @@ DEVKIT_NAME='a11y'
 . "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
 
 main() {
-    trap cleanup EXIT INT TERM
     require_commands magick node
     node "$ROOT/tools/a11y.js" "$@"
 }

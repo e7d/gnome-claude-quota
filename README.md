@@ -124,6 +124,7 @@ tools/dev.sh --watch --light
 | `--headless` | Run with no window, driven over D-Bus |
 | `--dark` | Force `prefer-dark` |
 | `--light` | Force `prefer-light` |
+| `-h`, `--help` | Print the flags and exit |
 
 Each script checks what it needs up front and names everything that is missing at once. Shared: `gnome-shell`, `dbus-run-session`, `dconf`, `gsettings`, `gdbus`. `--watch` also wants `find`, `stat`, `sha256sum` and `xargs`; `preview.sh` wants ImageMagick's `magick`, and skips `overview.png` alone if `montage` is absent.
 
@@ -145,6 +146,7 @@ A full run is a few minutes, so it also takes flags to shoot a subset while iter
 | --- | --- |
 | `--dark-only` / `--light-only` | Shoot one theme instead of both |
 | `--scenario=<name>` | Shoot one scenario; repeat the flag for several |
+| `-h`, `--help` | Print the flags and the scenario names, and exit |
 
 ```bash
 npm run preview -- --dark-only --scenario=loading --scenario=no-data
@@ -176,6 +178,16 @@ Pairing a foreground with its background is the hard part, and the method is an 
 A finding on the pill GNOME paints under a hovered or pressed panel button is reported as accepted rather than failed, and counted in the per-file line so the waiver is never silent. Those four greys are the only surfaces treated that way: severity colours are judged against the top bar and the popup card, and darkening amber until it clears a surface that exists for as long as the pointer rests there would cost the colour its meaning.
 
 What that costs: text on a saturated background is never measured, nor is anything within three pixels of a bar or an emoji; colour emoji are scored as though they were text, which is what the `service-error` shots report; the ratio comes from the strongest pixel of a stroke, so a stroke too thin to ever reach its own colour is scored optimistically; and large text is inferred from glyph height, which reads short on a word with no ascender and so errs towards the stricter threshold. It measures pixels, not CSS — a colour no scenario renders is a colour it never checks.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs the same checks you would run by hand, in that order: `shellcheck -x` over `tools/`, `npm test`, a preview subset, then `npm run a11y` over exactly what that subset shot.
+
+The screenshots need a whole GNOME session, so every step runs inside an image built from `.github/ci.Dockerfile` — Arch plus `gnome-shell`, ImageMagick, Node and the fonts the shots depend on. Its tag is a digest of that Dockerfile and it lives in the Forgejo registry, so a run rebuilds the image only when the file changes and pulls it otherwise. `.github/logind-stub.sh` supplies the `org.freedesktop.login1` service that `gnome-shell` refuses to start without and no container provides.
+
+Two of the waived pill greys exist only for CI. A shell running in a container paints the top bar transparent as soon as a pointer device exists, where the same GNOME on a workstation paints it opaque black — so CI shoots GNOME's pill over the desktop rather than over the panel, and lands on `#5e5e61` / `#46464a` instead of `#2b2b2b` / `#474747`. Everything else in the shots is byte-identical between the two, ink colours included. The cause sits inside GNOME's own panel styling; version, renderer, wallpaper, dconf, animation timing, colour scheme and session mode were each measured and excluded.
+
+The preview step shoots six scenarios in both themes — `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major` — rather than all 21. Between them they render every severity colour, the status button and the error surface, which is the whole of what `a11y` can measure; the scenarios left out differ in text rather than in colour, and the full matrix costs minutes per run to say the same thing.
 
 ---
 

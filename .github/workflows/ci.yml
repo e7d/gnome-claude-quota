@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  REGISTRY: git.lan.e7d.io
+  CI_IMAGE: git.lan.e7d.io/${{ github.repository }}-ci
+  UUID: claude-quota@e7d.io
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: login
+        env: { T: "${{ secrets.REGISTRY_TOKEN }}", U: "${{ github.actor }}" }
+        run: echo "$T" | docker login "$REGISTRY" -u "$U" --password-stdin
+
+      - name: image
+        run: |
+          IMAGE="$CI_IMAGE:$(sha256sum .github/ci.Dockerfile | cut -c1-16)"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+          docker pull "$IMAGE" 2>/dev/null || {
+            docker build -f .github/ci.Dockerfile -t "$IMAGE" .github
+            docker push "$IMAGE"
+          }
+
+      - name: setup
+        run: |
+          C="claude-quota-${GITHUB_RUN_ID}"
+          echo "C=$C" >> $GITHUB_ENV
+          docker create --name "$C" -w /work "$IMAGE" sleep infinity
+          docker cp ./. "$C":/work/
+          docker start "$C"
+          docker exec -u root "$C" chown -R ci:ci /work
+          docker exec "$C" bash -c 'mkdir -p ~/.local/share/gnome-shell/extensions && ln -sfn /work ~/.local/share/gnome-shell/extensions/'"$UUID"
+          docker exec -u root "$C" .github/logind-stub.sh
+
+      - name: shellcheck
+        run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh'
+
+      - name: test
+        run: docker exec "$C" npm test
+
+      - name: preview
+        run: |
+          docker exec "$C" tools/preview.sh \
+            --scenario=normal --scenario=warning --scenario=critical \
+            --scenario=model-scoped --scenario=error --scenario=service-major
+
+      - name: a11y
+        run: docker exec "$C" npm run a11y
+
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
