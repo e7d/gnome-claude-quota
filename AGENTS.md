@@ -37,6 +37,14 @@ Every screenshot is a stacked pair: panel with the menu shut on top, popup open 
 
 `README.md` § Development is the user-facing reference for all of these and their flags. Update it in the same change when you alter a flag or add a script.
 
+## Behave like the platform
+
+The extension should be indistinguishable from a native part of the shell. Whatever GNOME does for a panel button — its resting, hover and pressed backgrounds, its focus ring, its spacing, its symbolic icons — is what this indicator does too, and overriding any of it is a defect rather than a style choice. A user who cannot tell which panel items ship with GNOME and which are ours is the target.
+
+That extends to colour: severity colours are judged against the surfaces a reader rests on (the top bar, the popup card), never against the transient pill under a pressed or hovered button. Darkening a warning until it clears 4.5:1 there turns amber into brown and destroys the meaning the colour exists to carry. `tools/a11y.js` encodes exactly that, listing the transient surfaces it accepts and printing what it accepted rather than hiding it.
+
+Suppressing a shell behaviour to satisfy a measurement is the wrong trade in both directions: it broke platform consistency once (a panel button with no hover state at all) and cost a colour its meaning once. Change what is ours; leave what is GNOME's.
+
 ## Things that will bite you
 
 **GNOME caches extension modules for the life of a shell process.** Disabling and re-enabling the extension re-runs the *old* code. Watch mode restarts the whole nested shell for this reason; never replace that with a disable/enable cycle.
