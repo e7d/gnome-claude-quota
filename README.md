@@ -35,16 +35,13 @@ The popup displays the remaining time until each quota resets.
 
 ## Refreshing
 
-The extension polls every 5 minutes, and again when you open the popup if the cached data is more than a minute old. `Refresh now` forces a poll and leaves the popup open, so you can watch the numbers land. Its label doubles as the reason it is unavailable:
+The extension polls every 5 minutes, and again when you open the popup if the cached data is more than a minute old.
 
-| Label | State |
-|---|---|
-| `Refresh now` | the data is older than a minute; clicking polls |
-| `Refreshing…` | a poll is in flight |
-| `Up to date` | the data is younger than a minute, so a poll would return the same numbers |
-| `Refresh at 11:27 PM` | a `429` is in force, and this is the earliest retry it allowed |
+The popup's first line carries `Last refresh: 10:48 AM` with a circular-arrow button on the right. Clicking it polls and **leaves the popup open**, so the numbers land in front of you. The icon spins while the poll is in flight and the button is insensitive until it finishes, so a poll cannot be fired twice.
 
-The button obeys the same staleness rule as opening the popup, because the `429` allowance is shared with every other Claude extension on the machine. Nothing in either response reports how much of it is left, so the extension declines to be what spends it.
+There is no `Up to date` state: the timestamp beside the button already says how fresh the numbers are.
+
+The button also goes insensitive while a `429` is in force, because that allowance is shared with every other Claude extension on the machine. Nothing in either response reports how much of it is left, so the extension declines to be what spends it.
 
 `Claude status` opens [status.claude.com](https://status.claude.com/) and appears only once something has actually failed.
 
@@ -63,7 +60,7 @@ When a usage request comes back `5xx`, the extension appends an emoji after the 
 The wording comes from the Claude Code component on [status.claude.com](https://status.claude.com/); the *decision to show anything at all* comes from your own failed request. Two consequences follow:
 
 - A degraded status page with no local failures shows nothing. If your requests all succeed, you are not in the outage.
-- `429` is not a failure. The service is working and refusing you, so it raises no status, and `Claude status` stays hidden — the status page cannot explain a spent allowance. The refresh action names the retry time instead.
+- `429` is not a failure. The service is working and refusing you, so it raises no error line, no status is raised and `Claude status` stays hidden — the status page cannot explain a spent allowance. The only sign is the refresh button greying out until the retry time.
 
 The status page is only fetched **after** a `5xx`, so the ordinary 5-minute poll stays a single request and a status.claude.com outage cannot slow it down.
 
@@ -142,11 +139,41 @@ Watch mode restarts the whole shell rather than reloading the extension, because
 npm run preview -- --windowed
 ```
 
+A full run is a few minutes, so it also takes flags to shoot a subset while iterating on one state — seconds rather than minutes:
+
+| Flag | Effect |
+| --- | --- |
+| `--dark-only` / `--light-only` | Shoot one theme instead of both |
+| `--scenario=<name>` | Shoot one scenario; repeat the flag for several |
+
+```bash
+npm run preview -- --dark-only --scenario=loading --scenario=no-data
+```
+
+An unknown scenario name is refused with the list of valid ones rather than silently shooting nothing. A subset run leaves the other screenshots alone instead of wiping `preview/`, but it also renormalises and retiles only what it shot — so finish with a full run before treating `overview.png` as complete.
+
 Each `<theme>-<scenario>.png` stacks two shots of the same state: on top the panel with the menu shut and the pointer parked away, below it the menu open with the pointer on the pill. Both halves are cropped to the same width, and every pair is then padded to the tallest one, so the panel row sits at the same place in all of them. That is what lets `overview.png` be scanned as a grid — a contrast regression shows up as one tile differing from its neighbours rather than something you have to hunt for.
 
 The scenarios live in the `SCENARIOS` array in `tools/preview.sh`, each paired with a `setup_for` case that fabricates the state. `preview/` is gitignored: the shots are local artifacts, and their exact dimensions vary with whatever your live quota text happens to be.
 
 Both scripts share `tools/devkit.sh`, which owns the session lifecycle — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. Each script only declares what differs from that, so a fix to the session handling lands in one place.
+
+`npm run a11y` reads those screenshots back and measures colour contrast, so a scheme that leaves a label unreadable fails a check instead of waiting to be noticed:
+
+```bash
+npm run a11y                           # every preview/*.png except overview.png
+npm run a11y -- preview/dark-full.png  # or named files
+```
+
+It wants `magick` and `node`, prints the pairs it measured per file and a total, and exits `1` while anything is under threshold — `2` if a file cannot be read — so it can gate CI.
+
+Pairing a foreground with its background is the hard part, and the method is an inference with known edges. The image is swept in 16px windows: the dominant colour of a window is the background, the minority colours are ink, and each ink is measured against that background under WCAG 2.1 — 4.5:1 for normal text, 3:1 once the glyph stands 18px or taller. Three filters keep that from degenerating into noise:
+
+- Only neutral surfaces are measured. The crop also catches the wallpaper behind the popup and whatever else GNOME parks in the top bar, and those are saturated; this extension only ever paints ink onto grey.
+- Anything whose interior sits more than two pixels from its own background is a region rather than ink — the wallpaper, another indicator's pill, a progress bar. Windows touching one are skipped.
+- Anti-aliasing lays a ramp of blends between ink and background. A colour on the line between the background and a stronger ink nearby is dropped, so a half-lit edge pixel is not reported as faint text.
+
+What that costs: text on a saturated background is never measured, nor is anything within three pixels of a bar or an emoji; colour emoji are scored as though they were text, which is what the `service-error` shots report; the ratio comes from the strongest pixel of a stroke, so a stroke too thin to ever reach its own colour is scored optimistically; and large text is inferred from glyph height, which reads short on a word with no ascender and so errs towards the stricter threshold. It measures pixels, not CSS — a colour no scenario renders is a colour it never checks.
 
 ---
 
