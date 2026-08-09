@@ -1,3 +1,14 @@
+/* The shipped theme paints a light pill behind an open menu's button, and the
+   severity colours drop to 2.6:1 against it where they clear 4.5:1 on the bar. */
+.cq-indicator:active,
+.cq-indicator:checked,
+.cq-indicator:focus,
+.cq-indicator:hover {
+    background-color: transparent;
+    box-shadow: none;
+    border-image: none;
+}
+
 .cq-panel {
     spacing: 6px;
     padding-right: 10px;
@@ -41,6 +52,7 @@
 .cq-meta {
     spacing: 6px;
     font-size: 0.9em;
+    padding-bottom: 6px;
 }
 
 .cq-name,

@@ -55,7 +55,7 @@ When a usage request comes back `5xx`, the extension appends an emoji after the 
 | ⚠️ Partial outage | reported as `partial_outage` |
 | 🔴 Major outage | reported as `major_outage` |
 | 🚧 Under maintenance | reported as `under_maintenance` |
-| ❗ Service error | the request failed, but the status page reads operational, is unreachable, or answers something unrecognised |
+| 🚨 Service error | the request failed, but the status page reads operational, is unreachable, or answers something unrecognised |
 
 The wording comes from the Claude Code component on [status.claude.com](https://status.claude.com/); the *decision to show anything at all* comes from your own failed request. Two consequences follow:
 
