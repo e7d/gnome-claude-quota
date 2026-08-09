@@ -13,6 +13,19 @@
     spacing: 10px;
 }
 
+.cq-blocks {
+    spacing: 10px;
+}
+
+.cq-refresh {
+    padding: 2px;
+    border-radius: 99px;
+}
+
+.cq-refresh:hover {
+    background-color: rgba(127, 127, 127, 0.25);
+}
+
 .cq-block {
     spacing: 4px;
     min-width: 260px;
@@ -26,7 +39,7 @@
 }
 
 .cq-meta {
-    spacing: 2px;
+    spacing: 6px;
     font-size: 0.9em;
 }
 

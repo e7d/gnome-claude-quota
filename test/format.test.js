@@ -51,7 +51,7 @@ test('refreshLine names the time of the last fetch', () => {
 });
 
 test('refreshLine still reports before any fetch has landed', () => {
-    assert.equal(refreshLine(null, now, 'en-GB'), 'Last refresh: never');
+    assert.equal(refreshLine(null, now, 'en-GB'), 'Last refresh: -');
 });
 
 test('windowProgress measures elapsed time in the session window', () => {
@@ -71,3 +71,5 @@ test('windowProgress clamps a reset already in the past', () => {
 test('windowProgress is null without a reset time', () => {
     assert.equal(windowProgress(null, now, WINDOW_LENGTH_MS.weekly), null);
 });
+
+
