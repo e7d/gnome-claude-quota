@@ -97,10 +97,56 @@ On Wayland, a running shell session does not detect newly installed extensions u
 ## Tests
 
 ```bash
-TZ=UTC node --test
+npm test
 ```
 
-`TZ` is pinned because the test suite asserts absolute times and `Intl.DateTimeFormat` resolves against the system timezone.
+`TZ` is pinned to `UTC` in the script because the test suite asserts absolute times and `Intl.DateTimeFormat` resolves against the system timezone.
+
+## Development
+
+A running GNOME session caches extension code for its whole lifetime, so testing a change otherwise means logging out. `npm run dev` instead starts a throwaway nested shell that runs this extension and nothing else:
+
+```bash
+npm run dev          # nested shell in a window, Ctrl-C to stop
+npm run dev:watch    # same, restarted on every source edit
+```
+
+This needs the extension installed as a symlink to *this* checkout, as in the second install recipe above; `tools/dev.sh` refuses to start otherwise rather than silently running some other copy.
+
+Both are thin wrappers around `tools/dev.sh`. Pass its flags through `npm` with a `--` separator, or call the script directly:
+
+```bash
+npm run dev -- --watch --light
+tools/dev.sh --watch --light
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--watch` | Restart the shell whenever a source file changes |
+| `--windowed` | Show the session in a Mutter devkit window (default here) |
+| `--headless` | Run with no window, driven over D-Bus |
+| `--dark` | Force `prefer-dark` |
+| `--light` | Force `prefer-light` |
+
+Each script checks what it needs up front and names everything that is missing at once. Shared: `gnome-shell`, `dbus-run-session`, `dconf`, `gsettings`, `gdbus`. `--watch` also wants `find`, `stat`, `sha256sum` and `xargs`; `preview.sh` wants ImageMagick's `magick`, and skips `overview.png` alone if `montage` is absent.
+
+`--windowed` needs the `mutter-devkit` package, matching your `mutter` version. That one only warns rather than failing: the session still runs, there is just nothing to look at.
+
+Without `--dark` or `--light` the colour scheme resets to the GNOME default rather than inheriting your desktop, as do the wallpaper and accent colour, so a session looks the same on any machine. Your own settings are untouched: the nested shell gets a private copy of dconf, and every write to it happens inside that session's own bus.
+
+Watch mode restarts the whole shell rather than reloading the extension, because a disable/enable cycle re-runs the cached modules and would silently ignore your edit.
+
+`npm run preview` regenerates the screenshots in `preview/`. It takes the same `--windowed` / `--headless` pair, defaulting to headless — the opposite of `dev.sh` — so add `--windowed` to watch it work:
+
+```bash
+npm run preview -- --windowed
+```
+
+Each `<theme>-<scenario>.png` stacks two shots of the same state: on top the panel with the menu shut and the pointer parked away, below it the menu open with the pointer on the pill. Both halves are cropped to the same width, and every pair is then padded to the tallest one, so the panel row sits at the same place in all of them. That is what lets `overview.png` be scanned as a grid — a contrast regression shows up as one tile differing from its neighbours rather than something you have to hunt for.
+
+The scenarios live in the `SCENARIOS` array in `tools/preview.sh`, each paired with a `setup_for` case that fabricates the state. `preview/` is gitignored: the shots are local artifacts, and their exact dimensions vary with whatever your live quota text happens to be.
+
+Both scripts share `tools/devkit.sh`, which owns the session lifecycle — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. Each script only declares what differs from that, so a fix to the session handling lands in one place.
 
 ---
 

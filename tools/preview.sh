@@ -1,83 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UUID='claude-quota@e7d.io'
-MONITOR='1400x900'
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEVKIT_NAME='preview'
+DEVKIT_SETUP='gsettings set org.gnome.desktop.interface font-name "Cantarell 11"'
+DEVKIT_HEADLESS=1
+# shellcheck source=tools/devkit.sh
+. "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
+
+for arg in "$@"; do
+    devkit_flag "$arg" || die "unknown option $arg"
+done
+
 OUT="$ROOT/preview"
-RUN="$(mktemp -d)"
-CFG="$RUN/config"
-BUS_FILE="$RUN/bus"
-PID_FILE="$RUN/pid"
-LOG="$RUN/shell.log"
-
-cleanup() {
-    if [ -s "$PID_FILE" ]; then
-        kill "$(cat "$PID_FILE")" 2>/dev/null || true
-        sleep 1
-    fi
-    rm -rf "$RUN"
-}
-
-die() {
-    echo "preview: $1" >&2
-    [ -s "$LOG" ] && tail -5 "$LOG" >&2
-    exit 1
-}
-
-# The nested shell shares the user's dconf unless we hand it a private copy, and
-# its extensions write to whatever they are given, including enabled-extensions.
-isolate_dconf() {
-    mkdir -p "$CFG/dconf"
-    cp "${XDG_CONFIG_HOME:-$HOME/.config}/dconf/user" "$CFG/dconf/user"
-}
-
-# GNOME 50 dropped the nested backend; --devkit is the replacement, and runs even
-# though its viewer binary is unpackaged. --unsafe-mode is what unlocks Eval.
-#
-# Every dconf write lives inside this dbus-run-session, and nowhere else in the
-# script. XDG_CONFIG_HOME does NOT sandbox dconf: writes travel over the session
-# bus to the dconf service, which reads its own environment, so a write issued
-# before the private bus exists lands in the live session's database. That is how
-# the user's enabled-extensions list got replaced with a single entry — twice.
-# The list is replaced rather than appended to, so no other extension's indicator
-# lands in the panel next to this one, and the font is pinned so a shot reads the
-# same whatever the host happens to run (Cantarell ships with gnome-shell).
-start_shell() {
-    # The inner shell must expand these itself, so the body stays single-quoted.
-    # shellcheck disable=SC2016
-    XDG_CONFIG_HOME="$CFG" dbus-run-session -- bash -c '
-        echo "$DBUS_SESSION_BUS_ADDRESS" > "$1"
-        echo $$ > "$2"
-        dconf write /org/gnome/shell/enabled-extensions "['"'"'$4'"'"']"
-        gsettings set org.gnome.desktop.interface font-name "Cantarell 11"
-        exec gnome-shell --devkit --virtual-monitor "$3" --unsafe-mode
-    ' _ "$BUS_FILE" "$PID_FILE" "$MONITOR" "$UUID" >"$LOG" 2>&1 &
-    for _ in $(seq 60); do
-        [ -s "$BUS_FILE" ] && break
-        sleep 1
-    done
-    [ -s "$BUS_FILE" ] || die 'shell never published a bus address'
-    DBUS_SESSION_BUS_ADDRESS="$(cat "$BUS_FILE")"
-    export DBUS_SESSION_BUS_ADDRESS
-}
-
-shell_eval() {
-    gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
-        --method org.gnome.Shell.Eval "$1" 2>/dev/null
-}
-
-# Eval answers (false, '') both when it is locked down and when the script is
-# wrong, so treat anything but a true reply as not-ready rather than as an error.
-wait_for_indicator() {
-    for _ in $(seq 60); do
-        case "$(shell_eval "Object.keys(Main.panel.statusArea).includes('$UUID').toString()")" in
-            "(true, '\"true\"')"|"(true, 'true')") return 0 ;;
-        esac
-        sleep 1
-    done
-    die "indicator $UUID never appeared"
-}
 
 # Every state below is fabricated, so the real endpoint must never answer over the
 # top of it. Stubbing the instance method also spares the shared API rate limit.
@@ -86,25 +20,51 @@ freeze() {
 }
 
 set_theme() {
-    XDG_CONFIG_HOME="$CFG" gsettings set org.gnome.desktop.interface color-scheme "prefer-$1"
-    sleep 2
+    shell_settle color-scheme "prefer-$1"
 }
 
-unwrap() {
-    sed -n "s/^(true, '\(.*\)')\$/\1/p" | tr -d '"'
-}
-
-# Spans the panel button and the popup so the button's hover pill is never clipped.
-shot_box() {
+popup_box() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
-        const [bx, by] = i.get_transformed_position();
-        const [bw, bh] = i.get_transformed_size();
+        const [bx] = i.get_transformed_position();
+        const [bw] = i.get_transformed_size();
         const m = i.menu.actor;
         const [mx, my] = m.get_transformed_position();
         const [mw, mh] = m.get_transformed_size();
+        const mon = Main.layoutManager.primaryMonitor;
         const x0 = Math.max(0, Math.round(Math.min(bx, mx)) - 12);
-        const x1 = Math.round(Math.max(bx + bw, mx + mw)) + 12;
-        [x0, 0, x1 - x0, Math.round(my + mh) + 12].join(' ')" | unwrap
+        const x1 = Math.min(mon.width, Math.round(Math.max(bx + bw, mx + mw)) + 12);
+        const y1 = Math.min(mon.height, Math.round(my + mh) + 12);
+        [x0, 0, x1 - x0, y1].join(' ')" | unwrap
+}
+
+panel_height() {
+    shell_eval "(Math.round(Main.panel.height) + 12).toString()" | unwrap
+}
+
+# warp_pointer is ignored while the devkit viewer owns the pointer, so hover has
+# to come from a virtual device emitting real motion events.
+point_at() {
+    shell_eval "const C = imports.gi.Clutter;
+        globalThis._vd ||= C.get_default_backend().get_default_seat()
+            .create_virtual_device(C.InputDeviceType.POINTER_DEVICE);
+        const i = Main.panel.statusArea['$UUID'];
+        const mon = Main.layoutManager.primaryMonitor;
+        const [bx, by] = i.get_transformed_position();
+        const [bw, bh] = i.get_transformed_size();
+        const [x, y] = '$1' === 'pill'
+            ? [bx + bw / 2, by + bh / 2]
+            : [mon.width / 2, mon.height - 8];
+        globalThis._vd.notify_absolute_motion(global.get_current_time(), Math.round(x), Math.round(y));
+        'ok'" >/dev/null
+}
+
+shoot() {
+    local path="$1"
+    shift
+    gdbus call --session --dest org.gnome.Shell.Screenshot \
+        --object-path /org/gnome/Shell/Screenshot \
+        --method org.gnome.Shell.Screenshot.ScreenshotArea \
+        "$@" false "$path" >/dev/null || die "screenshot failed for $path"
 }
 
 QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => {
@@ -166,17 +126,28 @@ capture() {
         i._quotas = []; i._error = null; i._serviceStatus = null; i._blockedUntil = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000);
         $(setup_for "$2")
         i.menu.open(false); i._render(); 'ok'" >/dev/null
+    point_at pill
     sleep 1
-    box="$(shot_box)"
+    box="$(popup_box)"
     [ -n "$box" ] || die "could not measure the popup for $name"
     read -r -a rect <<<"$box"
-    gdbus call --session --dest org.gnome.Shell.Screenshot \
-        --object-path /org/gnome/Shell/Screenshot \
-        --method org.gnome.Shell.Screenshot.ScreenshotArea \
-        "${rect[@]}" false "$OUT/$name.png" >/dev/null || die "screenshot failed for $name"
+    shoot "$RUN/open.png" "${rect[@]}"
     shell_eval "Main.panel.statusArea['$UUID'].menu.close(false); 'ok'" >/dev/null
+    point_at away
+    sleep 1
+    shoot "$RUN/closed.png" "${rect[0]}" 0 "${rect[2]}" "$(panel_height)"
+    magick "$RUN/closed.png" "$RUN/open.png" -background none -smush 8 "$OUT/$name.png"
     SHOTS+=("$OUT/$name.png")
     echo "  $OUT/$name.png"
+}
+
+normalize() {
+    local w h
+    w="$(magick identify -format '%w\n' "${SHOTS[@]}" | sort -n | tail -1)"
+    h="$(magick identify -format '%h\n' "${SHOTS[@]}" | sort -n | tail -1)"
+    [ "${w:-0}" -gt 0 ] && [ "${h:-0}" -gt 0 ] || die 'could not measure the captured shots'
+    magick mogrify -background none -gravity north -extent "${w}x${h}" "${SHOTS[@]}"
+    echo "  normalized ${#SHOTS[@]} shots to ${w}x${h}"
 }
 
 overview() {
@@ -184,9 +155,15 @@ overview() {
         echo 'preview: montage missing, skipping overview' >&2
         return 0
     fi
-    montage -background '#101014' -fill '#b9b9c0' -font DejaVu-Sans -pointsize 22 -label '%t' \
-        -tile 7x -geometry '+12+12' \
-        "${SHOTS[@]}" "$OUT/overview.png"
+    local tiles=() shot name
+    for shot in "${SHOTS[@]}"; do
+        name="$(basename "$shot" .png)"
+        magick -background '#101014' -fill '#b9b9c0' -font DejaVu-Sans -pointsize 22 \
+            label:"$name" -gravity center "$shot" -append +set label "$RUN/tile-$name.png"
+        tiles+=("$RUN/tile-$name.png")
+    done
+    montage -background '#101014' -tile 7x -geometry '+12+12' \
+        "${tiles[@]}" "$OUT/overview.png"
     echo "  $OUT/overview.png"
 }
 
@@ -197,13 +174,15 @@ SCENARIOS=(normal over-pace warning critical full zero expired model-scoped
 SHOTS=()
 
 main() {
-    command -v gnome-shell >/dev/null || die 'gnome-shell not found'
-    trap cleanup EXIT
+    trap cleanup EXIT INT TERM
+    require_install
+    require_commands magick
     mkdir -p "$OUT"
     rm -f "$OUT"/*.png
     isolate_dconf
     start_shell
     wait_for_indicator
+    hide_overview
     freeze
     for theme in dark light; do
         set_theme "$theme"
@@ -212,7 +191,8 @@ main() {
             capture "$theme-$scenario" "$scenario"
         done
     done
+    normalize
     overview
 }
 
-main "$@"
+main

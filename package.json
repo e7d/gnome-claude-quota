@@ -1,5 +1,11 @@
 {
   "name": "claude-quota",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "TZ=UTC node --test",
+    "dev": "tools/dev.sh",
+    "dev:watch": "tools/dev.sh --watch",
+    "preview": "tools/preview.sh"
+  }
 }
