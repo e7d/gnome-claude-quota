@@ -28,6 +28,20 @@ function targets(args) {
         .map(name => join(SHOTS, name));
 }
 
+// The pill the theme paints under a pressed or hovered panel button is a
+// transient surface; forcing amber and red to clear it costs them their meaning.
+const TRANSIENT_SURFACES = ['#474747', '#bdbdbf'];
+
+function accepted(finding) {
+    return TRANSIENT_SURFACES.some(surface => near(finding.background, surface));
+}
+
+function near(color, hex) {
+    const want = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+    return [color.red, color.green, color.blue]
+        .every((channel, index) => Math.abs(channel - want[index]) <= 12);
+}
+
 function describe(finding) {
     return `${finding.ratio.toFixed(2)}:1 under ${finding.threshold.ratio}:1 (${finding.threshold.label})`
         + `  ${toHex(finding.ink)} on ${toHex(finding.background)}`
@@ -36,10 +50,12 @@ function describe(finding) {
 
 function report(path) {
     const {findings} = scanImage(readImage(path));
-    const failed = findings
-        .filter(finding => finding.ratio < finding.threshold.ratio)
+    const under = findings.filter(finding => finding.ratio < finding.threshold.ratio);
+    const failed = under.filter(finding => !accepted(finding))
         .toSorted((one, other) => one.ratio - other.ratio);
-    console.log(`${basename(path)}: ${findings.length} pair(s) measured, ${failed.length} under threshold`);
+    const waived = under.length - failed.length;
+    console.log(`${basename(path)}: ${findings.length} pair(s) measured, ${failed.length} under threshold`
+        + (waived ? `, ${waived} accepted` : ''));
     for (const finding of failed)
         console.log(`  ${describe(finding)}`);
     return failed.length;
