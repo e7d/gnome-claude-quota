@@ -141,11 +141,16 @@ capture() {
     [ -n "$box" ] || die "could not measure the popup for $name"
     read -r -a rect <<<"$box"
     shoot "$RUN/open.png" "${rect[@]}"
+    local panel
+    panel="$(panel_height)"
     shell_eval "Main.panel.statusArea['$UUID'].menu.close(false); 'ok'" >/dev/null
+    sleep 1
+    shoot "$RUN/hovered.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
     point_at away
     sleep 1
-    shoot "$RUN/closed.png" "${rect[0]}" 0 "${rect[2]}" "$(panel_height)"
-    magick "$RUN/closed.png" "$RUN/open.png" -background none -smush 8 "$OUT/$name.png"
+    shoot "$RUN/closed.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
+    magick "$RUN/closed.png" "$RUN/hovered.png" "$RUN/open.png" \
+        -background none -smush 8 "$OUT/$name.png"
     SHOTS+=("$OUT/$name.png")
     echo "  $OUT/$name.png"
 }

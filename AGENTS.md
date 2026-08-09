@@ -29,7 +29,7 @@ npm run preview -- --dark-only --scenario=loading --scenario=no-data
 
 Seconds, versus a few minutes for the full matrix. Headless is the default and is what you want — a window is for a human watching, not for you. A subset run leaves the other screenshots alone. Reach for `--windowed` only when the user asked to watch, and for the full run only before treating `overview.png` as complete or when handing the set over.
 
-Every screenshot is a stacked pair: panel with the menu shut on top, popup open below. If a change concerns a state no scenario covers, add the scenario to `SCENARIOS` and `setup_for` in `tools/preview.sh` rather than eyeballing it once by hand.
+Every screenshot stacks the panel button's three states: resting, hovered, then pressed with the popup open below it. If a change concerns a state no scenario covers, add the scenario to `SCENARIOS` and `setup_for` in `tools/preview.sh` rather than eyeballing it once by hand.
 
 `npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last preview run. It exits non-zero on a finding.
 

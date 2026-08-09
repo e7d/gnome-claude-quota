@@ -28,12 +28,10 @@ function targets(args) {
         .map(name => join(SHOTS, name));
 }
 
-// The pill the theme paints under a pressed or hovered panel button is a
-// transient surface; forcing amber and red to clear it costs them their meaning.
-const TRANSIENT_SURFACES = ['#474747', '#bdbdbf'];
+const TRANSIENT_PANEL_PILL_SURFACES = ['#474747', '#bdbdbf', '#2b2b2b', '#d5d5d7'];
 
 function accepted(finding) {
-    return TRANSIENT_SURFACES.some(surface => near(finding.background, surface));
+    return TRANSIENT_PANEL_PILL_SURFACES.some(surface => near(finding.background, surface));
 }
 
 function near(color, hex) {
