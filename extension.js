@@ -122,7 +122,6 @@ class Indicator extends PanelMenu.Button {
     _init(iconPath) {
         super._init(0.5, 'Claude Quota');
         this.track_hover = false;
-        this.add_style_class_name('cq-indicator');
         this._client = new UsageClient();
         this._status = new StatusClient();
         this._settings = St.Settings.get();
