@@ -61,10 +61,11 @@ What is measured is the *recovery*, not the budget: a `429` asks for 119 s and 1
 
 ## Popup actions
 
-`Refresh now` and `Claude status` are the only activatable rows; everything above them comes from `displayItem()`, which strips the `popup-inactive-menu-item` class the theme paints at 50% alpha.
+The service-status line is the only activatable row; everything else comes from `displayItem()`, which strips the `popup-inactive-menu-item` class the theme paints at 50% alpha.
 
-- **`PopupMenuItem.activate()` closes the menu it belongs to**, which would hide the numbers the refresh was asked to update. `RefreshItem` overrides `activate()` to emit the signal without calling up. `Claude status` keeps the inherited behaviour, because leaving for a browser *should* close the menu.
-- **The refresh row's label carries its own disabled reason** — `Refreshing…`, `Up to date`, `Refresh at <time>`. A popup menu has no tooltip surface, so a greyed row with a fixed label would leave the user with no explanation.
+- **`PopupMenuItem.activate()` closes the menu it belongs to**, which would hide the numbers a refresh was asked to update — hence the refresh affordance being an `St.Button` in the header rather than a row. The status line keeps the inherited behaviour, because leaving for a browser *should* close the menu.
+- **A client-side failure and a service issue share one line but not one nature.** An expired token or an unreachable host renders into the non-reactive `_message`; only a `serviceIssue` renders into the activatable row, so nothing offers a status page that cannot explain the failure.
+- **The header timestamp carries the refresh button's disabled reason.** A popup menu has no tooltip surface, so `Last refresh: <time>` beside a greyed button is the only explanation the user gets for why pressing it does nothing.
 - **The manual path reuses `shouldFetchOnOpen` rather than a second constant.** Manual and open-triggered fetches spend the same shared allowance, so one rule governs both.
 - **Nothing re-renders while the popup sits open**, so `Up to date` and `Refresh at <time>` are re-evaluated on the next open or the next poll, not on a ticker. Both windows are ≤2 minutes, which is why that is acceptable — worth knowing before adding a state where the staleness matters more.
 

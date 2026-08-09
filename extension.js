@@ -111,7 +111,7 @@ class QuotaBlock extends St.BoxLayout {
         this._bar.value = quota.expired ? 0 : quota.percent / 100;
         this._bar.overdriveStart = quota.expired ? 1 : (quota.windowProgress ?? 1);
         this._bar.style_class = barClass(quota, scheme);
-        this._caption.visible = !quota.expired && quota.resetsAt !== null;
+        this._caption.visible = !quota.expired;
         if (this._caption.visible)
             this._caption.text = captionLine(quota, now);
     }
@@ -188,13 +188,13 @@ class Indicator extends PanelMenu.Button {
         this._bodyBox.add_child(this._metaBox);
         this._bodyBox.add_child(this._blockBox);
         this._body.add_child(this._bodyBox);
-        this._statusItem = new PopupMenu.PopupMenuItem('Claude status');
-        this._statusItem.connect('activate', () => Gio.AppInfo.launch_default_for_uri(STATUS_URL, null));
+        this._issueItem = new PopupMenu.PopupMenuItem('');
+        this._issueItem.connect('activate', () => Gio.AppInfo.launch_default_for_uri(STATUS_URL, null));
         this._messageSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this.menu.addMenuItem(this._body);
         this.menu.addMenuItem(this._messageSeparator);
         this.menu.addMenuItem(this._message);
-        this.menu.addMenuItem(this._statusItem);
+        this.menu.addMenuItem(this._issueItem);
         this._schemeId = this._settings.connect('notify::color-scheme', () => this._render());
         this.menu.connect('open-state-changed', (menu, open) => {
             if (!open)
@@ -349,21 +349,19 @@ class Indicator extends PanelMenu.Button {
         this._serviceStatus = result.serverError ? UNKNOWN_SERVICE : null;
     }
 
-    _composeMessage(now) {
-        if (this._error === null || isBlocked(this._blockedUntil, now))
-            return null;
-        const issue = serviceIssue(this._serviceStatus);
-        return issue ? `${issue.emoji} ${issue.text}` : this._error;
-    }
-
     _renderMessage(now, hasQuotas) {
-        const issue = this._composeMessage(now);
-        const loading = issue === null && !hasQuotas;
-        const message = issue ?? (loading ? 'Loading…' : '');
+        const silenced = isBlocked(this._blockedUntil, now);
+        const issue = silenced ? null : serviceIssue(this._serviceStatus);
+        const error = silenced || issue || this._error === null ? '' : this._error;
+        const loading = issue === null && error === '' && !hasQuotas;
+        const message = loading ? 'Loading…' : error;
         this._refreshLabel.text = refreshLine(this._fetchedAt, now);
+        this._issueItem.visible = issue !== null;
+        if (issue)
+            this._issueItem.label.text = `${issue.emoji} ${issue.text}`;
         this._messageLabel.text = message;
         this._message.visible = message !== '';
-        this._messageSeparator.visible = message !== '' && hasQuotas;
+        this._messageSeparator.visible = (issue !== null || error !== '') && hasQuotas;
         this._body.visible = !loading;
     }
 
@@ -374,7 +372,6 @@ class Indicator extends PanelMenu.Button {
             this._startSpinner();
         else
             this._stopSpinner();
-        this._statusItem.visible = this._error !== null && !isBlocked(this._blockedUntil, now);
     }
 
     _startSpinner() {

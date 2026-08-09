@@ -10,6 +10,10 @@ test('captionLine pairs the remaining time with the reset time', () => {
     assert.equal(captionLine(quota, now, 'en-US'), '4h 08m left · 11:59 AM');
 });
 
+test('captionLine falls back to a placeholder before a window has started', () => {
+    assert.equal(captionLine({resetsAt: null}, now, 'en-US'), '-');
+});
+
 test('relativeDuration renders days and hours past a day', () => {
     assert.equal(relativeDuration(new Date('2026-08-08T07:59:00Z'), now), '4d 0h');
 });

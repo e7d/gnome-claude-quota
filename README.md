@@ -43,11 +43,9 @@ There is no `Up to date` state: the timestamp beside the button already says how
 
 The button also goes insensitive while a `429` is in force, because that allowance is shared with every other Claude extension on the machine. Nothing in either response reports how much of it is left, so the extension declines to be what spends it.
 
-`Claude status` opens [status.claude.com](https://status.claude.com/) and appears only once something has actually failed.
-
 ## Service problems
 
-When a usage request comes back `5xx`, the extension appends an emoji after the quotas in the panel and a matching one-line status at the foot of the popup, beside `Claude status`. A single failure is enough to raise it — there is no failure counter to wait out.
+When a usage request comes back `5xx`, the extension appends an emoji after the quotas in the panel and a matching one-line status at the foot of the popup. That line is itself the button: clicking it opens [status.claude.com](https://status.claude.com/). A single failure is enough to raise it — there is no failure counter to wait out.
 
 | Line | What it means |
 |---|---|
@@ -60,7 +58,9 @@ When a usage request comes back `5xx`, the extension appends an emoji after the 
 The wording comes from the Claude Code component on [status.claude.com](https://status.claude.com/); the *decision to show anything at all* comes from your own failed request. Two consequences follow:
 
 - A degraded status page with no local failures shows nothing. If your requests all succeed, you are not in the outage.
-- `429` is not a failure. The service is working and refusing you, so it raises no error line, no status is raised and `Claude status` stays hidden — the status page cannot explain a spent allowance. The only sign is the refresh button greying out until the retry time.
+- `429` is not a failure. The service is working and refusing you, so it raises no error line and no status row — the status page cannot explain a spent allowance. The only sign is the refresh button greying out until the retry time.
+
+A failure the service is not responsible for — an expired token, an unreachable host — states itself on the same line but stays inert, because status.claude.com has nothing to say about it.
 
 The status page is only fetched **after** a `5xx`, so the ordinary 5-minute poll stays a single request and a status.claude.com outage cannot slow it down.
 

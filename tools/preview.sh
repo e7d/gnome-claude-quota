@@ -114,6 +114,7 @@ setup_for() {
         zero) echo "i._quotas = [q('S','Session',0,'normal',300,SESSION), q('W','Weekly',0,'normal',WEEK,WEEK)];" ;;
         expired) echo "i._quotas = [q('S','Session',40,'normal',-5,SESSION), q('W','Weekly',60,'normal',-5,WEEK)];" ;;
         model-scoped) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), q('O','Opus',72,'warning',200,SESSION)];" ;;
+        no-reset) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), {...q('O','Opus',72,'normal',200,SESSION), resetsAt: null, windowProgress: null, aheadOfPace: false}];" ;;
         long-name) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('So','Sonnet with a very long display name',61,'normal',200,SESSION)];" ;;
         rate-limited) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._blockedUntil = new Date(Date.now() + 180000);" ;;
         error) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Cannot reach api.anthropic.com';" ;;
@@ -175,7 +176,7 @@ overview() {
     echo "  $OUT/overview.png"
 }
 
-SCENARIOS=(normal over-pace warning critical full zero expired model-scoped
+SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-reset
            long-name rate-limited error token-expired loading refreshing fresh no-data
            service-degraded service-partial service-major service-maintenance
            service-error)
