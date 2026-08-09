@@ -6,6 +6,7 @@
     "test": "TZ=UTC node --test",
     "dev": "tools/dev.sh",
     "dev:watch": "tools/dev.sh --watch",
-    "preview": "tools/preview.sh"
+    "preview": "tools/preview.sh",
+    "a11y": "tools/a11y.sh"
   }
 }

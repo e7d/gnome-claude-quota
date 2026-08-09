@@ -1,0 +1,62 @@
+import {execFileSync} from 'node:child_process';
+import {readdirSync} from 'node:fs';
+import {basename, dirname, join, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+import {scanImage, toHex} from './contrast.js';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SHOTS = join(ROOT, 'preview');
+
+function readImage(path) {
+    const size = execFileSync('magick', ['identify', '-format', '%w %h\n', path], {encoding: 'utf8'});
+    const [width, height] = size.split('\n')[0].split(' ').map(Number);
+    if (!(width > 0) || !(height > 0))
+        throw new Error(`${path}: could not measure the image`);
+    const pixels = execFileSync('magick', [path, '-depth', '8', 'RGBA:-'], {maxBuffer: width * height * 4 + 4096});
+    if (pixels.length !== width * height * 4)
+        throw new Error(`${path}: expected ${width * height * 4} bytes of RGBA, read ${pixels.length}`);
+    return {width, height, pixels};
+}
+
+function targets(args) {
+    if (args.length)
+        return args.map(path => resolve(path));
+    return readdirSync(SHOTS)
+        .filter(name => name.endsWith('.png') && name !== 'overview.png')
+        .toSorted()
+        .map(name => join(SHOTS, name));
+}
+
+function describe(finding) {
+    return `${finding.ratio.toFixed(2)}:1 under ${finding.threshold.ratio}:1 (${finding.threshold.label})`
+        + `  ${toHex(finding.ink)} on ${toHex(finding.background)}`
+        + `  at ${finding.x},${finding.y} in ${finding.windows} window(s)`;
+}
+
+function report(path) {
+    const {findings} = scanImage(readImage(path));
+    const failed = findings
+        .filter(finding => finding.ratio < finding.threshold.ratio)
+        .toSorted((one, other) => one.ratio - other.ratio);
+    console.log(`${basename(path)}: ${findings.length} pair(s) measured, ${failed.length} under threshold`);
+    for (const finding of failed)
+        console.log(`  ${describe(finding)}`);
+    return failed.length;
+}
+
+function main(args) {
+    const files = targets(args);
+    if (!files.length)
+        throw new Error(`no screenshots in ${SHOTS}; run npm run preview first`);
+    const failed = files.reduce((total, path) => total + report(path), 0);
+    console.log(`${files.length} file(s), ${failed} finding(s) under threshold`);
+    return failed ? 1 : 0;
+}
+
+try {
+    process.exitCode = main(process.argv.slice(2));
+} catch (error) {
+    console.error(`a11y: ${error.message}`);
+    process.exitCode = 2;
+}

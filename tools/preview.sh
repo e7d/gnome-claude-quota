@@ -7,8 +7,16 @@ DEVKIT_HEADLESS=1
 # shellcheck source=tools/devkit.sh
 . "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
 
+THEMES=(dark light)
+PICKED=()
 for arg in "$@"; do
-    devkit_flag "$arg" || die "unknown option $arg"
+    devkit_flag "$arg" && continue
+    case "$arg" in
+        --dark-only) THEMES=(dark) ;;
+        --light-only) THEMES=(light) ;;
+        --scenario=*) PICKED+=("${arg#*=}") ;;
+        *) die "unknown option $arg" ;;
+    esac
 done
 
 OUT="$ROOT/preview"
@@ -107,7 +115,7 @@ setup_for() {
         expired) echo "i._quotas = [q('S','Session',40,'normal',-5,SESSION), q('W','Weekly',60,'normal',-5,WEEK)];" ;;
         model-scoped) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), q('O','Opus',72,'warning',200,SESSION)];" ;;
         long-name) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('So','Sonnet with a very long display name',61,'normal',200,SESSION)];" ;;
-        rate-limited) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Rate limited'; i._blockedUntil = new Date(Date.now() + 180000);" ;;
+        rate-limited) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._blockedUntil = new Date(Date.now() + 180000);" ;;
         error) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Cannot reach api.anthropic.com';" ;;
         token-expired) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION)]; i._error = 'Token expired, run Claude Code once';" ;;
         loading) echo "i._fetchedAt = null;" ;;
@@ -173,18 +181,40 @@ SCENARIOS=(normal over-pace warning critical full zero expired model-scoped
            service-error)
 SHOTS=()
 
+select_scenarios() {
+    local want found
+    [ "${#PICKED[@]}" -gt 0 ] || return 0
+    for want in "${PICKED[@]}"; do
+        found=''
+        for known in "${SCENARIOS[@]}"; do
+            [ "$known" = "$want" ] && found=1 && break
+        done
+        [ -n "$found" ] || die "unknown scenario '$want'; known: ${SCENARIOS[*]}"
+    done
+    SCENARIOS=("${PICKED[@]}")
+}
+
+subset() {
+    [ "${#PICKED[@]}" -gt 0 ] || [ "${#THEMES[@]}" -lt 2 ]
+}
+
 main() {
     trap cleanup EXIT INT TERM
     require_install
     require_commands magick
+    select_scenarios
     mkdir -p "$OUT"
-    rm -f "$OUT"/*.png
+    if subset; then
+        echo "preview: subset run (${THEMES[*]} x ${SCENARIOS[*]}); other shots left as they are"
+    else
+        rm -f "$OUT"/*.png
+    fi
     isolate_dconf
     start_shell
     wait_for_indicator
     hide_overview
     freeze
-    for theme in dark light; do
+    for theme in "${THEMES[@]}"; do
         set_theme "$theme"
         echo "$theme:"
         for scenario in "${SCENARIOS[@]}"; do
