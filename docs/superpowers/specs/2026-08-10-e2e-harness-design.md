@@ -160,7 +160,7 @@ with no `--scenario` flags — the shot list is the script's own. The `a11y` ste
 
 ## Risks
 
-**Runtime.** CI gains six shots plus two assertion passes. Estimated under a minute net, but it is an estimate until measured; if it lands worse, the shot list is the dial to turn.
+**Runtime.** Measured on the host at completion: **1m59s** for the full suite — 186 state assertions across 46 states, 20 more across the interaction groups, ten negative controls, and 18 screenshots. It is almost entirely settle-sleep bound, at 11s of user CPU, so the shot list is the dial to turn if it ever needs to shrink.
 
 **Flake.** The capture path's settle sleeps are pre-existing and carried over unchanged. The assertion path adds none, so it adds no new flake surface.
 
