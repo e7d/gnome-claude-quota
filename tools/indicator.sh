@@ -60,8 +60,6 @@ QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => {
 };
 const SESSION = 300, WEEK = 10080;"
 
-# The scenario name carries the component status the status page would publish, so
-# the emoji mapping is never restated here — the extension resolves it at render.
 service_status() {
     case "$1" in
         service-degraded) echo 'degraded_performance' ;;

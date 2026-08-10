@@ -50,7 +50,6 @@ assert_abort() {
     exit 1
 }
 
-# A verdict read from output would depend on formatting; the counter is the fact.
 assert_quiet() {
     local passed="$ASSERT_PASSED" failed="$ASSERT_FAILED" verdict=0
     "$1" >/dev/null
