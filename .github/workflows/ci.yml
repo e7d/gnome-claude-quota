@@ -47,11 +47,8 @@ jobs:
       - name: test
         run: docker exec "$C" npm test
 
-      - name: preview
-        run: |
-          docker exec "$C" tools/preview.sh \
-            --scenario=normal --scenario=warning --scenario=critical \
-            --scenario=model-scoped --scenario=error --scenario=service-major
+      - name: e2e
+        run: docker exec "$C" npm run e2e
 
       - name: a11y
         run: docker exec "$C" npm run a11y

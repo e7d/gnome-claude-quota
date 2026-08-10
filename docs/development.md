@@ -15,7 +15,7 @@ Stylesheets behave differently: `loadExtension` calls `theme.load_stylesheet()` 
 | `lib/*.js` logic | `TZ=UTC node --test` — no shell involved |
 | `stylesheet.css` | disable/enable the extension |
 | icon file contents | nothing; it is read at render time |
-| `extension.js`, or any `lib/` module as executed code | a new shell process, i.e. `./tools/preview.sh` |
+| `extension.js`, or any `lib/` module as executed code | a new shell process, i.e. `./tools/preview.sh` or `./tools/e2e.sh` |
 
 That asymmetry is a trap worth remembering: a disable/enable cycle picks up CSS while silently keeping old JS, so a change can appear to work while the code under test never ran.
 
@@ -52,11 +52,39 @@ A missing colour shows up as `Did not find color property` in the shell log, wor
 
 Geometry questions are better answered from the actors than from pixels. Measuring the panel button's padding by thresholding a screenshot returned a plausible constant that was really the hover pill's own anti-aliased edge; reading `get_theme_node().get_padding()` gave the true figure and a different answer.
 
+## Asserting what it does
+
+```bash
+./tools/e2e.sh
+./tools/e2e.sh --group=hover
+```
+
+The same throwaway shell as the preview, driven for verdicts instead of pixels. Four groups run in the order below, and `--group=<name>` runs one of them; the theme and scenario flags are `preview.sh`'s.
+
+| Group | What it holds to account |
+| --- | --- |
+| `state` | every scenario in both themes: every row filled, no `null`/`undefined`/`NaN` reaching a label, one block per quota, each panel label ending in its block's percentage — plus a severity resolving to different colours in the two schemes |
+| `hover` | the indicator's hover shape read live against `quickSettings`, the display rows staying inert, and the status row highlighting |
+| `refresh` | a click leaves the popup open, spins the icon while the fetch is in flight, and leaves no transition behind afterwards |
+| `lifecycle` | disable releases the timer, cancels the in-flight fetch and empties the panel entry; enable registers exactly one indicator |
+
+`lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. The `state` group is also what writes `preview/`, so a run excluding it leaves whatever was already there for `npm run a11y` to score.
+
+**Every assertion is proven able to fail, on every run.** `prove` evaluates a check three times — untouched, with a deliberate runtime mutation applied, then after the restore — and requires it to pass, fail and pass again. A check that survives its own break is a dead check, and the run stops there, non-zero, with its reason on stderr:
+
+```
+control status row highlights: still passed with the break applied
+```
+
+That line says **the assertion is dead, not the extension**. Fix the assertion, never the control. A `prove …` line on stdout is therefore not a passing test but a licence for the tests after it, and it leaves the tally alone — the counters are saved and restored around every control, so the summary counts real assertions only.
+
+The breaks are mutations over `Eval` and the restores are re-renders, since `_render()` rebuilds every actor from state. Staging a failure by editing `extension.js` is the one thing a control must never be: it has to be undone inside the run, and a control that outlives its run is a broken checkout.
+
 ## Rate limits
 
 The usage endpoint answers `429` with `retry-after: 119`, and every Claude extension on the machine shares that allowance. Do not poll it in a loop while debugging: a burst pins the window, and each retry inside it re-arms the limit. `lib/policy.js` exists to keep the extension itself out of that state.
 
-`tools/preview.sh` stubs the indicator's `_refresh` before capturing, so the whole matrix costs at most the one fetch the shell makes at startup.
+`tools/preview.sh` stubs the indicator's `_refresh` before capturing, so the whole matrix costs at most the one fetch the shell makes at startup. `tools/e2e.sh` inherits that stub, and its refresh group — which has to remove it to make the button do anything — replaces `_fetchCycle` with a promise that never resolves, so asserting the spinner still spends nothing.
 
 What is measured is the *recovery*, not the budget: a `429` asks for 119 s and 139 s of silence restored a `200`. Nothing observed so far reports how many requests the window allows, or how much of it the neighbouring extensions have already spent. Treat any interval shorter than `POLL_SECONDS` as unmeasured until a successful response is shown to carry `anthropic-ratelimit-*` headers.
 

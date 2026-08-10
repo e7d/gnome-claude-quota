@@ -126,7 +126,7 @@ tools/dev.sh --watch --light
 | `--light` | Force `prefer-light` |
 | `-h`, `--help` | Print the flags and exit |
 
-Each script checks what it needs up front and names everything that is missing at once. Shared: `gnome-shell`, `dbus-run-session`, `dconf`, `gsettings`, `gdbus`. `--watch` also wants `find`, `stat`, `sha256sum` and `xargs`; `preview.sh` wants ImageMagick's `magick`, and skips `overview.png` alone if `montage` is absent.
+Each script checks what it needs up front and names everything that is missing at once. Shared: `gnome-shell`, `dbus-run-session`, `dconf`, `gsettings`, `gdbus`. `--watch` also wants `find`, `stat`, `sha256sum` and `xargs`; `preview.sh` and `e2e.sh` want ImageMagick's `magick`, and skip `overview.png` alone if `montage` is absent.
 
 `--windowed` needs the `mutter-devkit` package, matching your `mutter` version. That one only warns rather than failing: the session still runs, there is just nothing to look at.
 
@@ -156,9 +156,21 @@ An unknown scenario name is refused with the list of valid ones rather than sile
 
 Each `<theme>-<scenario>.png` stacks three shots of the same state, one per panel-button state: resting with the pointer parked away, hovered with the menu still shut, then pressed with the menu open. All three are cropped to the same width, and every stack is then padded to the tallest one, so the panel row sits at the same place in all of them. The hovered band is not decoration — the pill the theme paints under a hover is a surface the quota colours have to sit on, and `npm run a11y` cannot judge a surface no screenshot contains. That is what lets `overview.png` be scanned as a grid — a contrast regression shows up as one tile differing from its neighbours rather than something you have to hunt for.
 
-The scenarios live in the `SCENARIOS` array in `tools/preview.sh`, each paired with a `setup_for` case that fabricates the state. `preview/` is gitignored: the shots are local artifacts, and their exact dimensions vary with whatever your live quota text happens to be.
+The scenarios live in the `SCENARIOS` array in `tools/indicator.sh`, each paired with a `setup_for` case that fabricates the state. `preview/` is gitignored: the shots are local artifacts, and their exact dimensions vary with whatever your live quota text happens to be.
 
-Both scripts share `tools/devkit.sh`, which owns the session lifecycle — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. Each script only declares what differs from that, so a fix to the session handling lands in one place.
+`npm run e2e` boots the same throwaway shell and asserts what it finds there: that every popup row is filled, that the panel labels agree with the blocks beneath them, that a severity repaints between the two schemes, that only a panel button takes a hover, that a refresh spins its icon and leaves nothing spinning, and that disabling the extension releases its timer and its in-flight fetch.
+
+```bash
+npm run e2e                                    # every group, both themes
+npm run e2e -- --group=hover                   # one group
+npm run e2e -- --group=state --dark-only --scenario=normal
+```
+
+A full run asserts 23 scenarios in both themes and costs about two minutes. It takes `preview`'s flags — `--windowed` / `--headless`, `--dark-only` / `--light-only`, `--scenario=` — plus `--group=<name>` to run one of `state`, `hover`, `refresh` and `lifecycle`.
+
+The state group also photographs nine of those scenarios in both themes, so a full `npm run e2e` leaves `preview/` holding the 18 shots `npm run a11y` scores, plus the contact sheet. That is what CI runs. Reach for `npm run preview` when you want the whole matrix on screen — 23 scenarios in both themes, 46 shots — rather than the subset colour is measured from.
+
+The three scripts share `tools/devkit.sh`, which owns the session lifecycle — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. `tools/indicator.sh` drives the extension into a state and `tools/capture.sh` turns that state into a PNG, so `preview.sh` and `e2e.sh` are drivers over one shared layer and a fix to any of it lands in one place.
 
 `npm run a11y` reads those screenshots back and measures colour contrast, so a scheme that leaves a label unreadable fails a check instead of waiting to be noticed:
 
@@ -181,13 +193,15 @@ What that costs: text on a saturated background is never measured, nor is anythi
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs the same checks you would run by hand, in that order: `shellcheck -x` over `tools/`, `npm test`, a preview subset, then `npm run a11y` over exactly what that subset shot.
+`.github/workflows/ci.yml` runs the same checks you would run by hand, in that order: `shellcheck -x` over `tools/`, `npm test`, `npm run e2e`, then `npm run a11y` over exactly what that run shot.
 
 The screenshots need a whole GNOME session, so every step runs inside an image built from `.github/ci.Dockerfile` — Arch plus `gnome-shell`, ImageMagick, Node and the fonts the shots depend on. Its tag is a digest of that Dockerfile and it lives in the Forgejo registry, so a run rebuilds the image only when the file changes and pulls it otherwise. `.github/logind-stub.sh` supplies the `org.freedesktop.login1` service that `gnome-shell` refuses to start without and no container provides.
 
 Two of the waived pill greys exist only for CI. A shell running in a container paints the top bar transparent as soon as a pointer device exists, where the same GNOME on a workstation paints it opaque black — so CI shoots GNOME's pill over the desktop rather than over the panel, and lands on `#5e5e61` / `#46464a` instead of `#2b2b2b` / `#474747`. Everything else in the shots is byte-identical between the two, ink colours included. The cause sits inside GNOME's own panel styling; version, renderer, wallpaper, dconf, animation timing, colour scheme and session mode were each measured and excluded.
 
-The preview step shoots six scenarios in both themes — `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major` — rather than all 23. Between them they render every severity colour, the status button and the error surface, which is the whole of what `a11y` can measure; the scenarios left out differ in text rather than in colour, and the full matrix costs minutes per run to say the same thing.
+The e2e step asserts all 23 scenarios in both themes and photographs nine of them: `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major`, `over-pace`, `rate-limited` and `no-data`. Between them they render every colour `a11y` can measure — each severity, the pace verdict, the status button, the error surface and the empty-state text. The scenarios left out differ in text rather than in colour, and photographing all 46 would cost minutes per run to say the same thing.
+
+It replaced a step that shot six of those scenarios and asserted nothing: the screenshots are never uploaded, so all a preview run could prove was that six states rendered without throwing. An assertion is a property read back over `Eval` and costs a fraction of a screenshot, so the same shell boot now checks every state and every interaction, and still produces the shots the contrast scan scores.
 
 ---
 

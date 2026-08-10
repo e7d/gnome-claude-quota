@@ -29,9 +29,17 @@ npm run preview -- --dark-only --scenario=loading --scenario=no-data
 
 Seconds, versus a few minutes for the full matrix. Headless is the default and is what you want — a window is for a human watching, not for you. A subset run leaves the other screenshots alone. Reach for `--windowed` only when the user asked to watch, and for the full run only before treating `overview.png` as complete or when handing the set over.
 
-Every screenshot stacks the panel button's three states: resting, hovered, then pressed with the popup open below it. If a change concerns a state no scenario covers, add the scenario to `SCENARIOS` and `setup_for` in `tools/preview.sh` rather than eyeballing it once by hand.
+Every screenshot stacks the panel button's three states: resting, hovered, then pressed with the popup open below it. If a change concerns a state no scenario covers, add the scenario to `SCENARIOS` and `setup_for` in `tools/indicator.sh` rather than eyeballing it once by hand.
 
-`npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last preview run. It exits non-zero on a finding.
+**When a change affects how the extension behaves rather than how it looks, `npm run e2e` is the fast path instead.** A preview subset tells you what a state looks like; e2e tells you whether it still works — 23 scenarios asserted in both themes, plus the hover, refresh and lifecycle groups, in about two minutes. Narrow it the same way while iterating:
+
+```bash
+npm run e2e -- --group=refresh
+```
+
+Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
+
+`npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last preview or full e2e run — the e2e state group shoots the nine scenarios it scores, and a narrowed run leaves the rest as they were. It exits non-zero on a finding.
 
 `npm run dev` and `npm run dev:watch` run a throwaway nested shell for interactive work. Prefer a preview subset when you only need to see a result; a nested session is for behaviour you have to drive.
 
