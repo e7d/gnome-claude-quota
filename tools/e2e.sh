@@ -194,6 +194,85 @@ group_state() {
     [ "${#SHOTS[@]}" -eq 0 ] || { normalize; overview; }
 }
 
+QS="Main.panel.statusArea.quickSettings"
+
+hover_shape() {
+    probe "[$1.hover, $1.get_style_pseudo_class(), $1.track_hover].join('|')"
+}
+
+# The session's first pointer motion closes the menu when it lands inside it, so
+# the pointer is moved once while the menu is deliberately shut.
+reopen_menu() {
+    close_menu
+    point_at away
+    open_menu
+    sleep 1
+}
+
+assert_panel_matches_platform() {
+    local hovered
+    close_menu
+    point_at away
+    assert_eq 'panel resting matches quickSettings' "$(hover_shape "$QS")" "$(hover_shape "$IND")"
+    point_at_actor "$QS"
+    hovered="$(hover_shape "$QS")"
+    point_at pill
+    assert_eq 'panel hovered matches quickSettings' "$hovered" "$(hover_shape "$IND")"
+    reopen_menu
+}
+
+assert_display_rows_inert() {
+    local row
+    for row in _body _message; do
+        point_at_actor "$IND.$row"
+        assert_eq "$row does not track hover" 'false' "$(probe "$IND.$row.track_hover")"
+        assert_eq "$row takes no hover class" 'true' \
+            "$(probe "!/hover|active/.test($IND.$row.get_style_pseudo_class() ?? '')")"
+    done
+}
+
+assert_status_row_highlights() {
+    point_at_actor "$IND._issueItem"
+    assert_eq 'status row tracks hover' 'true' "$(probe "$IND._issueItem.track_hover")"
+    assert_eq 'status row highlights' 'true' \
+        "$(probe "/hover/.test($IND._issueItem.get_style_pseudo_class() ?? '')")"
+    point_at away
+}
+
+prove_hover() {
+    prove 'panel matches platform' \
+        "shell_eval \"$IND.track_hover = false; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND.track_hover = true; 'ok'\" >/dev/null" \
+        assert_panel_matches_platform
+    prove 'display rows inert' \
+        "shell_eval \"$IND._body.track_hover = true; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._body.track_hover = false; 'ok'\" >/dev/null" \
+        assert_display_rows_inert
+}
+
+prove_status_row() {
+    prove 'status row highlights' \
+        "shell_eval \"$IND._issueItem.track_hover = false; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._issueItem.track_hover = true; 'ok'\" >/dev/null" \
+        assert_status_row_highlights
+}
+
+# error is the only scenario where both display rows are visible, and service-major
+# the only one where the status row is: _renderMessage blanks the message whenever
+# it has a service issue to show instead.
+group_hover() {
+    echo 'hover:'
+    render_state error
+    reopen_menu
+    prove_hover
+    assert_panel_matches_platform
+    assert_display_rows_inert
+    render_state service-major
+    reopen_menu
+    prove_status_row
+    assert_status_row_highlights
+}
+
 main() {
     require_install
     require_commands magick
