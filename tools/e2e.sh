@@ -340,6 +340,65 @@ group_refresh() {
     assert_spinner_cleared
 }
 
+park_indicator() {
+    shell_eval "globalThis._parked = $IND; 'ok'" >/dev/null
+}
+
+wait_for_teardown() {
+    for _ in $(seq 30); do
+        [ "$(probe "Object.keys(Main.panel.statusArea).includes('$UUID')")" = 'false' ] && return 0
+        sleep 1
+    done
+    return 0
+}
+
+# _refresh only schedules the next poll once its fetch settles, so the first read
+# after wait_for_indicator measures _timerId null with _refreshing still true.
+wait_for_polling() {
+    for _ in $(seq 30); do
+        [ "$(probe "$IND._timerId !== null")" = 'true' ] && return 0
+        sleep 1
+    done
+    return 0
+}
+
+assert_teardown_complete() {
+    assert_eq 'timer released on disable' 'null' "$(probe "globalThis._parked._timerId")"
+    assert_eq 'indicator marked destroyed' 'true' "$(probe "globalThis._parked._destroyed")"
+    assert_eq 'in-flight fetch cancelled' 'true' \
+        "$(probe "globalThis._parked._cancellable?.is_cancelled() ?? true")"
+    assert_eq 'panel entry removed' 'false' \
+        "$(probe "Object.keys(Main.panel.statusArea).includes('$UUID')")"
+}
+
+assert_reenable_registers_once() {
+    assert_eq 'one panel entry after re-enable' '1' \
+        "$(probe "Object.keys(Main.panel.statusArea).filter(k => k === '$UUID').length")"
+    assert_eq 'a fresh indicator replaced the old one' 'false' \
+        "$(probe "$IND === globalThis._parked")"
+    assert_eq 'polling resumed' 'true' "$(probe "$IND._timerId !== null")"
+}
+
+prove_teardown() {
+    prove 'teardown complete' \
+        "shell_eval \"globalThis._parked._timerId = 1; 'ok'\" >/dev/null" \
+        "shell_eval \"globalThis._parked._timerId = null; 'ok'\" >/dev/null" \
+        assert_teardown_complete
+}
+
+group_lifecycle() {
+    echo 'lifecycle:'
+    park_indicator
+    shell_eval "Main.extensionManager.disableExtension('$UUID'); 'ok'" >/dev/null
+    wait_for_teardown
+    prove_teardown
+    assert_teardown_complete
+    shell_eval "Main.extensionManager.enableExtension('$UUID'); 'ok'" >/dev/null
+    wait_for_indicator
+    wait_for_polling
+    assert_reenable_registers_once
+}
+
 main() {
     require_install
     require_commands magick
