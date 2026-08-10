@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {WINDOW_LENGTH_MS, absoluteTime, captionLine, refreshLine, relativeDuration, windowProgress} from '../lib/format.js';
+import {WINDOW_LENGTH_MS, absoluteTime, captionLine, percentLine, refreshLine, relativeDuration, timeLocale, windowProgress} from '../lib/format.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
 
@@ -12,6 +12,53 @@ test('captionLine pairs the remaining time with the reset time', () => {
 
 test('captionLine falls back to a placeholder before a window has started', () => {
     assert.equal(captionLine({resetsAt: null}, now, 'en-US'), '-');
+});
+
+test('captionLine falls back to a placeholder once a window has expired', () => {
+    const quota = {resetsAt: new Date('2026-08-04T06:00:00Z'), expired: true};
+    assert.equal(captionLine(quota, now, 'en-US'), '-');
+});
+
+test('timeLocale prefers the time category over the base language', () => {
+    assert.equal(timeLocale({LANG: 'en_US.UTF-8', LC_TIME: 'fr_FR.UTF-8'}), 'fr-FR');
+    assert.equal(timeLocale({LANG: 'en_US.UTF-8'}), 'en-US');
+    assert.equal(timeLocale({LANG: 'en_US.UTF-8', LC_TIME: 'fr_FR.UTF-8', LC_ALL: 'de_DE.UTF-8'}), 'de-DE');
+});
+
+test('timeLocale drops modifiers and yields to the runtime default when unset', () => {
+    assert.equal(timeLocale({LC_TIME: 'ca_ES.UTF-8@valencia'}), 'ca-ES');
+    assert.equal(timeLocale({LC_TIME: 'C'}), undefined);
+    assert.equal(timeLocale({LANG: null}), undefined);
+    assert.equal(timeLocale({}), undefined);
+});
+
+test('a French time locale renders the 24-hour clock', () => {
+    const quota = {resetsAt: new Date('2026-08-04T12:49:00Z')};
+    const locale = timeLocale({LANG: 'en_US.UTF-8', LC_TIME: 'fr_FR.UTF-8'});
+    assert.equal(captionLine(quota, now, locale), '4h 58m left · 12:49');
+});
+
+test('percentLine renders a share of the window', () => {
+    assert.equal(percentLine({percent: 22}), '22%');
+});
+
+test('percentLine falls back to a placeholder when expired or unmeasured', () => {
+    assert.equal(percentLine({percent: 22, expired: true}), '-');
+    assert.equal(percentLine({percent: null}), '-');
+    assert.equal(percentLine({}), '-');
+});
+
+test('every quota shape keeps the percent and caption rows filled', () => {
+    const shapes = [
+        {percent: 22, resetsAt: new Date('2026-08-04T11:59:00Z')},
+        {percent: 0, resetsAt: null},
+        {percent: 22, resetsAt: new Date('2026-08-04T06:00:00Z'), expired: true},
+        {},
+    ];
+    for (const quota of shapes) {
+        assert.notEqual(percentLine(quota), '');
+        assert.notEqual(captionLine(quota, now, 'en-US'), '');
+    }
 });
 
 test('relativeDuration renders days and hours past a day', () => {

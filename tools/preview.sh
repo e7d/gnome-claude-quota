@@ -8,7 +8,7 @@ DEVKIT_HEADLESS=1
 . "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
 
 SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-reset
-           long-name rate-limited error token-expired loading refreshing fresh no-data
+           long-name locale rate-limited error token-expired loading refreshing fresh no-data
            service-degraded service-partial service-major service-maintenance
            service-error)
 SHOTS=()
@@ -150,6 +150,7 @@ setup_for() {
         model-scoped) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), q('O','Opus',72,'warning',200,SESSION)];" ;;
         no-reset) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), {...q('O','Opus',72,'normal',200,SESSION), resetsAt: null, windowProgress: null, aheadOfPace: false}];" ;;
         long-name) echo "i._quotas = [q('S','Session',30,'normal',200,SESSION), q('So','Sonnet with a very long display name',61,'normal',200,SESSION)];" ;;
+        locale) echo "$(setup_quotas) i._locale = 'fr-FR';" ;;
         rate-limited) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._blockedUntil = new Date(Date.now() + 180000);" ;;
         error) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Cannot reach api.anthropic.com';" ;;
         token-expired) echo "i._quotas = [q('S','Session',21,'normal',253,SESSION)]; i._error = 'Token expired, run Claude Code once';" ;;
@@ -165,7 +166,7 @@ setup_for() {
 render_state() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         $QUOTA
-        i._quotas = []; i._error = null; i._serviceStatus = null; i._blockedUntil = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000);
+        i._quotas = []; i._error = null; i._serviceStatus = null; i._blockedUntil = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._locale = 'en-US';
         $(setup_for "$1")
         i.menu.open(false); i._render(); 'ok'" >/dev/null
     sleep 1

@@ -187,7 +187,7 @@ The screenshots need a whole GNOME session, so every step runs inside an image b
 
 Two of the waived pill greys exist only for CI. A shell running in a container paints the top bar transparent as soon as a pointer device exists, where the same GNOME on a workstation paints it opaque black — so CI shoots GNOME's pill over the desktop rather than over the panel, and lands on `#5e5e61` / `#46464a` instead of `#2b2b2b` / `#474747`. Everything else in the shots is byte-identical between the two, ink colours included. The cause sits inside GNOME's own panel styling; version, renderer, wallpaper, dconf, animation timing, colour scheme and session mode were each measured and excluded.
 
-The preview step shoots six scenarios in both themes — `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major` — rather than all 21. Between them they render every severity colour, the status button and the error surface, which is the whole of what `a11y` can measure; the scenarios left out differ in text rather than in colour, and the full matrix costs minutes per run to say the same thing.
+The preview step shoots six scenarios in both themes — `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major` — rather than all 23. Between them they render every severity colour, the status button and the error surface, which is the whole of what `a11y` can measure; the scenarios left out differ in text rather than in colour, and the full matrix costs minutes per run to say the same thing.
 
 ---
 

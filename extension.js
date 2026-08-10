@@ -12,7 +12,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {deserialize, serialize} from './lib/cache.js';
-import {absoluteTime, captionLine, refreshLine} from './lib/format.js';
+import {captionLine, percentLine, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
 import {blockedUntil, isBlocked, markExpired, nextPollSeconds, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
@@ -104,16 +104,14 @@ class QuotaBlock extends St.BoxLayout {
         this.add_child(this._caption);
     }
 
-    update(quota, now, scheme) {
+    update({quota, now, scheme, locale}) {
         this._name.text = quota.name;
-        this._percent.text = quota.expired ? '-' : `${quota.percent}%`;
+        this._percent.text = percentLine(quota);
         this._percent.style_class = quotaClass('cq-percent', quota, scheme);
         this._bar.value = quota.expired ? 0 : quota.percent / 100;
         this._bar.overdriveStart = quota.expired ? 1 : (quota.windowProgress ?? 1);
         this._bar.style_class = barClass(quota, scheme);
-        this._caption.visible = !quota.expired;
-        if (this._caption.visible)
-            this._caption.text = captionLine(quota, now);
+        this._caption.text = captionLine(quota, now, locale);
     }
 });
 
@@ -135,6 +133,11 @@ class Indicator extends PanelMenu.Button {
         this._blockedUntil = null;
         this._timerId = null;
         this._limits = [];
+        this._locale = timeLocale({
+            LC_ALL: GLib.getenv('LC_ALL'),
+            LC_TIME: GLib.getenv('LC_TIME'),
+            LANG: GLib.getenv('LANG'),
+        });
         const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         this._icon = new St.Icon({
             style_class: 'system-status-icon',
@@ -355,7 +358,7 @@ class Indicator extends PanelMenu.Button {
         const error = silenced || issue || this._error === null ? '' : this._error;
         const loading = issue === null && error === '' && !hasQuotas;
         const message = loading ? 'Loading…' : error;
-        this._refreshLabel.text = refreshLine(this._fetchedAt, now);
+        this._refreshLabel.text = refreshLine(this._fetchedAt, now, this._locale);
         this._issueItem.visible = issue !== null;
         if (issue)
             this._issueItem.label.text = `${issue.emoji} ${issue.text}`;
@@ -409,7 +412,8 @@ class Indicator extends PanelMenu.Button {
                 return block;
             });
         }
-        quotaViews.forEach((quota, index) => this._blocks[index].update(quota, now, scheme));
+        quotaViews.forEach((quota, index) =>
+            this._blocks[index].update({quota, now, scheme, locale: this._locale}));
         const hasQuotas = quotaViews.length > 0;
         this._blockBox.visible = hasQuotas;
         this._renderMessage(now, hasQuotas);
@@ -437,7 +441,7 @@ class Indicator extends PanelMenu.Button {
             if (index > 0)
                 this._panelQuotas.add_child(this._panelSeparator());
             this._panelQuotas.add_child(new St.Label({
-                text: quota.expired ? `${quota.short} -` : `${quota.short} ${quota.percent}%`,
+                text: `${quota.short} ${percentLine(quota)}`,
                 style_class: quotaClass('cq-panel-quota', quota, scheme),
                 y_align: Clutter.ActorAlign.CENTER,
             }));
