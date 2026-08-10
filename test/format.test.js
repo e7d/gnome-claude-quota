@@ -19,6 +19,29 @@ test('captionLine falls back to a placeholder once a window has expired', () => 
     assert.equal(captionLine(quota, now, 'en-US'), '-');
 });
 
+test('a reset a second short of the minute reads as that minute', () => {
+    const quota = {resetsAt: new Date('2026-08-08T07:59:59.966Z')};
+    assert.equal(captionLine(quota, now, 'en-US'), '4d 0h left · Sat 8:00 AM');
+});
+
+test('sibling windows stamped a second apart share one clock reading', () => {
+    const early = {resetsAt: new Date('2026-08-08T07:59:59.966Z')};
+    const late = {resetsAt: new Date('2026-08-08T08:00:00.966Z')};
+    assert.equal(captionLine(early, now, 'en-US'), captionLine(late, now, 'en-US'));
+});
+
+test('a reset rounds to the nearer minute rather than always up', () => {
+    const down = {resetsAt: new Date('2026-08-04T09:00:29Z')};
+    const up = {resetsAt: new Date('2026-08-04T09:00:31Z')};
+    assert.equal(captionLine(down, now, 'en-US'), '1h 09m left · 9:00 AM');
+    assert.equal(captionLine(up, now, 'en-US'), '1h 09m left · 9:01 AM');
+});
+
+test('a reset rounding across midnight carries the new weekday', () => {
+    const quota = {resetsAt: new Date('2026-08-04T23:59:45Z')};
+    assert.equal(captionLine(quota, now, 'en-US'), '16h 08m left · Wed 12:00 AM');
+});
+
 test('timeLocale prefers the time category over the base language', () => {
     assert.equal(timeLocale({LANG: 'en_US.UTF-8', LC_TIME: 'fr_FR.UTF-8'}), 'fr-FR');
     assert.equal(timeLocale({LANG: 'en_US.UTF-8'}), 'en-US');
