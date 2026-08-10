@@ -273,6 +273,73 @@ group_hover() {
     assert_status_row_highlights
 }
 
+# freeze stubs the instance's _refresh, so without the delete the click runs
+# nothing and every assertion below describes a refresh that never started. The
+# fetch never settles because a real poll resolves before the spinner is read.
+unfreeze_refresh() {
+    shell_eval "delete $IND._refresh;
+        $IND._fetchCycle = () => new Promise(() => {});
+        'ok'" >/dev/null
+}
+
+refreeze_refresh() {
+    shell_eval "$IND._refreshing = false;
+        delete $IND._fetchCycle;
+        $IND._refresh = () => {};
+        $IND._render();
+        'ok'" >/dev/null
+}
+
+# St.Button::clicked carries the button number, and emitting it without one is
+# refused outright — the click then runs nothing and no assertion below can tell.
+click_refresh() {
+    shell_eval "$IND._refreshButton.emit('clicked', 1); 'ok'" >/dev/null
+}
+
+assert_menu_survives_refresh() {
+    assert_eq 'menu stays open through a refresh' 'true' "$(probe "$IND.menu.isOpen")"
+}
+
+assert_spinner_runs() {
+    assert_eq 'refresh icon spins' 'true' \
+        "$(probe "$IND._refreshButton.child.get_transition('spin') !== null")"
+    assert_eq 'refresh button is insensitive while refreshing' 'false' \
+        "$(probe "$IND._refreshButton.reactive")"
+}
+
+assert_spinner_cleared() {
+    assert_eq 'spin transition removed' 'true' \
+        "$(probe "$IND._refreshButton.child.get_transition('spin') === null")"
+    assert_eq 'icon rotation reset' '0' \
+        "$(probe "$IND._refreshButton.child.rotation_angle_z")"
+}
+
+prove_refresh() {
+    prove 'spinner runs' \
+        "shell_eval \"$IND._refreshButton.child.remove_transition('spin'); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
+        assert_spinner_runs
+    prove 'menu survives a refresh' \
+        "shell_eval \"$IND.menu.close(false); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND.menu.open(false); 'ok'\" >/dev/null" \
+        assert_menu_survives_refresh
+}
+
+group_refresh() {
+    echo 'refresh:'
+    render_state normal
+    reopen_menu
+    unfreeze_refresh
+    click_refresh
+    sleep 1
+    prove_refresh
+    assert_menu_survives_refresh
+    assert_spinner_runs
+    refreeze_refresh
+    sleep 1
+    assert_spinner_cleared
+}
+
 main() {
     require_install
     require_commands magick
