@@ -3,14 +3,39 @@
 UUID='claude-quota@e7d.io'
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLED="$HOME/.local/share/gnome-shell/extensions/$UUID"
-RUN="$(mktemp -d)"
-CFG="$RUN/config"
-BUS_FILE="$RUN/bus"
-PID_FILE="$RUN/pid"
-LOG="$RUN/shell.log"
+RUNTIME_ROOT="${CLAUDE_QUOTA_RUNTIME:-${XDG_RUNTIME_DIR:-/tmp}/claude-quota}"
+
+use_session() {
+    RUN="$RUNTIME_ROOT/$1"
+    CFG="$RUN/config"
+    BUS_FILE="$RUN/bus"
+    PID_FILE="$RUN/pid"
+    LOG="$RUN/shell.log"
+    # shellcheck disable=SC2034
+    STATE_FILE="$RUN/state"
+}
+
+session_live() {
+    [ -s "$PID_FILE" ] || return 1
+    kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+reap_session() {
+    session_live && return 0
+    rm -rf "$RUN"
+    return 0
+}
+
+attach_session() {
+    session_live || return 1
+    DBUS_SESSION_BUS_ADDRESS="$(cat "$BUS_FILE")"
+    export DBUS_SESSION_BUS_ADDRESS
+}
+
 : "${DEVKIT_NAME:=devkit}"
 : "${DEVKIT_SETUP:=}"
 : "${DEVKIT_HEADLESS:=0}"
+: "${DEVKIT_SESSION:=$DEVKIT_NAME}"
 DEVKIT_MONITOR='1280x800'
 DEVKIT_VIEWER='/usr/lib/mutter-devkit'
 
@@ -32,9 +57,13 @@ stop_shell() {
     : > "$BUS_FILE"
 }
 
-cleanup() {
+release_session() {
     stop_shell
     rm -rf "$RUN"
+}
+
+own_session() {
+    trap release_session EXIT INT TERM
 }
 
 require_commands() {
@@ -84,6 +113,7 @@ backend_args() {
 # XDG_CONFIG_HOME does not sandbox dconf, so a write hoisted out of this
 # dbus-run-session lands in the live session's database instead.
 start_shell() {
+    mkdir -p "$RUN"
     local backend
     mapfile -t backend < <(backend_args)
     # shellcheck disable=SC2016
@@ -154,4 +184,4 @@ unwrap() {
     sed -n "s/^(true, '\(.*\)')\$/\1/p" | tr -d '"'
 }
 
-trap cleanup EXIT INT TERM
+use_session "$DEVKIT_SESSION"

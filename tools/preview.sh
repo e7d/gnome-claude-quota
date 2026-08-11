@@ -66,6 +66,7 @@ main() {
         prepare_out full
     fi
     isolate_dconf
+    own_session
     start_shell
     wait_for_indicator
     hide_overview

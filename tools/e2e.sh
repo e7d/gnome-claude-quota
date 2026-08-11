@@ -477,6 +477,7 @@ main() {
     select_scenarios
     select_groups
     isolate_dconf
+    own_session
     start_shell
     wait_for_indicator
     hide_overview

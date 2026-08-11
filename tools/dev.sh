@@ -61,6 +61,7 @@ signature() {
 }
 
 launch() {
+    own_session
     start_shell
     wait_for_indicator
     hide_overview
