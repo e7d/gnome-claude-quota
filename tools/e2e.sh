@@ -197,10 +197,9 @@ group_state() {
         set_theme "$theme"
         echo "$theme:"
         for scenario in "${SCENARIOS[@]}"; do
+            render_state "$scenario"
             if shoots "$scenario"; then
-                capture "$theme-$scenario" "$scenario"
-            else
-                render_state "$scenario"
+                capture "$theme-$scenario"
             fi
             assert_state "$theme-$scenario"
         done

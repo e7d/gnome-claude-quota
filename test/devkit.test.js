@@ -76,3 +76,62 @@ test('attach_session exports the recorded bus address', () => {
     assert.equal(status, 0);
     assert.match(stdout, /unix:path=\/run\/fake-bus/);
 });
+
+test('state_get returns empty for a key never written', () => {
+    const root = runtimeRoot();
+    const {stdout} = run('use_session mine\nmkdir -p "$RUN"\necho "[$(state_get theme)]"', root);
+    assert.match(stdout, /\[\]/);
+});
+
+test('state_set then state_get round-trips a value', () => {
+    const root = runtimeRoot();
+    const {stdout} = run('use_session mine\nmkdir -p "$RUN"\nstate_set theme dark\nstate_get theme', root);
+    assert.equal(stdout.trim(), 'dark');
+});
+
+test('state_set replaces a previous value rather than appending', () => {
+    const root = runtimeRoot();
+    const script = `use_session mine
+        mkdir -p "$RUN"
+        state_set theme dark
+        state_set theme light
+        state_get theme
+        wc -l < "$STATE_FILE"`;
+    const {stdout} = run(script, root);
+    const [value, lines] = stdout.trim().split('\n');
+    assert.equal(value, 'light');
+    assert.equal(lines.trim(), '1');
+});
+
+test('state_set keeps the other keys', () => {
+    const root = runtimeRoot();
+    const script = `use_session mine
+        mkdir -p "$RUN"
+        state_set theme dark
+        state_set data normal
+        state_set theme light
+        echo "$(state_get theme)/$(state_get data)"`;
+    const {stdout} = run(script, root);
+    assert.equal(stdout.trim(), 'light/normal');
+});
+
+test('tile_name joins the recorded theme and data', () => {
+    const root = runtimeRoot();
+    const script = `use_session mine
+        mkdir -p "$RUN"
+        state_set theme dark
+        state_set data error
+        tile_name`;
+    const {stdout} = run(script, root);
+    assert.equal(stdout.trim(), 'dark-error');
+});
+
+test('tile_name calls an unforced theme default', () => {
+    const root = runtimeRoot();
+    const script = `use_session mine
+        mkdir -p "$RUN"
+        state_set data live
+        tile_name`;
+    const {stdout} = run(script, root);
+    assert.equal(stdout.trim(), 'default-live');
+});

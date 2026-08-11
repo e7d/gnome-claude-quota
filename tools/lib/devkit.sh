@@ -11,7 +11,6 @@ use_session() {
     BUS_FILE="$RUN/bus"
     PID_FILE="$RUN/pid"
     LOG="$RUN/shell.log"
-    # shellcheck disable=SC2034
     STATE_FILE="$RUN/state"
 }
 
@@ -30,6 +29,24 @@ attach_session() {
     session_live || return 1
     DBUS_SESSION_BUS_ADDRESS="$(cat "$BUS_FILE")"
     export DBUS_SESSION_BUS_ADDRESS
+}
+
+state_get() {
+    [ -f "$STATE_FILE" ] || return 0
+    sed -n "s/^$1=//p" "$STATE_FILE"
+}
+
+state_set() {
+    local kept="$RUN/state.next"
+    [ -f "$STATE_FILE" ] && grep -v "^$1=" "$STATE_FILE" > "$kept" || : > "$kept"
+    echo "$1=$2" >> "$kept"
+    mv "$kept" "$STATE_FILE"
+}
+
+tile_name() {
+    local theme
+    theme="$(state_get theme)"
+    echo "${theme:-default}-$(state_get data)"
 }
 
 : "${DEVKIT_NAME:=devkit}"

@@ -40,7 +40,6 @@ shoot() {
 # crop belongs to the previous scenario's narrower panel button.
 capture() {
     local name="$1" box rect panel
-    render_state "$2"
     close_menu
     sleep 1
     open_menu
