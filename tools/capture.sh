@@ -36,9 +36,14 @@ shoot() {
         "$@" false "$path" >/dev/null || die "screenshot failed for $path"
 }
 
+# An already-open menu never repositions itself, so without this cycle the measured
+# crop belongs to the previous scenario's narrower panel button.
 capture() {
     local name="$1" box rect panel
     render_state "$2"
+    close_menu
+    sleep 1
+    open_menu
     sleep 1
     box="$(popup_box)"
     [ -n "$box" ] || die "could not measure the popup for $name"
@@ -54,6 +59,7 @@ capture() {
     shoot "$RUN/hovered.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
     open_menu
     sleep 1
+    [ "$(popup_box)" = "$box" ] || die "the popup moved between measuring and shooting $name"
     shoot "$RUN/open.png" "${rect[@]}"
     magick "$RUN/closed.png" "$RUN/hovered.png" "$RUN/open.png" \
         -background none -smush 8 "$OUT/$name.png"
