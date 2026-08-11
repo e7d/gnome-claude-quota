@@ -94,9 +94,12 @@ apply_popup() {
     state_set popup "$WANT_POPUP"
 }
 
+# render_state leaves the menu open, so touching data moves the popup dimension too;
+# re-asserting the recorded popup is what keeps an omitted flag from changing anything.
 apply_shape() {
     apply_theme
     apply_data
+    [ -z "$WANT_DATA" ] || : "${WANT_POPUP:=$(state_get popup)}"
     apply_popup
 }
 
@@ -137,6 +140,7 @@ main() {
         exit 0
     fi
     if attach_session; then
+        wait_for_indicator
         if [ -n "$WANT_BACKEND" ] && [ "$WANT_BACKEND" != "$(state_get backend)" ]; then
             echo "preview: $WANT_BACKEND needs a new shell, restarting session '$SESSION'"
             replay_backend
