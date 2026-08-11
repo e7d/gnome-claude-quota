@@ -12,6 +12,12 @@ freeze() {
     shell_eval "Main.panel.statusArea['$UUID']._refresh = () => {}; 'ok'" >/dev/null
 }
 
+# freeze sets _refresh as an own property, so delete restores the prototype method.
+unfreeze() {
+    shell_eval "const i = Main.panel.statusArea['$UUID'];
+        delete i._refresh; i._refresh('manual'); 'ok'" >/dev/null
+}
+
 set_theme() {
     shell_settle color-scheme "prefer-$1"
 }

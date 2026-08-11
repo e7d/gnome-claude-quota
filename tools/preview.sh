@@ -3,84 +3,154 @@ set -euo pipefail
 
 DEVKIT_NAME='preview'
 DEVKIT_SETUP='gsettings set org.gnome.desktop.interface font-name "Cantarell 11"'
-DEVKIT_HEADLESS=1
+DEVKIT_HEADLESS=0
 # shellcheck source=tools/lib/devkit.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/devkit.sh"
 # shellcheck source=tools/lib/indicator.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/indicator.sh"
-# shellcheck source=tools/lib/capture.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib/capture.sh"
 
-THEMES=(dark light)
+SESSION='preview'
+WANT_THEME=''
+WANT_DATA=''
+WANT_POPUP=''
+WANT_BACKEND=''
+DETACH=0
+STOP=0
 
 usage() {
     cat <<USAGE
 Usage: tools/preview.sh [options]
 
-Shoots preview/<theme>-<scenario>.png in a throwaway nested GNOME shell, each one
-stacking the panel button resting, hovered, then pressed with the popup open, plus
-an overview.png contact sheet of them all.
+Owns one nested GNOME shell and sets the shape of the extension inside it. Called
+again while that session is up, it changes the shape live instead of restarting.
 
 Options:
-  --headless           Run with no window, driven over D-Bus (default)
-  --windowed           Show the session in a Mutter devkit window
-  --dark-only          Shoot the dark theme only
-  --light-only         Shoot the light theme only
-  --scenario=<name>    Shoot one scenario; repeat the flag for several
-  -h, --help           Show this message
+  --session=<name>   Name the session (default preview)
+  --windowed         Show the session in a Mutter devkit window (default)
+  --headless         Run with no window, driven over D-Bus
+  --dark, --light    Force a colour scheme
+  --scenario=<name>  Render a fabricated state
+  --live             Render real data (default)
+  --close            Leave the popup closed and the pointer away (default)
+  --hover            Leave the pointer on the panel button
+  --open             Leave the popup open
+  --detach           Start the session and return instead of blocking
+  --stop             Tear the session down
+  -h, --help         Show this message
 
-A full run takes a few minutes; a subset run takes seconds and leaves the
-screenshots it did not shoot alone.
+An option you leave out is left alone: preview.sh --light repaints and changes
+nothing else. On a fresh session the defaults above apply.
 
 Scenarios:
   ${SCENARIOS[*]}
 
-Needs magick, and gnome-shell with this checkout symlinked at
+Needs gnome-shell with this checkout symlinked at
 $INSTALLED
 USAGE
 }
 
 for arg in "$@"; do
-    devkit_flag "$arg" && continue
     case "$arg" in
-        --dark-only) THEMES=(dark) ;;
-        --light-only) THEMES=(light) ;;
-        --scenario=*) PICKED+=("${arg#*=}") ;;
+        --session=*) SESSION="${arg#*=}" ;;
+        --windowed) WANT_BACKEND=windowed ;;
+        --headless) WANT_BACKEND=headless ;;
+        --dark|--light) WANT_THEME="${arg#--}" ;;
+        --scenario=*) WANT_DATA="${arg#*=}"; PICKED=("${arg#*=}") ;;
+        --live) WANT_DATA=live ;;
+        --close|--hover|--open) WANT_POPUP="${arg#--}" ;;
+        --detach) DETACH=1 ;;
+        --stop) STOP=1 ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown option $arg" ;;
     esac
 done
 
-subset() {
-    [ "${#PICKED[@]}" -gt 0 ] || [ "${#THEMES[@]}" -lt 2 ]
+apply_theme() {
+    [ -n "$WANT_THEME" ] || return 0
+    set_theme "$WANT_THEME"
+    state_set theme "$WANT_THEME"
 }
 
-main() {
-    require_install
-    require_commands magick
-    select_scenarios
-    if subset; then
-        echo "preview: subset run (${THEMES[*]} x ${SCENARIOS[*]}); other shots left as they are"
-        prepare_out subset
+apply_data() {
+    [ -n "$WANT_DATA" ] || return 0
+    if [ "$WANT_DATA" = 'live' ]; then
+        unfreeze
     else
-        prepare_out full
+        freeze
+        render_state "$WANT_DATA"
     fi
+    state_set data "$WANT_DATA"
+}
+
+# --open moves the pointer away first because the session's first pointer motion
+# closes a menu it lands inside — the same reason e2e.sh has reopen_menu.
+apply_popup() {
+    [ -n "$WANT_POPUP" ] || return 0
+    case "$WANT_POPUP" in
+        close) close_menu; point_at away ;;
+        hover) close_menu; point_at pill ;;
+        open) point_at away; open_menu ;;
+    esac
+    state_set popup "$WANT_POPUP"
+}
+
+apply_shape() {
+    apply_theme
+    apply_data
+    apply_popup
+}
+
+fresh_defaults() {
+    : "${WANT_THEME:=}"
+    : "${WANT_DATA:=live}"
+    : "${WANT_POPUP:=close}"
+    : "${WANT_BACKEND:=windowed}"
+}
+
+start() {
+    require_install
+    reap_session
+    fresh_defaults
+    [ "$WANT_BACKEND" = 'headless' ] && DEVKIT_HEADLESS=1
     isolate_dconf
-    own_session
+    [ "$DETACH" -eq 1 ] || own_session
     start_shell
     wait_for_indicator
     hide_overview
-    freeze
-    for theme in "${THEMES[@]}"; do
-        set_theme "$theme"
-        echo "$theme:"
-        for scenario in "${SCENARIOS[@]}"; do
-            render_state "$scenario"
-            capture "$theme-$scenario"
-        done
-    done
-    normalize
-    overview
+    state_set backend "$WANT_BACKEND"
+    apply_shape
+}
+
+replay_backend() {
+    WANT_THEME="${WANT_THEME:-$(state_get theme)}"
+    WANT_DATA="${WANT_DATA:-$(state_get data)}"
+    WANT_POPUP="${WANT_POPUP:-$(state_get popup)}"
+    stop_shell
+    start
+}
+
+main() {
+    use_session "$SESSION"
+    select_scenarios
+    if [ "$STOP" -eq 1 ]; then
+        session_live && release_session
+        exit 0
+    fi
+    if attach_session; then
+        if [ -n "$WANT_BACKEND" ] && [ "$WANT_BACKEND" != "$(state_get backend)" ]; then
+            echo "preview: $WANT_BACKEND needs a new shell, restarting session '$SESSION'"
+            replay_backend
+        else
+            apply_shape
+            exit 0
+        fi
+    else
+        start
+    fi
+    [ "$DETACH" -eq 1 ] && { echo "preview: session '$SESSION' up, detached"; exit 0; }
+    echo "preview: session '$SESSION' up, Ctrl-C to stop"
+    echo "preview: log $LOG"
+    wait
 }
 
 main

@@ -62,14 +62,19 @@ die() {
     exit 1
 }
 
-# Killing by name instead would match the host session's own gnome-shell.
+# Killing by name instead would match the host session's own gnome-shell. The pid
+# is read once and the directory rechecked, because a blocking owner reaps the
+# session the moment its shell dies — under a concurrent --stop, from beneath us.
 stop_shell() {
     [ -s "$PID_FILE" ] || return 0
-    kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    local pid
+    pid="$(cat "$PID_FILE")"
+    kill "$pid" 2>/dev/null || true
     for _ in $(seq 20); do
-        kill -0 "$(cat "$PID_FILE")" 2>/dev/null || break
+        kill -0 "$pid" 2>/dev/null || break
         sleep 0.5
     done
+    [ -d "$RUN" ] || return 0
     : > "$PID_FILE"
     : > "$BUS_FILE"
 }
