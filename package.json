@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "TZ=UTC node --test",
-    "dev": "tools/dev.sh",
-    "dev:watch": "tools/dev.sh --watch",
+    "dev": "tools/preview.sh --windowed",
+    "dev:watch": "tools/preview.sh --windowed --watch",
     "preview": "tools/preview.sh",
     "e2e": "tools/e2e.sh",
     "a11y": "tools/a11y.sh",

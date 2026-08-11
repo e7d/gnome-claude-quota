@@ -19,6 +19,7 @@ WANT_BACKEND=''
 DETACH=0
 STOP=0
 CAPTURE=0
+WATCH=0
 
 usage() {
     cat <<USAGE
@@ -38,6 +39,7 @@ Options:
   --hover            Leave the pointer on the panel button
   --open             Leave the popup open
   --capture          Shoot preview/<theme>-<scenario>.png of the shape applied
+  --watch            Restart the shell on a source change, replaying the shape
   --detach           Start the session and return instead of blocking
   --stop             Tear the session down
   -h, --help         Show this message
@@ -64,6 +66,7 @@ for arg in "$@"; do
         --close|--hover|--open) WANT_POPUP="${arg#--}" ;;
         --capture) CAPTURE=1 ;;
         --detach) DETACH=1 ;;
+        --watch) WATCH=1 ;;
         --stop) STOP=1 ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown option $arg" ;;
@@ -146,6 +149,36 @@ replay_backend() {
     start
 }
 
+sources() {
+    find "$ROOT/extension.js" "$ROOT/stylesheet.css" "$ROOT/metadata.json" \
+        "$ROOT/lib" "$ROOT/icons" -type f 2>/dev/null | sort
+}
+
+# sha256sum digests empty input to a real-looking constant, leaving the watcher
+# silently never firing.
+signature() {
+    local list="$RUN/sources"
+    sources > "$list"
+    [ -s "$list" ] || die 'no source files matched; watch would never fire'
+    xargs stat -c '%n %Y' < "$list" | sha256sum | cut -d' ' -f1
+}
+
+# Shell caches extension modules for the life of the process, so a disable/enable
+# cycle would silently re-run the old code.
+watch_sources() {
+    require_commands find stat sha256sum xargs
+    local last now
+    last="$(signature)"
+    while true; do
+        sleep 1
+        now="$(signature)"
+        [ "$now" = "$last" ] && continue
+        last="$now"
+        echo 'preview: source changed, restarting'
+        replay_backend
+    done
+}
+
 main() {
     use_session "$SESSION"
     select_scenarios
@@ -168,7 +201,11 @@ main() {
     [ "$DETACH" -eq 1 ] && { echo "preview: session '$SESSION' up, detached"; exit 0; }
     echo "preview: session '$SESSION' up, Ctrl-C to stop"
     echo "preview: log $LOG"
-    wait
+    if [ "$WATCH" -eq 0 ]; then
+        wait
+        exit 0
+    fi
+    watch_sources
 }
 
 main
