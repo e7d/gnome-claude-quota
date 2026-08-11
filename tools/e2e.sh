@@ -193,7 +193,7 @@ prove_state() {
 }
 
 subset_kind() {
-    if [ "$SHOOT_MODE" != 'all' ] || [ "${#PICKED[@]}" -gt 0 ] || [ "${#THEMES[@]}" -lt 2 ]; then
+    if [ "$SHOOT_MODE" = 'none' ] || [ "${#PICKED[@]}" -gt 0 ] || [ "${#THEMES[@]}" -lt 2 ]; then
         echo subset
     else
         echo full
@@ -202,6 +202,14 @@ subset_kind() {
 
 PREVIEW="$ROOT/tools/preview.sh"
 
+# A dead session's attach_session fails, so preview.sh falls through to starting
+# a brand-new one and blocks in `wait` forever — a command substitution calling
+# it would then never return, hanging the suite instead of failing it.
+preview() {
+    session_live || die 'the e2e session died'
+    "$PREVIEW" --session=e2e "$@"
+}
+
 # The theme is set once per row rather than per scenario: set_theme sleeps two
 # seconds, and preview.sh leaves an omitted dimension alone.
 group_state() {
@@ -209,15 +217,15 @@ group_state() {
     prove_state
     local theme scenario shot
     for theme in "${THEMES[@]}"; do
-        "$PREVIEW" --session=e2e "--$theme" >/dev/null
+        preview "--$theme" >/dev/null
         echo "$theme:"
         for scenario in "${SCENARIOS[@]}"; do
             if shoots "$scenario"; then
-                shot="$("$PREVIEW" --session=e2e --scenario="$scenario" --capture)"
+                shot="$(preview --scenario="$scenario" --capture)"
                 SHOTS+=("$shot")
                 echo "  $shot"
             else
-                "$PREVIEW" --session=e2e --scenario="$scenario" >/dev/null
+                preview --scenario="$scenario" >/dev/null
             fi
             assert_state "$theme-$scenario"
         done
@@ -496,7 +504,9 @@ main() {
     use_session e2e
     reap_session
     own_session
-    "$PREVIEW" --session=e2e --headless --detach --live >/dev/null
+    local backend_flag=--headless
+    [ "$DEVKIT_HEADLESS" -eq 1 ] || backend_flag=--windowed
+    "$PREVIEW" --session=e2e "$backend_flag" --detach --live >/dev/null
     attach_session || die 'preview.sh did not publish a session'
     freeze
     runs_group state && group_state

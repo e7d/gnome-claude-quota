@@ -8,8 +8,13 @@ PICKED=()
 
 # Every state below is fabricated, so the real endpoint must never answer over the
 # top of it. Stubbing the instance method also spares the shared API rate limit.
+# Overriding _refresh alone only stops future calls: a fetch already in flight
+# (the enable-time refresh, or preview.sh's own --live startup) resumes inside its
+# original async body and still writes _quotas and renders unless its cancellable
+# is cancelled too, which is what actually makes the pending fetch reject and bail.
 freeze() {
-    shell_eval "Main.panel.statusArea['$UUID']._refresh = () => {}; 'ok'" >/dev/null
+    shell_eval "const i = Main.panel.statusArea['$UUID'];
+        i._cancellable?.cancel(); i._refresh = () => {}; 'ok'" >/dev/null
 }
 
 # freeze sets _refresh as an own property, so delete restores the prototype method.
