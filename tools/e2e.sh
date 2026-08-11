@@ -17,7 +17,8 @@ DEVKIT_HEADLESS=1
 ALL_GROUPS=(state hover refresh lifecycle)
 RUN_GROUPS=("${ALL_GROUPS[@]}")
 THEMES=(dark light)
-SHOOT=(normal warning critical model-scoped error service-major over-pace rate-limited rate-limited-day no-data)
+A11Y_SHOTS=(normal warning critical model-scoped error service-major over-pace rate-limited rate-limited-day no-data)
+SHOOT_MODE=all
 PICKED_GROUPS=()
 ATTEMPTS_LOG=''
 
@@ -26,7 +27,7 @@ usage() {
 Usage: tools/e2e.sh [options]
 
 Asserts what the extension renders and how it reacts, in a throwaway nested GNOME
-shell, and shoots the subset of states npm run a11y scores.
+shell, and shoots what it asserts.
 
 Options:
   --headless           Run with no window, driven over D-Bus (default)
@@ -35,8 +36,12 @@ Options:
   --light-only         Assert the light theme only
   --scenario=<name>    Assert one scenario; repeat the flag for several
   --group=<name>       Run one group; repeat the flag for several
+  --a11y               Shoot only the subset npm run a11y scores
+  --assert             Shoot nothing, leaving preview/ alone
   -h, --help           Show this message
 
+Every scenario is shot by default, which costs minutes; narrow with --group,
+--scenario or --dark-only while iterating, or pass --assert to shoot nothing.
 Screenshots belong to the state group, so a run that excludes it leaves
 preview/ alone and npm run a11y would score whatever was already there.
 
@@ -58,6 +63,8 @@ for arg in "$@"; do
         --light-only) THEMES=(light) ;;
         --scenario=*) PICKED+=("${arg#*=}") ;;
         --group=*) PICKED_GROUPS+=("${arg#*=}") ;;
+        --a11y) SHOOT_MODE=a11y ;;
+        --assert) SHOOT_MODE=none ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown option $arg" ;;
     esac
@@ -90,7 +97,11 @@ probe() {
 
 shoots() {
     local name
-    for name in "${SHOOT[@]}"; do
+    case "$SHOOT_MODE" in
+        all) return 0 ;;
+        none) return 1 ;;
+    esac
+    for name in "${A11Y_SHOTS[@]}"; do
         [ "$name" = "$1" ] && return 0
     done
     return 1
@@ -182,24 +193,31 @@ prove_state() {
 }
 
 subset_kind() {
-    if [ "${#PICKED[@]}" -gt 0 ] || [ "${#THEMES[@]}" -lt 2 ]; then
+    if [ "$SHOOT_MODE" != 'all' ] || [ "${#PICKED[@]}" -gt 0 ] || [ "${#THEMES[@]}" -lt 2 ]; then
         echo subset
     else
         echo full
     fi
 }
 
+PREVIEW="$ROOT/tools/preview.sh"
+
+# The theme is set once per row rather than per scenario: set_theme sleeps two
+# seconds, and preview.sh leaves an omitted dimension alone.
 group_state() {
     prepare_out "$(subset_kind)"
     prove_state
-    local theme scenario
+    local theme scenario shot
     for theme in "${THEMES[@]}"; do
-        set_theme "$theme"
+        "$PREVIEW" --session=e2e "--$theme" >/dev/null
         echo "$theme:"
         for scenario in "${SCENARIOS[@]}"; do
-            render_state "$scenario"
             if shoots "$scenario"; then
-                capture "$theme-$scenario"
+                shot="$("$PREVIEW" --session=e2e --scenario="$scenario" --capture)"
+                SHOTS+=("$shot")
+                echo "  $shot"
+            else
+                "$PREVIEW" --session=e2e --scenario="$scenario" >/dev/null
             fi
             assert_state "$theme-$scenario"
         done
@@ -475,11 +493,11 @@ main() {
     require_commands magick
     select_scenarios
     select_groups
-    isolate_dconf
+    use_session e2e
+    reap_session
     own_session
-    start_shell
-    wait_for_indicator
-    hide_overview
+    "$PREVIEW" --session=e2e --headless --detach --live >/dev/null
+    attach_session || die 'preview.sh did not publish a session'
     freeze
     runs_group state && group_state
     runs_group hover && group_hover
