@@ -8,6 +8,7 @@
     "dev:watch": "tools/dev.sh --watch",
     "preview": "tools/preview.sh",
     "e2e": "tools/e2e.sh",
-    "a11y": "tools/a11y.sh"
+    "a11y": "tools/a11y.sh",
+    "attribution": "node tools/quota-attribution.js"
   }
 }

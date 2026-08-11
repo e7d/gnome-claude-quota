@@ -11,6 +11,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {captionLine, percentLine, rateLimitLine, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
@@ -162,7 +163,7 @@ class Indicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
             can_focus: true,
         });
-        this._refreshButton.connect('clicked', () => this._refresh());
+        this._refreshButton.connect('clicked', () => this._refresh('manual'));
         this._rateLimitLabel = new St.Label({
             y_align: Clutter.ActorAlign.CENTER,
             opacity: CAPTION_OPACITY,
@@ -209,16 +210,20 @@ class Indicator extends PanelMenu.Button {
                 return;
             this._render();
             if (shouldFetchOnOpen(this._fetchedAt, new Date(), this._blockedUntil))
-                this._refresh();
+                this._refresh('popup-stale');
         });
         this.connect('destroy', () => this._onDestroy());
         this._loadCache();
         this._render();
-        this._refresh();
+        this._refresh('startup');
     }
 
     _cachePath() {
         return GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-quota', 'usage.json']);
+    }
+
+    _attemptsPath() {
+        return GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-quota', 'attempts.jsonl']);
     }
 
     _loadCache() {
@@ -251,6 +256,30 @@ class Indicator extends PanelMenu.Button {
         }
     }
 
+    _readAttempts(file) {
+        try {
+            const [, contents] = file.load_contents(null);
+            return new TextDecoder().decode(contents);
+        } catch {
+            return '';
+        }
+    }
+
+    _appendAttempt(record) {
+        const file = Gio.File.new_for_path(this._attemptsPath());
+        try {
+            file.get_parent().make_directory_with_parents(null);
+        } catch {
+        }
+        try {
+            file.replace_contents(
+                new TextEncoder().encode(appendRecord(this._readAttempts(file), record)),
+                null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+        } catch (error) {
+            logError(error);
+        }
+    }
+
     get _scheme() {
         return Main.getStyleVariant() === 'light' ? 'light' : 'dark';
     }
@@ -262,12 +291,12 @@ class Indicator extends PanelMenu.Button {
         }
         this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, seconds, () => {
             this._timerId = null;
-            this._refresh();
+            this._refresh('timer');
             return GLib.SOURCE_REMOVE;
         });
     }
 
-    async _refresh() {
+    async _refresh(trigger) {
         const now = new Date();
         if (isBlocked(this._blockedUntil, now)) {
             this._scheduleNext(nextPollSeconds((this._blockedUntil - now) / 1000));
@@ -279,15 +308,15 @@ class Indicator extends PanelMenu.Button {
         this._cancellable = cancellable;
         this._refreshing = true;
         this._renderSafely();
-        await this._fetchCycle(cancellable);
+        await this._fetchCycle(cancellable, trigger);
         if (this._destroyed || this._cancellable !== cancellable)
             return;
         this._refreshing = false;
         this._renderSafely();
     }
 
-    async _fetchCycle(cancellable) {
-        const result = await this._fetchResult(cancellable);
+    async _fetchCycle(cancellable, trigger) {
+        const result = await this._fetchResult(cancellable, trigger);
         if (result === null || this._destroyed || this._cancellable !== cancellable)
             return;
         this._applyResult(result);
@@ -316,21 +345,43 @@ class Indicator extends PanelMenu.Button {
         }
     }
 
-    async _fetchResult(cancellable) {
+    async _fetchResult(cancellable, trigger) {
         try {
-            const payload = await this._client.fetch(cancellable);
-            return {payload, error: null, retryAfter: null, rateLimited: false, serverError: false};
+            const {payload, status, headers} = await this._client.fetch(cancellable);
+            return this._recordAttempt({
+                payload,
+                error: null,
+                retryAfter: null,
+                rateLimited: false,
+                serverError: false,
+                status,
+                headers,
+            }, trigger);
         } catch (error) {
             if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
                 return null;
-            return {
+            return this._recordAttempt({
                 payload: null,
                 error: error.message,
                 retryAfter: error.retryAfter ?? null,
                 rateLimited: error.rateLimited ?? false,
                 serverError: error.serverError ?? false,
-            };
+                status: error.status ?? null,
+                headers: error.headers ?? {},
+            }, trigger);
         }
+    }
+
+    _recordAttempt(result, trigger) {
+        this._appendAttempt(attemptRecord({
+            now: new Date(),
+            trigger,
+            outcome: outcomeFor(result),
+            status: result.status,
+            retryAfter: result.retryAfter,
+            headers: result.headers,
+        }));
+        return result;
     }
 
     _applyResult(result) {

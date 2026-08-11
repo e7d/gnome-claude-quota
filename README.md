@@ -181,6 +181,15 @@ npm run a11y -- preview/dark-full.png  # or named files
 
 It wants `magick` and `node`, prints the pairs it measured per file and a total, and exits `1` while anything is under threshold — `2` if a file cannot be read — so it can gate CI.
 
+`npm run attribution` answers a different question: when the usage endpoint starts refusing with `429`, what is spending the allowance. Every upstream attempt the extension makes appends one line to `~/.cache/claude-quota/attempts.jsonl` — the instant, what triggered it, the outcome, the status, the `retry-after` and any `anthropic-ratelimit-*` headers, and never a token or a body. The tool joins that against Claude Code's own session starts, taken from transcript birth times and metadata only, and prints both per hour with a verdict:
+
+```bash
+npm run attribution                       # ±10 minutes around a session start
+npm run attribution -- --window=20        # widen the correlation window
+```
+
+It says *no data* when the log is empty and *cannot attribute* when there is no `429` in it, rather than reporting all clear, and prints the thresholds it applied beside the verdict. `docs/development.md` § Attributing a 429 carries the record shape and the reasoning.
+
 Pairing a foreground with its background is the hard part, and the method is an inference with known edges. The image is swept in 16px windows: the dominant colour of a window is the background, the minority colours are ink, and each ink is measured against that background under WCAG 2.1 — 4.5:1 for normal text, 3:1 once the glyph stands 18px or taller. Three filters keep that from degenerating into noise:
 
 - Only neutral surfaces are measured. The crop also catches the wallpaper behind the popup and whatever else GNOME parks in the top bar, and those are saturated; this extension only ever paints ink onto grey.

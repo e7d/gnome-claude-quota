@@ -65,7 +65,7 @@ The same throwaway shell as the preview, driven for verdicts instead of pixels. 
 | --- | --- |
 | `state` | every scenario in both themes: every row filled, no `null`/`undefined`/`NaN` reaching a label, one block per quota, each panel label ending in its block's percentage — plus a severity resolving to different colours in the two schemes |
 | `hover` | the indicator's hover shape read live against `quickSettings`, the display rows staying inert, and the status row highlighting |
-| `refresh` | a click leaves the popup open, spins the icon while the fetch is in flight, and leaves no transition behind afterwards |
+| `refresh` | a click leaves the popup open, spins the icon while the fetch is in flight, leaves no transition behind afterwards, and appends one attempt record carrying the trigger that caused it, the outcome, the rate-limit header and no credential |
 | `lifecycle` | disable releases the timer, cancels the in-flight fetch and empties the panel entry; enable registers exactly one indicator |
 
 `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. The `state` group is also what writes `preview/`, so a run excluding it leaves whatever was already there for `npm run a11y` to score.
@@ -80,13 +80,29 @@ That line says **the assertion is dead, not the extension**. Fix the assertion, 
 
 The breaks are mutations over `Eval` and the restores are re-renders, since `_render()` rebuilds every actor from state. Staging a failure by editing `extension.js` is the one thing a control must never be: it has to be undone inside the run, and a control that outlives its run is a broken checkout.
 
+The attempt-log control is the one break that runs real code rather than mutating an actor: it triggers a second fetch with `trigger` set to `timer` and expects the assertion on the newest record to fail, then triggers a `manual` one to restore. That works only because the block a `429` arms is cleared before each deliberate attempt — a blocked `_refresh` makes no upstream call and therefore writes no record, which would leave the log unchanged and read as a dead assertion.
+
+## Attributing a 429
+
+Every upstream attempt appends one JSON object to `~/.cache/claude-quota/attempts.jsonl`, beside the cache: the instant, the trigger (`startup`, `timer`, `manual`, `popup-stale`), the outcome, the HTTP status, the `retry-after` and whatever `anthropic-ratelimit-*` headers the response carried. No token, no request body, no response body — `lib/attempts.js` keeps header names by prefix, so an unfamiliar credential header is dropped without having to be anticipated, and `test/attempts.test.js` asserts a record built from a response carrying an `Authorization` header holds no part of it. The file is capped at 2000 records, trimmed on write.
+
+```bash
+npm run attribution                  # or: node tools/quota-attribution.js --window=20
+```
+
+It joins that log against Claude Code's own session starts — `~/.claude/projects/**/*.jsonl` birth times, metadata only, never contents — prints both per hour, and names what the numbers support. `--window=<minutes>` sets the correlation window either side of a session start, and the window, the cluster threshold and the observed fraction are printed with the verdict so a reader sees what was asserted rather than the label alone.
+
+The verdict distinguishes *no problem* from *no data*: an empty log says so and asks for a poll cycle, and a log with attempts but no `429` says it cannot attribute rather than reporting all clear. If a `429` carried `anthropic-ratelimit-*` headers, those answer the question directly and the correlation is only a cross-check.
+
+Birth times come from `fs.statSync().birthtimeMs`. If any file reports `0` the tool falls back to mtime for all of them and renames the column to `last activity`, so a different measurement never appears under the name of the one that was asked for. It is Node rather than shell deliberately: `find` here is bfs, which rejects `-newermt '48 hours ago'` and yields a confident `0` once a pipe swallows the error, and `-printf` is an action rather than a filter, so tests placed after it narrow nothing.
+
 ## Rate limits
 
 The usage endpoint answers `429` with `retry-after: 119`, and every Claude extension on the machine shares that allowance. Do not poll it in a loop while debugging: a burst pins the window, and each retry inside it re-arms the limit. `lib/policy.js` exists to keep the extension itself out of that state.
 
 `tools/preview.sh` stubs the indicator's `_refresh` before capturing, so the whole matrix costs at most the one fetch the shell makes at startup. `tools/e2e.sh` inherits that stub, and its refresh group — which has to remove it to make the button do anything — replaces `_fetchCycle` with a promise that never resolves, so asserting the spinner still spends nothing.
 
-What is measured is the *recovery*, not the budget: a `429` asks for 119 s and 139 s of silence restored a `200`. Nothing observed so far reports how many requests the window allows, or how much of it the neighbouring extensions have already spent. Treat any interval shorter than `POLL_SECONDS` as unmeasured until a successful response is shown to carry `anthropic-ratelimit-*` headers.
+What is measured is the *recovery*, not the budget: a `429` asks for 119 s and 139 s of silence restored a `200`. Nothing observed so far reports how many requests the window allows, or how much of it the neighbouring extensions have already spent. Treat any interval shorter than `POLL_SECONDS` as unmeasured until a successful response is shown to carry `anthropic-ratelimit-*` headers — the attempts log records them whenever they appear, so § Attributing a 429 is where that answer will show up first. The first `200` recorded that way, on 2026-08-11, carried none at all: `rateLimitHeaders` came back `{}`. Whether a `429` carries them is still unobserved, and it is the one response that would settle the budget question outright.
 
 ## Popup actions
 

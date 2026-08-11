@@ -1,7 +1,19 @@
 # Quota 429 attribution — design
 
 **Date:** 2026-08-11
-**Status:** approved, not yet implemented
+**Status:** implemented 2026-08-11
+
+Two things the implementation settled that this document could not:
+
+- **`trigger` gained a fourth value, `startup`.** The shell's own first fetch is neither a scheduled poll nor a
+  button press, and folding it into `timer` would have attributed every shell restart — the commonest event of
+  a development session — to the cadence being measured.
+- **The pure half of the analysis lives in `tools/attribution.js`**, with `tools/quota-attribution.js` as the
+  runner that reads the filesystem, exactly as `tools/contrast.js` sits under `tools/a11y.js`. That is what
+  "unit-testable the same way `tools/a11y.js` is" means in this tree: `a11y.js` runs `main()` at import time
+  and cannot be imported by a test.
+- **A `200` carries no `anthropic-ratelimit-*` headers.** First live record, `rateLimitHeaders: {}`, so the
+  row of the verdict table that would have answered the question outright is still waiting on a `429`.
 
 ## Problem
 

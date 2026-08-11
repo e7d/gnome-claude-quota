@@ -13,7 +13,7 @@ Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`]
 | `tools/*.sh`, `tools/*.js` | Your machine | Development tooling. Never shipped to users. |
 | `test/*.test.js` | `node --test` | Unit tests for `lib/` and `tools/`. |
 
-**Every `lib/` module except `usage.js` must stay free of `gi://`.** Those five are imported by the Node test runner as well as the shell, and one `gi://` import makes the whole module untestable. `lib/usage.js` is the deliberate exception — it wraps Soup and Gio for HTTP, and is consequently the one module with no unit tests, so keep it thin and put any decision it would make into `policy.js` instead. When you want a unit test for logic stuck inside `extension.js`, move the logic to `lib/` first; that is the intended direction of travel.
+**Every `lib/` module except `usage.js` must stay free of `gi://`.** Those six are imported by the Node test runner as well as the shell, and one `gi://` import makes the whole module untestable. `lib/usage.js` is the deliberate exception — it wraps Soup and Gio for HTTP, and is consequently the one module with no unit tests, so keep it thin and put any decision it would make into `policy.js` instead. When you want a unit test for logic stuck inside `extension.js`, move the logic to `lib/` first; that is the intended direction of travel.
 
 Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_blockedUntil`, `_refreshing`, `_fetchedAt`) are the truth, and `_render()` derives every actor from them. Never mutate an actor outside a render path; set the state and re-render.
 

@@ -19,6 +19,7 @@ RUN_GROUPS=("${ALL_GROUPS[@]}")
 THEMES=(dark light)
 SHOOT=(normal warning critical model-scoped error service-major over-pace rate-limited no-data)
 PICKED_GROUPS=()
+ATTEMPTS_LOG=''
 
 usage() {
     cat <<USAGE
@@ -336,6 +337,59 @@ prove_refresh() {
         assert_menu_survives_refresh
 }
 
+# The real endpoint must never answer here either, so the 429 is fabricated — and
+# the log is redirected to a temp file, since the live one is the evidence
+# tools/quota-attribution.js reads and a test record would corrupt the verdict.
+stub_attempt_log() {
+    ATTEMPTS_LOG="$(mktemp -t claude-quota-attempts.XXXXXX)"
+    shell_eval "delete $IND._refresh;
+        $IND._attemptsPath = () => '$ATTEMPTS_LOG';
+        $IND._client.fetch = () => Promise.reject(Object.assign(new Error('Rate limited'),
+            {rateLimited: true, retryAfter: 1, status: 429,
+             headers: {'authorization': 'Bearer sk-ant-oat01-STUB',
+                       'anthropic-ratelimit-requests-remaining': '0'}}));
+        'ok'" >/dev/null
+    log_attempt manual
+}
+
+restore_attempt_log() {
+    shell_eval "delete $IND._client.fetch;
+        delete $IND._attemptsPath;
+        $IND._blockedUntil = null;
+        $IND._refresh = () => {};
+        $IND._render();
+        'ok'" >/dev/null
+    rm -f "$ATTEMPTS_LOG"
+    ATTEMPTS_LOG=''
+}
+
+# A 429 arms _blockedUntil, and a blocked _refresh makes no upstream attempt and
+# therefore no record — so the block is cleared before each deliberate attempt.
+log_attempt() {
+    shell_eval "$IND._blockedUntil = null; $IND._refresh('$1'); 'ok'" >/dev/null
+    sleep 1
+}
+
+last_attempt_field() {
+    tail -n 1 "$ATTEMPTS_LOG" 2>/dev/null | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"
+}
+
+assert_attempt_logged() {
+    assert_eq 'attempt records the trigger that caused it' 'manual' "$(last_attempt_field trigger)"
+    assert_eq 'attempt records the 429 as its outcome' 'rate-limited' "$(last_attempt_field outcome)"
+    assert_eq 'attempt keeps the rate-limit header' '0' \
+        "$(last_attempt_field anthropic-ratelimit-requests-remaining)"
+    assert_eq 'attempt carries no credential' '' \
+        "$(tail -n 1 "$ATTEMPTS_LOG" 2>/dev/null | grep -oiE 'bearer|authorization|sk-ant' | head -1 || true)"
+}
+
+prove_attempt_log() {
+    prove 'attempt log records the trigger' \
+        'log_attempt timer' \
+        'log_attempt manual' \
+        assert_attempt_logged
+}
+
 group_refresh() {
     echo 'refresh:'
     render_state normal
@@ -349,6 +403,10 @@ group_refresh() {
     refreeze_refresh
     sleep 1
     assert_spinner_cleared
+    stub_attempt_log
+    prove_attempt_log
+    assert_attempt_logged
+    restore_attempt_log
 }
 
 park_indicator() {
