@@ -171,6 +171,7 @@ watch_sources() {
     last="$(signature)"
     while true; do
         sleep 1
+        [ -d "$RUN" ] || exit 0
         now="$(signature)"
         [ "$now" = "$last" ] && continue
         last="$now"
