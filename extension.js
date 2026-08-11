@@ -12,7 +12,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {deserialize, serialize} from './lib/cache.js';
-import {captionLine, percentLine, refreshLine, timeLocale} from './lib/format.js';
+import {captionLine, percentLine, rateLimitLine, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
 import {blockedUntil, isBlocked, markExpired, nextPollSeconds, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
@@ -163,7 +163,12 @@ class Indicator extends PanelMenu.Button {
             can_focus: true,
         });
         this._refreshButton.connect('clicked', () => this._refresh());
+        this._rateLimitLabel = new St.Label({
+            y_align: Clutter.ActorAlign.CENTER,
+            opacity: CAPTION_OPACITY,
+        });
         this._metaBox.add_child(this._refreshLabel);
+        this._metaBox.add_child(this._rateLimitLabel);
         this._metaBox.add_child(this._refreshButton);
         this._message = displayItem();
         this._messageBox = new St.BoxLayout({
@@ -256,6 +261,7 @@ class Indicator extends PanelMenu.Button {
             this._timerId = null;
         }
         this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, seconds, () => {
+            this._timerId = null;
             this._refresh();
             return GLib.SOURCE_REMOVE;
         });
@@ -356,9 +362,11 @@ class Indicator extends PanelMenu.Button {
         const silenced = isBlocked(this._blockedUntil, now);
         const issue = silenced ? null : serviceIssue(this._serviceStatus);
         const error = silenced || issue || this._error === null ? '' : this._error;
-        const loading = issue === null && error === '' && !hasQuotas;
+        const loading = issue === null && error === '' && !hasQuotas && !silenced;
         const message = loading ? 'Loading…' : error;
         this._refreshLabel.text = refreshLine(this._fetchedAt, now, this._locale);
+        this._rateLimitLabel.text = silenced ? rateLimitLine(this._blockedUntil, now, this._locale) : '';
+        this._rateLimitLabel.visible = this._rateLimitLabel.text !== '';
         this._issueItem.visible = issue !== null;
         if (issue)
             this._issueItem.label.text = `${issue.emoji} ${issue.text}`;

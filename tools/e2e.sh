@@ -121,11 +121,17 @@ assert_panel_matches() {
         "$(probe "$IND._blocks.every((b, n) => ($PANEL_QUOTAS)[n].endsWith(b._percent.text))")"
 }
 
+assert_rate_limit_note() {
+    assert_eq "$1 retry note tracks the block" 'true' \
+        "$(probe "$IND._rateLimitLabel.visible === /^retry /.test($IND._rateLimitLabel.text) && $IND._rateLimitLabel.visible === ($IND._blockedUntil > new Date())")"
+}
+
 assert_state() {
     assert_rows_filled "$1"
     assert_no_placeholders "$1"
     assert_block_count "$1"
     assert_panel_matches "$1"
+    assert_rate_limit_note "$1"
 }
 
 assert_theme_differs() {
@@ -145,6 +151,7 @@ assert_rows_filled_probe() { assert_rows_filled control; }
 assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
 assert_panel_matches_probe() { assert_panel_matches control; }
+assert_rate_limit_note_probe() { assert_rate_limit_note control; }
 
 prove_state() {
     render_state normal
@@ -164,6 +171,10 @@ prove_state() {
         "shell_eval \"$IND._panelQuotas.get_children().find(c => c.text)?.set_text('S 0%'); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_panel_matches_probe
+    prove 'retry note tracks the block' \
+        "shell_eval \"$IND._rateLimitLabel.text = 'retry at 9:00'; $IND._rateLimitLabel.show(); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
+        assert_rate_limit_note_probe
 }
 
 subset_kind() {

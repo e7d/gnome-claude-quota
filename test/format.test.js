@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {WINDOW_LENGTH_MS, absoluteTime, captionLine, percentLine, refreshLine, relativeDuration, timeLocale, windowProgress} from '../lib/format.js';
+import {WINDOW_LENGTH_MS, absoluteTime, captionLine, percentLine, rateLimitLine, refreshLine, relativeDuration, timeLocale, windowProgress} from '../lib/format.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
 
@@ -126,6 +126,18 @@ test('refreshLine names the time of the last fetch', () => {
 
 test('refreshLine still reports before any fetch has landed', () => {
     assert.equal(refreshLine(null, now, 'en-GB'), 'Last refresh: -');
+});
+
+test('rateLimitLine names the time polling resumes', () => {
+    assert.equal(rateLimitLine(new Date('2026-08-04T08:36:31Z'), now, 'en-GB'), 'retry at 8:37');
+});
+
+test('rateLimitLine carries the weekday when the retry falls on another day', () => {
+    assert.equal(rateLimitLine(new Date('2026-08-05T06:00:00Z'), now, 'en-GB'), 'retry Wed 06:00');
+});
+
+test('rateLimitLine says nothing when nothing is holding the poll back', () => {
+    assert.equal(rateLimitLine(null, now, 'en-GB'), '');
 });
 
 test('windowProgress measures elapsed time in the session window', () => {
