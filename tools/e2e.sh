@@ -17,7 +17,7 @@ DEVKIT_HEADLESS=1
 ALL_GROUPS=(state hover refresh lifecycle)
 RUN_GROUPS=("${ALL_GROUPS[@]}")
 THEMES=(dark light)
-SHOOT=(normal warning critical model-scoped error service-major over-pace rate-limited no-data)
+SHOOT=(normal warning critical model-scoped error service-major over-pace rate-limited rate-limited-day no-data)
 PICKED_GROUPS=()
 ATTEMPTS_LOG=''
 
@@ -123,8 +123,11 @@ assert_panel_matches() {
 }
 
 assert_rate_limit_note() {
-    assert_eq "$1 retry note tracks the block" 'true' \
-        "$(probe "$IND._rateLimitLabel.visible === /^retry /.test($IND._rateLimitLabel.text) && $IND._rateLimitLabel.visible === ($IND._blockedUntil > new Date())")"
+    assert_eq "$1 header always states the last refresh" 'true' \
+        "$(probe "$IND._refreshLabel.text.startsWith('Last refresh')")"
+    assert_eq "$1 the rate-limit row tracks the block" 'true' \
+        "$(probe "(/Rate limited/.test($IND._messageLabel.text) && $IND._message.visible)
+            === ($IND._blockedUntil > new Date())")"
 }
 
 assert_state() {
@@ -172,8 +175,8 @@ prove_state() {
         "shell_eval \"$IND._panelQuotas.get_children().find(c => c.text)?.set_text('S 0%'); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_panel_matches_probe
-    prove 'retry note tracks the block' \
-        "shell_eval \"$IND._rateLimitLabel.text = 'retry at 9:00'; $IND._rateLimitLabel.show(); 'ok'\" >/dev/null" \
+    prove 'the rate-limit row tracks the block' \
+        "shell_eval \"$IND._messageLabel.text = '⏳ Rate limited · retry at 9:00'; $IND._message.show(); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_rate_limit_note_probe
 }

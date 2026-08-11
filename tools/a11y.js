@@ -1,12 +1,13 @@
 import {execFileSync} from 'node:child_process';
-import {readdirSync} from 'node:fs';
+import {readFileSync, readdirSync} from 'node:fs';
 import {basename, dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {scanImage, toHex} from './contrast.js';
+import {scanImage, tickFindings, toHex} from './contrast.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SHOTS = join(ROOT, 'preview');
+const STYLESHEET = join(ROOT, 'stylesheet.css');
 
 function readImage(path) {
     const size = execFileSync('magick', ['identify', '-format', '%w %h\n', path], {encoding: 'utf8'});
@@ -62,11 +63,23 @@ function report(path) {
     return failed.length;
 }
 
+function reportTick() {
+    const findings = tickFindings(readFileSync(STYLESHEET, 'utf8'));
+    const failed = findings.filter(finding => finding.ratio < finding.threshold.ratio);
+    console.log(`pace tick: ${findings.length} pair(s) measured, ${failed.length} under threshold`);
+    for (const finding of findings) {
+        console.log(`  ${finding.label}: ${finding.ratio.toFixed(2)}:1`
+            + ` (${finding.threshold.ratio}:1 ${finding.threshold.label})`
+            + `  ${toHex(finding.ink)} on ${toHex(finding.background)}`);
+    }
+    return failed.length;
+}
+
 function main(args) {
     const files = targets(args);
     if (!files.length)
         throw new Error(`no screenshots in ${SHOTS}; run npm run preview first`);
-    const failed = files.reduce((total, path) => total + report(path), 0);
+    const failed = files.reduce((total, path) => total + report(path), 0) + reportTick();
     console.log(`${files.length} file(s), ${failed} finding(s) under threshold`);
     return failed ? 1 : 0;
 }

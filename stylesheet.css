@@ -18,12 +18,17 @@
 }
 
 .cq-refresh {
-    padding: 2px;
+    padding: 6px;
     border-radius: 99px;
+    background-color: rgba(127, 127, 127, 0.15);
 }
 
 .cq-refresh:hover {
-    background-color: rgba(127, 127, 127, 0.25);
+    background-color: rgba(127, 127, 127, 0.3);
+}
+
+.cq-refresh:active {
+    background-color: rgba(127, 127, 127, 0.45);
 }
 
 .cq-block {
@@ -50,30 +55,21 @@
 }
 
 .cq-bar {
+    height: 12px;
     -barlevel-height: 6px;
-    -barlevel-overdrive-separator-width: 2px;
+    -cq-tick-width: 2px;
 }
 
 .cq-bar-dark {
     color: #ffffff;
     -barlevel-background-color: rgba(255, 255, 255, 0.1);
     -barlevel-active-background-color: #d97757;
-    -barlevel-overdrive-color: #d97757;
 }
 
 .cq-bar-light {
     color: #000000;
     -barlevel-background-color: rgba(34, 34, 38, 0.1);
     -barlevel-active-background-color: #c6613f;
-    -barlevel-overdrive-color: #c6613f;
-}
-
-.cq-bar-ahead-dark {
-    -barlevel-overdrive-color: #ff7b63;
-}
-
-.cq-bar-ahead-light {
-    -barlevel-overdrive-color: #c01c28;
 }
 
 .cq-caption {

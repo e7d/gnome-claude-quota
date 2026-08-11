@@ -110,9 +110,20 @@ The service-status line is the only activatable row; everything else comes from 
 
 - **`PopupMenuItem.activate()` closes the menu it belongs to**, which would hide the numbers a refresh was asked to update — hence the refresh affordance being an `St.Button` in the header rather than a row. The status line keeps the inherited behaviour, because leaving for a browser *should* close the menu.
 - **A client-side failure and a service issue share one line but not one nature.** An expired token or an unreachable host renders into the non-reactive `_message`; only a `serviceIssue` renders into the activatable row, so nothing offers a status page that cannot explain the failure.
-- **The header timestamp carries the refresh button's disabled reason.** A popup menu has no tooltip surface, so `Last refresh: <time>` beside a greyed button is the only explanation the user gets for why pressing it does nothing.
+- **The header line states one fact and never shares its row: `Last refresh: <time>`, always.** Two absolute times on that row, each able to grow a weekday once it falls on another day, overflow the card in the locales that spell the weekday out — measured at 262px inside 256px of usable width. Stacking them was worse: six lines of grey metadata above the numbers the popup exists to show.
+- **A `429` therefore speaks in the message row, under the quotas, in words.** `⏳ Rate limited · retry at <time>` is the only explanation for the greyed button, and it sits where errors and service issues already speak rather than competing with the timestamp. The `rate-limited-day` scenario dates both timestamps a day out, which is the widest either line can get.
 - **The manual path reuses `shouldFetchOnOpen` rather than a second constant.** Manual and open-triggered fetches spend the same shared allowance, so one rule governs both.
 - **Nothing re-renders while the popup sits open**, so `Up to date` and `Refresh at <time>` are re-evaluated on the next open or the next poll, not on a ticker. Both windows are ≤2 minutes, which is why that is acceptable — worth knowing before adding a state where the staleness matters more.
+
+## The pace bar
+
+`BarLevel` carries its own pace marker, and it is the wrong one: `overdriveStart` makes it **carve a gap** out of the bar at a fractional x and paint the two halves around it, so a second mark drawn on top lands beside a half-pixel edge and reads as one smeared tick. `overdriveStart` is consequently left at its maximum, which keeps the shipped bar unbroken, and `PaceBar.setPace()` owns the marker alone.
+
+- **The tick is drawn on integer pixels.** A 2px rect at a fractional x antialiases across three columns, which is what "the tick looks 3px wide" means every time.
+- **The bar is deliberately shorter than its actor**: 6px of bar inside 12px of `.cq-bar`, so the tick can stand 2px proud above and below it (`TICK_OVERHANG`). Painted inside a 6px actor it can only ever be flush, and a flush tick disappears into the fill it is meant to mark.
+- **The excess past the tick keeps the brand orange.** It used to turn salmon (dark) or crimson (light), which read as a different measurement rather than as the same bar continuing. Geometry carries the verdict now: fill past the tick is over pace, and `-barlevel-overdrive-color` is gone with the classes that set it.
+- **The tick colour is plain white on dark, plain black on light**, and `tools/a11y.js` measures all four pairs — tick against fill and against track, per scheme — at the 3:1 WCAG threshold for a non-text mark. `tickFindings()` in `tools/contrast.js` reads the declared colours and blends the translucent track over the popup surface, because the pixel scan cannot reach a 2px mark inside a region. Worst pair is white on `#d97757` at **3.12:1**: it passes, with little room, so darkening the fill or the tick is the lever if that ever has to move.
+- **The popup surfaces those blends sit on are the shipped theme's**, sampled once rather than declared: `magick preview/dark-normal.png -crop 1x1+24+236 -format '%[pixel:p{0,0}]' info:` gave `#36363a` dark and `#fafafb` light. Re-sample them if a GNOME release repaints its menus.
 
 ## The status page
 

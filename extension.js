@@ -13,7 +13,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
-import {captionLine, percentLine, rateLimitLine, refreshLine, timeLocale} from './lib/format.js';
+import {captionLine, percentLine, rateLimitMessage, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
 import {blockedUntil, isBlocked, markExpired, nextPollSeconds, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
@@ -24,6 +24,7 @@ const SEPARATOR_OPACITY = 120;
 const UNKNOWN_SERVICE = 'unknown';
 const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
+const TICK_OVERHANG = 2;
 
 // The insensitive pseudo-class the shipped theme paints at 50% alpha is what a
 // non-reactive item gets, and every child label inherits it.
@@ -54,29 +55,36 @@ function quotaClass(base, quota, scheme) {
     return severityClass(base, quota.expired ? 'normal' : quota.severity, scheme);
 }
 
-function barClass(quota, scheme) {
-    const ahead = quota.aheadOfPace && !quota.expired;
-    return `cq-bar cq-bar-${scheme}${ahead ? ` cq-bar-ahead-${scheme}` : ''}`;
+function barClass(scheme) {
+    return `cq-bar cq-bar-${scheme}`;
 }
 
 const PaceBar = GObject.registerClass(
 class PaceBar extends BarLevel {
+    setPace(ratio) {
+        if (this._pace === ratio)
+            return;
+        this._pace = ratio;
+        this.queue_repaint();
+    }
+
     vfunc_repaint() {
         super.vfunc_repaint();
-        if (this.overdriveStart >= this.maximumValue)
+        if (this._pace === null || this._pace === undefined)
             return;
         const themeNode = this.get_theme_node();
         const [width, height] = this.get_surface_size();
         const barHeight = themeNode.get_length('-barlevel-height');
-        const tickWidth = themeNode.get_length('-barlevel-overdrive-separator-width');
+        const tickWidth = themeNode.get_length('-cq-tick-width');
         const radius = Math.min(width, barHeight) / 2;
-        let ratio = this.overdriveStart / this.maximumValue;
-        if (this.get_text_direction() === Clutter.TextDirection.RTL)
-            ratio = 1 - ratio;
+        const ratio = this.get_text_direction() === Clutter.TextDirection.RTL
+            ? 1 - this._pace
+            : this._pace;
+        const top = Math.round((height - barHeight) / 2 - TICK_OVERHANG);
         const cr = this.get_context();
         cr.rectangle(
-            radius + (width - 2 * radius) * ratio - tickWidth / 2,
-            (height - barHeight) / 2, tickWidth, barHeight);
+            Math.round(radius + (width - 2 * radius) * ratio - tickWidth / 2),
+            Math.max(0, top), tickWidth, barHeight + 2 * TICK_OVERHANG);
         cr.setSourceColor(themeNode.get_foreground_color());
         cr.fill();
         cr.$dispose();
@@ -110,8 +118,8 @@ class QuotaBlock extends St.BoxLayout {
         this._percent.text = percentLine(quota);
         this._percent.style_class = quotaClass('cq-percent', quota, scheme);
         this._bar.value = quota.expired ? 0 : quota.percent / 100;
-        this._bar.overdriveStart = quota.expired ? 1 : (quota.windowProgress ?? 1);
-        this._bar.style_class = barClass(quota, scheme);
+        this._bar.setPace(quota.expired ? null : quota.windowProgress);
+        this._bar.style_class = barClass(scheme);
         this._caption.text = captionLine(quota, now, locale);
     }
 });
@@ -154,6 +162,7 @@ class Indicator extends PanelMenu.Button {
             opacity: CAPTION_OPACITY,
             x_expand: true,
         });
+        this._refreshLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._refreshButton = new St.Button({
             style_class: 'cq-refresh',
             child: new St.Icon({
@@ -164,12 +173,7 @@ class Indicator extends PanelMenu.Button {
             can_focus: true,
         });
         this._refreshButton.connect('clicked', () => this._refresh('manual'));
-        this._rateLimitLabel = new St.Label({
-            y_align: Clutter.ActorAlign.CENTER,
-            opacity: CAPTION_OPACITY,
-        });
         this._metaBox.add_child(this._refreshLabel);
-        this._metaBox.add_child(this._rateLimitLabel);
         this._metaBox.add_child(this._refreshButton);
         this._message = displayItem();
         this._messageBox = new St.BoxLayout({
@@ -413,17 +417,16 @@ class Indicator extends PanelMenu.Button {
         const silenced = isBlocked(this._blockedUntil, now);
         const issue = silenced ? null : serviceIssue(this._serviceStatus);
         const error = silenced || issue || this._error === null ? '' : this._error;
+        const throttled = rateLimitMessage(this._blockedUntil, now, this._locale);
         const loading = issue === null && error === '' && !hasQuotas && !silenced;
-        const message = loading ? 'Loading…' : error;
+        const message = loading ? 'Loading…' : throttled || error;
         this._refreshLabel.text = refreshLine(this._fetchedAt, now, this._locale);
-        this._rateLimitLabel.text = silenced ? rateLimitLine(this._blockedUntil, now, this._locale) : '';
-        this._rateLimitLabel.visible = this._rateLimitLabel.text !== '';
         this._issueItem.visible = issue !== null;
         if (issue)
             this._issueItem.label.text = `${issue.emoji} ${issue.text}`;
         this._messageLabel.text = message;
         this._message.visible = message !== '';
-        this._messageSeparator.visible = (issue !== null || error !== '') && hasQuotas;
+        this._messageSeparator.visible = (issue !== null || error !== '' || throttled !== '') && hasQuotas;
         this._body.visible = !loading;
     }
 

@@ -166,9 +166,9 @@ npm run e2e -- --group=hover                   # one group
 npm run e2e -- --group=state --dark-only --scenario=normal
 ```
 
-A full run asserts 23 scenarios in both themes and costs about two minutes. It takes `preview`'s flags — `--windowed` / `--headless`, `--dark-only` / `--light-only`, `--scenario=` — plus `--group=<name>` to run one of `state`, `hover`, `refresh` and `lifecycle`.
+A full run asserts 24 scenarios in both themes and costs about two minutes. It takes `preview`'s flags — `--windowed` / `--headless`, `--dark-only` / `--light-only`, `--scenario=` — plus `--group=<name>` to run one of `state`, `hover`, `refresh` and `lifecycle`.
 
-The state group also photographs nine of those scenarios in both themes, so a full `npm run e2e` leaves `preview/` holding the 18 shots `npm run a11y` scores, plus the contact sheet. That is what CI runs. Reach for `npm run preview` when you want the whole matrix on screen — 23 scenarios in both themes, 46 shots — rather than the subset colour is measured from.
+The state group also photographs ten of those scenarios in both themes, so a full `npm run e2e` leaves `preview/` holding the 20 shots `npm run a11y` scores, plus the contact sheet. That is what CI runs. Reach for `npm run preview` when you want the whole matrix on screen — 24 scenarios in both themes, 48 shots — rather than the subset colour is measured from.
 
 The three scripts share `tools/devkit.sh`, which owns the session lifecycle — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. `tools/indicator.sh` drives the extension into a state and `tools/capture.sh` turns that state into a PNG, so `preview.sh` and `e2e.sh` are drivers over one shared layer and a fix to any of it lands in one place.
 
@@ -180,6 +180,8 @@ npm run a11y -- preview/dark-full.png  # or named files
 ```
 
 It wants `magick` and `node`, prints the pairs it measured per file and a total, and exits `1` while anything is under threshold — `2` if a file cannot be read — so it can gate CI.
+
+It also measures the pace tick, which no screenshot can settle: a 2px mark inside a bar is a region by the scanner's own rules, so its four pairs come from the declared colours instead — the tick against the bar's fill and against its track, in both schemes, at the 3:1 WCAG threshold for a non-text mark. Those four print with the rest and count towards the same exit code.
 
 `npm run attribution` answers a different question: when the usage endpoint starts refusing with `429`, what is spending the allowance. Every upstream attempt the extension makes appends one line to `~/.cache/claude-quota/attempts.jsonl` — the instant, what triggered it, the outcome, the status, the `retry-after` and any `anthropic-ratelimit-*` headers, and never a token or a body. The tool joins that against Claude Code's own session starts, taken from transcript birth times and metadata only, and prints both per hour with a verdict:
 
@@ -208,7 +210,7 @@ The screenshots need a whole GNOME session, so every step runs inside an image b
 
 Two of the waived pill greys exist only for CI. A shell running in a container paints the top bar transparent as soon as a pointer device exists, where the same GNOME on a workstation paints it opaque black — so CI shoots GNOME's pill over the desktop rather than over the panel, and lands on `#5e5e61` / `#46464a` instead of `#2b2b2b` / `#474747`. Everything else in the shots is byte-identical between the two, ink colours included. The cause sits inside GNOME's own panel styling; version, renderer, wallpaper, dconf, animation timing, colour scheme and session mode were each measured and excluded.
 
-The e2e step asserts all 23 scenarios in both themes and photographs nine of them: `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major`, `over-pace`, `rate-limited` and `no-data`. Between them they render every colour `a11y` can measure — each severity, the pace verdict, the status button, the error surface and the empty-state text. The scenarios left out differ in text rather than in colour, and photographing all 46 would cost minutes per run to say the same thing.
+The e2e step asserts all 24 scenarios in both themes and photographs ten of them: `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major`, `over-pace`, `rate-limited`, `rate-limited-day` and `no-data`. Between them they render every colour `a11y` can measure — each severity, the pace verdict, the status button, the error surface and the empty-state text. The scenarios left out differ in text rather than in colour, and photographing all 48 would cost minutes per run to say the same thing.
 
 It replaced a step that shot six of those scenarios and asserted nothing: the screenshots are never uploaded, so all a preview run could prove was that six states rendered without throwing. An assertion is a property read back over `Eval` and costs a fraction of a screenshot, so the same shell boot now checks every state and every interaction, and still produces the shots the contrast scan scores.
 

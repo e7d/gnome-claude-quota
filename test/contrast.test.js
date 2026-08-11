@@ -3,7 +3,7 @@ import {test} from 'node:test';
 
 import {
     blendFraction, chroma, clusterColors, colorDistance, contrastRatio, isBlend, isTextLike,
-    LARGE_TEXT, measureMark, NORMAL_TEXT, scanImage, textThreshold, toHex,
+    LARGE_TEXT, measureMark, NORMAL_TEXT, scanImage, textThreshold, tickFindings, toHex,
 } from '../tools/contrast.js';
 
 const WHITE = {red: 255, green: 255, blue: 255};
@@ -155,4 +155,45 @@ test('scanImage treats a solid block as a region rather than ink', () => {
 
 test('scanImage leaves an image with nothing on it alone', () => {
     assert.deepEqual(scanImage(canvas(64, 64, WHITE)).findings, []);
+});
+
+const STYLESHEET = `
+.cq-bar-dark {
+    color: #ffffff;
+    -barlevel-background-color: rgba(255, 255, 255, 0.1);
+    -barlevel-active-background-color: #d97757;
+}
+
+.cq-bar-light {
+    color: #000000;
+    -barlevel-background-color: rgba(34, 34, 38, 0.1);
+    -barlevel-active-background-color: #c6613f;
+}
+`;
+
+test('tickFindings reads the tick colour past the property names that end in colour', () => {
+    assert.equal(toHex(tickFindings(STYLESHEET)[0].ink), '#ffffff');
+    assert.equal(toHex(tickFindings(STYLESHEET)[3].ink), '#000000');
+});
+
+test('tickFindings measures the tick against both surfaces in both schemes', () => {
+    const findings = tickFindings(STYLESHEET);
+    assert.deepEqual(findings.map(f => f.label),
+        ['dark tick on track', 'dark tick on fill', 'light tick on track', 'light tick on fill']);
+    assert.equal(findings.every(f => f.ratio >= f.threshold.ratio), true);
+});
+
+test('tickFindings blends the translucent track over the popup surface', () => {
+    const [track] = tickFindings(STYLESHEET);
+    assert.equal(toHex(track.background), '#4a4a4e');
+});
+
+test('tickFindings reports a tick that cannot be seen on the surface it sits on', () => {
+    const inverted = tickFindings(STYLESHEET.replace('.cq-bar-light {\n    color: #000000;', '.cq-bar-light {\n    color: #ffffff;'));
+    const under = inverted.filter(f => f.ratio < f.threshold.ratio);
+    assert.deepEqual(under.map(f => f.label), ['light tick on track']);
+});
+
+test('tickFindings refuses a stylesheet missing a colour rather than scoring three', () => {
+    assert.throws(() => tickFindings(STYLESHEET.replace('color: #000000;', '')), /declares no color/);
 });

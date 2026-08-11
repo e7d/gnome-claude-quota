@@ -20,6 +20,9 @@ const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 export const NORMAL_TEXT = {label: 'normal text', ratio: 4.5};
 export const LARGE_TEXT = {label: 'large text', ratio: 3};
+export const NON_TEXT = {label: 'non-text', ratio: 3};
+
+const POPUP_SURFACE = {dark: '#36363a', light: '#fafafb'};
 
 export function contrastRatio(one, other) {
     const [bright, dim] = [relativeLuminance(one), relativeLuminance(other)].toSorted((a, b) => b - a);
@@ -354,6 +357,50 @@ function withoutBlends(findings) {
         && colorDistance(other.background, finding.background) <= GROUP_TOLERANCE
         && colorDistance(other.ink, finding.background) > colorDistance(finding.ink, finding.background)
         && isBlend(finding.ink, finding.background, other.ink)));
+}
+
+function declaredColor(cssText, scheme, property) {
+    const block = new RegExp(`\\.cq-bar-${scheme}\\s*\\{([^}]*)\\}`).exec(cssText)?.[1];
+    if (block === undefined)
+        throw new Error(`stylesheet has no .cq-bar-${scheme} rule`);
+    const value = new RegExp(`(?:^|[;{\\s])${property}\\s*:\\s*([^;]+);`).exec(block)?.[1]?.trim();
+    if (value === undefined)
+        throw new Error(`.cq-bar-${scheme} declares no ${property}`);
+    return parseColor(value);
+}
+
+function parseColor(value) {
+    const rgba = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)/.exec(value);
+    if (rgba) {
+        const [red, green, blue] = rgba.slice(1, 4).map(Number);
+        return {red, green, blue, alpha: rgba[4] === undefined ? 1 : Number(rgba[4])};
+    }
+    const hex = /^#([0-9a-f]{6})$/i.exec(value);
+    if (!hex)
+        throw new Error(`cannot read the colour '${value}'`);
+    const channels = [0, 2, 4].map(index => parseInt(hex[1].slice(index, index + 2), 16));
+    return {red: channels[0], green: channels[1], blue: channels[2], alpha: 1};
+}
+
+function over(color, surface) {
+    return mix(surface, color, color.alpha ?? 1);
+}
+
+export function tickFindings(cssText) {
+    return ['dark', 'light'].flatMap(scheme => {
+        const ink = declaredColor(cssText, scheme, 'color');
+        const surface = parseColor(POPUP_SURFACE[scheme]);
+        return [
+            {place: 'track', background: over(declaredColor(cssText, scheme, '-barlevel-background-color'), surface)},
+            {place: 'fill', background: declaredColor(cssText, scheme, '-barlevel-active-background-color')},
+        ].map(({place, background}) => ({
+            label: `${scheme} tick on ${place}`,
+            ink,
+            background,
+            ratio: contrastRatio(ink, background),
+            threshold: NON_TEXT,
+        }));
+    });
 }
 
 export function scanImage(image) {
