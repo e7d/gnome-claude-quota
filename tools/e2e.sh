@@ -175,8 +175,8 @@ prove_state() {
         "shell_eval \"$IND._panelQuotas.get_children().find(c => c.text)?.set_text('S 0%'); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_panel_matches_probe
-    prove 'the rate-limit row tracks the block' \
-        "shell_eval \"$IND._messageLabel.text = '⏳ Rate limited · retry at 9:00'; $IND._message.show(); 'ok'\" >/dev/null" \
+    prove 'header states the retry time while blocked, the last refresh otherwise' \
+        "shell_eval \"$IND._refreshLabel.text = 'retry at 9:00'; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_rate_limit_note_probe
 }
