@@ -75,7 +75,8 @@ main() {
         set_theme "$theme"
         echo "$theme:"
         for scenario in "${SCENARIOS[@]}"; do
-            capture "$theme-$scenario" "$scenario"
+            render_state "$scenario"
+            capture "$theme-$scenario"
         done
     done
     normalize
