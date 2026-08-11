@@ -2,8 +2,8 @@
 set -euo pipefail
 
 DEVKIT_NAME='a11y'
-# shellcheck source=tools/devkit.sh
-. "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
+# shellcheck source=tools/lib/devkit.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/devkit.sh"
 
 main() {
     require_commands magick node

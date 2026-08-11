@@ -1,4 +1,4 @@
-import {relativeLuminance} from '../lib/theme.js';
+import {relativeLuminance} from '../../lib/theme.js';
 
 const WINDOW = 16;
 const STEP = 8;

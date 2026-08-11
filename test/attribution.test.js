@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {DEFAULT_WINDOW_MINUTES, hourlyRows, verdict} from '../tools/attribution.js';
+import {DEFAULT_WINDOW_MINUTES, hourlyRows, verdict} from '../tools/lib/attribution.js';
 
 function attempt(ts, overrides = {}) {
     return {ts, trigger: 'timer', outcome: 'ok', status: 200, retryAfter: null, rateLimitHeaders: {}, ...overrides};

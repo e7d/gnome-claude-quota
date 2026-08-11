@@ -3,7 +3,7 @@ import {homedir} from 'node:os';
 import {join} from 'node:path';
 
 import {parseLog} from '../lib/attempts.js';
-import {CLUSTER_FRACTION, DEFAULT_WINDOW_MINUTES, SPREAD_FRACTION, hourlyRows, verdict} from './attribution.js';
+import {CLUSTER_FRACTION, DEFAULT_WINDOW_MINUTES, SPREAD_FRACTION, hourlyRows, verdict} from './lib/attribution.js';
 
 const ATTEMPTS = join(homedir(), '.cache', 'claude-quota', 'attempts.jsonl');
 const TRANSCRIPTS = join(homedir(), '.claude', 'projects');

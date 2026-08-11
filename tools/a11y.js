@@ -3,7 +3,7 @@ import {readFileSync, readdirSync} from 'node:fs';
 import {basename, dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {scanImage, tickFindings, toHex} from './contrast.js';
+import {scanImage, tickFindings, toHex} from './lib/contrast.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SHOTS = join(ROOT, 'preview');

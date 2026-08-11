@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-const LIB = fileURLToPath(new URL('../tools/assert.sh', import.meta.url));
+const LIB = fileURLToPath(new URL('../tools/lib/assert.sh', import.meta.url));
 
 function run(script) {
     try {

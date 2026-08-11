@@ -4,7 +4,7 @@ import {test} from 'node:test';
 import {
     blendFraction, chroma, clusterColors, colorDistance, contrastRatio, isBlend, isTextLike,
     LARGE_TEXT, measureMark, NORMAL_TEXT, scanImage, textThreshold, tickFindings, toHex,
-} from '../tools/contrast.js';
+} from '../tools/lib/contrast.js';
 
 const WHITE = {red: 255, green: 255, blue: 255};
 const BLACK = {red: 0, green: 0, blue: 0};

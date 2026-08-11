@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 
 UUID='claude-quota@e7d.io'
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLED="$HOME/.local/share/gnome-shell/extensions/$UUID"
 RUN="$(mktemp -d)"
 CFG="$RUN/config"

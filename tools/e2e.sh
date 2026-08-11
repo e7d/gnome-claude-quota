@@ -4,14 +4,14 @@ set -euo pipefail
 DEVKIT_NAME='e2e'
 DEVKIT_SETUP='gsettings set org.gnome.desktop.interface font-name "Cantarell 11"'
 DEVKIT_HEADLESS=1
-# shellcheck source=tools/devkit.sh
-. "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
-# shellcheck source=tools/indicator.sh
-. "$(dirname "${BASH_SOURCE[0]}")/indicator.sh"
-# shellcheck source=tools/capture.sh
-. "$(dirname "${BASH_SOURCE[0]}")/capture.sh"
-# shellcheck source=tools/assert.sh
-. "$(dirname "${BASH_SOURCE[0]}")/assert.sh"
+# shellcheck source=tools/lib/devkit.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/devkit.sh"
+# shellcheck source=tools/lib/indicator.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/indicator.sh"
+# shellcheck source=tools/lib/capture.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/capture.sh"
+# shellcheck source=tools/lib/assert.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/assert.sh"
 
 # GROUPS is a bash built-in holding the user's gids, and assignments to it are ignored.
 ALL_GROUPS=(state hover refresh lifecycle)

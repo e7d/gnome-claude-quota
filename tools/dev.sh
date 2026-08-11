@@ -3,8 +3,8 @@ set -euo pipefail
 
 DEVKIT_NAME='dev'
 DEVKIT_HEADLESS=0
-# shellcheck source=tools/devkit.sh
-. "$(dirname "${BASH_SOURCE[0]}")/devkit.sh"
+# shellcheck source=tools/lib/devkit.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/devkit.sh"
 
 WATCH=0
 SCHEME=''
