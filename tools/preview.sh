@@ -8,6 +8,8 @@ DEVKIT_HEADLESS=0
 . "$(dirname "${BASH_SOURCE[0]}")/lib/devkit.sh"
 # shellcheck source=tools/lib/indicator.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/indicator.sh"
+# shellcheck source=tools/lib/capture.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/capture.sh"
 
 SESSION='preview'
 WANT_THEME=''
@@ -16,6 +18,7 @@ WANT_POPUP=''
 WANT_BACKEND=''
 DETACH=0
 STOP=0
+CAPTURE=0
 
 usage() {
     cat <<USAGE
@@ -34,6 +37,7 @@ Options:
   --close            Leave the popup closed and the pointer away (default)
   --hover            Leave the pointer on the panel button
   --open             Leave the popup open
+  --capture          Shoot preview/<theme>-<scenario>.png of the shape applied
   --detach           Start the session and return instead of blocking
   --stop             Tear the session down
   -h, --help         Show this message
@@ -58,6 +62,7 @@ for arg in "$@"; do
         --scenario=*) WANT_DATA="${arg#*=}"; PICKED=("${arg#*=}") ;;
         --live) WANT_DATA=live ;;
         --close|--hover|--open) WANT_POPUP="${arg#--}" ;;
+        --capture) CAPTURE=1 ;;
         --detach) DETACH=1 ;;
         --stop) STOP=1 ;;
         -h|--help) usage; exit 0 ;;
@@ -94,13 +99,22 @@ apply_popup() {
     state_set popup "$WANT_POPUP"
 }
 
-# render_state leaves the menu open, so touching data moves the popup dimension too;
-# re-asserting the recorded popup is what keeps an omitted flag from changing anything.
+# render_state and capture both leave the menu open, so touching data or shooting a
+# tile moves the popup dimension too; re-asserting the recorded popup is what keeps
+# an omitted flag from changing anything.
 apply_shape() {
     apply_theme
     apply_data
-    [ -z "$WANT_DATA" ] || : "${WANT_POPUP:=$(state_get popup)}"
+    shoot_tile
+    { [ -z "$WANT_DATA" ] && [ "$CAPTURE" -ne 1 ]; } || : "${WANT_POPUP:=$(state_get popup)}"
     apply_popup
+}
+
+shoot_tile() {
+    [ "$CAPTURE" -eq 1 ] || return 0
+    require_commands magick
+    mkdir -p "$OUT"
+    capture "$(tile_name)"
 }
 
 fresh_defaults() {

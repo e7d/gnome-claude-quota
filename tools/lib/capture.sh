@@ -63,7 +63,7 @@ capture() {
     magick "$RUN/closed.png" "$RUN/hovered.png" "$RUN/open.png" \
         -background none -smush 8 "$OUT/$name.png"
     SHOTS+=("$OUT/$name.png")
-    echo "  $OUT/$name.png"
+    echo "$OUT/$name.png"
 }
 
 normalize() {
