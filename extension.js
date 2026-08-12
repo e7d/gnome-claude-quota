@@ -16,7 +16,7 @@ import {deserialize, serialize} from './lib/cache.js';
 import {captionLine, percentLine, rateLimitMessage, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
-import {blockedUntil, isBlocked, markExpired, nextPollSeconds, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
+import {isBlocked, markExpired, nextPollSeconds, rateLimitBlock, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
 import {StatusClient, UsageClient} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
@@ -140,6 +140,7 @@ class Indicator extends PanelMenu.Button {
         this._refreshing = false;
         this._fetchedAt = null;
         this._blockedUntil = null;
+        this._rateLimitStreak = 0;
         this._timerId = null;
         this._limits = [];
         this._locale = timeLocale({
@@ -395,18 +396,23 @@ class Indicator extends PanelMenu.Button {
             this._error = null;
             this._serviceStatus = null;
             this._blockedUntil = null;
+            this._rateLimitStreak = 0;
             this._fetchedAt = new Date();
             this._saveCache();
             this._scheduleNext(nextPollSeconds(null));
             return;
         }
-        this._blockedUntil = blockedUntil(result.retryAfter, new Date());
-        this._scheduleNext(nextPollSeconds(result.retryAfter));
         if (result.rateLimited) {
+            const block = rateLimitBlock(result.retryAfter, new Date(), this._rateLimitStreak);
+            this._rateLimitStreak += 1;
+            this._blockedUntil = block.until;
+            this._scheduleNext(nextPollSeconds(block.seconds));
             this._error = null;
             this._serviceStatus = null;
             return;
         }
+        this._blockedUntil = null;
+        this._scheduleNext(nextPollSeconds(result.retryAfter));
         this._error = result.error;
         // Named before status.claude.com has answered, so the line appears with the
         // first failed poll and is only ever refined, never introduced late.

@@ -4,9 +4,11 @@ import {test} from 'node:test';
 import {
     OPEN_REFRESH_SECONDS,
     POLL_SECONDS,
+    RATE_LIMIT_CAP_SECONDS,
+    RATE_LIMIT_FLOOR_SECONDS,
     SERVICE_ERROR,
-    blockedUntil,
     isBlocked,
+    rateLimitBlock,
     markExpired,
     nextPollSeconds,
     serviceIssue,
@@ -33,14 +35,33 @@ test('nextPollSeconds rounds a fractional retry-after up before adding the margi
     assert.equal(nextPollSeconds(400.2), 406);
 });
 
-test('blockedUntil returns null without a retry-after', () => {
-    assert.equal(blockedUntil(null, now), null);
-    assert.equal(blockedUntil(0, now), null);
+test('rateLimitBlock lands five seconds past a usable retry-after, rounded up', () => {
+    const {until, seconds} = rateLimitBlock(119, now, 0);
+    assert.equal(seconds, 124);
+    assert.equal(until.toISOString(), '2026-08-04T07:53:04.000Z');
 });
 
-test('blockedUntil lands five seconds past the retry-after, rounded up', () => {
-    const until = blockedUntil(119, now);
-    assert.equal(until.toISOString(), '2026-08-04T07:53:04.000Z');
+// The endpoint answers 429 with retry-after: 0 and no rate-limit headers, which
+// read as "no hint" and armed no block at all, so every popup open and timer tick
+// earned another refusal.
+test('rateLimitBlock still blocks when the server offers no usable retry-after', () => {
+    for (const hint of [null, undefined, 0, -1, Number.NaN]) {
+        const {seconds} = rateLimitBlock(hint, now, 0);
+        assert.equal(seconds, RATE_LIMIT_FLOOR_SECONDS, `hint ${hint}`);
+    }
+});
+
+test('rateLimitBlock doubles the floor for each consecutive refusal', () => {
+    assert.equal(rateLimitBlock(0, now, 1).seconds, RATE_LIMIT_FLOOR_SECONDS * 2);
+    assert.equal(rateLimitBlock(0, now, 2).seconds, RATE_LIMIT_FLOOR_SECONDS * 4);
+});
+
+test('rateLimitBlock caps the exponential growth', () => {
+    assert.equal(rateLimitBlock(0, now, 99).seconds, RATE_LIMIT_CAP_SECONDS);
+});
+
+test('rateLimitBlock honours a retry-after longer than the cap', () => {
+    assert.equal(rateLimitBlock(3600, now, 0).seconds, 3605);
 });
 
 test('isBlocked is true strictly before the blocked-until time', () => {
