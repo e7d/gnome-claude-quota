@@ -1171,7 +1171,7 @@ Expected: `5` — one line per control in `prove_state`. A `control …` line on
 - [ ] **Step 10: Run the whole suite**
 
 Run: `npm run e2e`
-Expected: every group passes, `N passed, 0 failed`, and `preview/` holds 46 tiles plus `overview.png`. Then `npm run a11y` exits 0.
+Expected: every group passes, `N passed, 0 failed`, and `preview/` holds 48 tiles plus `overview.png`. Then `npm run a11y` exits 0.
 
 - [ ] **Step 11: Confirm the host session is untouched, run shellcheck, commit**
 
@@ -1300,7 +1300,7 @@ showing it, which is the form to reach for when nobody is watching.
     npm run e2e -- --group=state --dark-only --scenario=loading
 ```
 
-and in the e2e paragraph, note that a bare `npm run e2e` now shoots all 46 tiles and costs minutes, `--a11y` shoots the scored ten, `--assert` shoots none.
+and in the e2e paragraph, note that a bare `npm run e2e` now shoots all 48 tiles and costs minutes, `--a11y` shoots the scored ten, `--assert` shoots none.
 
 - [ ] **Step 4: Fix the `AGENTS.md` bite-you note about editing a running script**
 
@@ -1352,7 +1352,7 @@ change it, and every screenshot now comes out of the assertion suite."
 
 - [ ] `npm test` — every unit test passes, including the new `test/devkit.test.js`.
 - [ ] `shellcheck tools/*.sh tools/lib/*.sh` — silent.
-- [ ] `npm run e2e` — all four groups pass, 46 tiles plus `overview.png` in `preview/`.
+- [ ] `npm run e2e` — all four groups pass, 48 tiles plus `overview.png` in `preview/`.
 - [ ] `npm run a11y` — exits 0.
 - [ ] `npm run preview -- --windowed --scenario=full`, recalled from a second terminal with `--light`, `--open` and `--scenario=error`, changes the window each time without restarting it; `--stop` closes it and empties the registry.
 - [ ] `sha256sum ~/.config/dconf/user` and `gsettings get org.gnome.shell enabled-extensions | wc -c` match the values recorded before Task 1.
