@@ -41,7 +41,7 @@ A bare `npm run e2e` now shoots every scenario in both themes by default — 24 
 
 `npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last capture or full e2e run — the e2e state group shoots the ten scenarios it scores, and a narrowed run leaves the rest as they were. It exits non-zero on a finding.
 
-`npm run dev` and `npm run dev:watch` run a throwaway nested shell for interactive work. Prefer a preview subset when you only need to see a result; a nested session is for behaviour you have to drive.
+`npm run dev` and `npm run dev:watch` run a throwaway nested shell for interactive work. Reach for a headless `--capture` when you only need to see a result; a windowed session is for behaviour a human has to drive, and `--watch` refuses to attach to a session someone else already owns.
 
 `README.md` § Development is the user-facing reference for all of these and their flags. Update it in the same change when you alter a flag or add a script.
 

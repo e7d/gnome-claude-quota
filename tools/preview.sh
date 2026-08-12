@@ -128,10 +128,10 @@ fresh_defaults() {
 }
 
 start() {
-    require_install
-    reap_session
     fresh_defaults
     [ "$WANT_BACKEND" = 'headless' ] && DEVKIT_HEADLESS=1
+    require_install
+    reap_session
     isolate_dconf
     [ "$DETACH" -eq 1 ] || own_session
     start_shell
@@ -193,6 +193,8 @@ main() {
             echo "preview: $WANT_BACKEND needs a new shell, restarting session '$SESSION'"
             replay_backend
         else
+            [ "$WATCH" -eq 0 ] ||
+                die "--watch needs a session of its own; --session=$SESSION is already running, --stop it first"
             apply_shape
             exit 0
         fi

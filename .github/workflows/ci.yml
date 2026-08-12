@@ -42,13 +42,13 @@ jobs:
           docker exec -u root "$C" .github/logind-stub.sh
 
       - name: shellcheck
-        run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh'
+        run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh tools/lib/*.sh'
 
       - name: test
         run: docker exec "$C" npm test
 
       - name: e2e
-        run: docker exec "$C" npm run e2e
+        run: docker exec "$C" npm run e2e -- --a11y
 
       - name: a11y
         run: docker exec "$C" npm run a11y
