@@ -43,12 +43,12 @@ test('claudeCodeStatus returns null for a malformed or empty payload', () => {
 });
 
 test('every populated limit renders, named after its kind or its model', () => {
-    assert.deepEqual(quotas(payload(), now).map(quota => quota.name), ['Session', 'Weekly', 'Fable']);
+    assert.deepEqual(quotas(payload(), now).map(quota => quota.name), ['Session (5h)', 'Weekly', 'Fable']);
 });
 
 test('session and weekly always render, a scoped quota at zero does not', () => {
     const names = quotas(zeroScopedPayload(), zeroScopedNow).map(quota => quota.name);
-    assert.deepEqual(names, ['Session', 'Weekly']);
+    assert.deepEqual(names, ['Session (5h)', 'Weekly']);
 });
 
 test('the session entry carries every field the UI needs', () => {

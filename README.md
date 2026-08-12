@@ -6,7 +6,7 @@ A GNOME Shell indicator showing your Claude Code subscription quota usage: the 5
 Panel:  ✳ S 5% · W 37%
 
 Popup:
-  Session                      5%
+  Session (5h)                 5%
   ▓▓▓░░░╵░░░░░░░░░░░░░░░░░░░░░░░░
   4h 08m left · 13:59
 
