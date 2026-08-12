@@ -17,6 +17,7 @@ import {deserialize, serialize} from './lib/cache.js';
 import {captionLine, percentLine, rateLimitMessage, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
+import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
 import {isBlocked, markExpired, nextPollSeconds, rateLimitBlock, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
 import {StatusClient, UsageClient} from './lib/usage.js';
@@ -76,17 +77,25 @@ class PaceBar extends BarLevel {
             return;
         const themeNode = this.get_theme_node();
         const [width, height] = this.get_surface_size();
-        const barHeight = themeNode.get_length('-barlevel-height');
-        const tickWidth = themeNode.get_length('-cq-tick-width');
-        const radius = Math.min(width, barHeight) / 2;
-        const ratio = this.get_text_direction() === Clutter.TextDirection.RTL
-            ? 1 - this._pace
-            : this._pace;
-        const top = Math.round((height - barHeight) / 2 - TICK_OVERHANG);
+        const [hasShadow, shadowColor] = themeNode.lookup_color('-cq-tick-shadow-color', false);
+        const {shadow, tick} = tickRects({
+            width,
+            height,
+            barHeight: themeNode.get_length('-barlevel-height'),
+            tickWidth: themeNode.get_length('-cq-tick-width'),
+            shadowWidth: hasShadow ? themeNode.get_length('-cq-tick-shadow-width') : 0,
+            overhang: TICK_OVERHANG,
+            ratio: this.get_text_direction() === Clutter.TextDirection.RTL
+                ? 1 - this._pace
+                : this._pace,
+        });
         const cr = this.get_context();
-        cr.rectangle(
-            Math.round(radius + (width - 2 * radius) * ratio - tickWidth / 2),
-            Math.max(0, top), tickWidth, barHeight + 2 * TICK_OVERHANG);
+        if (shadow) {
+            cr.rectangle(shadow.x, shadow.y, shadow.width, shadow.height);
+            cr.setSourceColor(shadowColor);
+            cr.fill();
+        }
+        cr.rectangle(tick.x, tick.y, tick.width, tick.height);
         cr.setSourceColor(themeNode.get_foreground_color());
         cr.fill();
         cr.$dispose();
