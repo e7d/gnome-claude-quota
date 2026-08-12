@@ -14,7 +14,7 @@ DEVKIT_HEADLESS=1
 . "$(dirname "${BASH_SOURCE[0]}")/lib/assert.sh"
 
 # GROUPS is a bash built-in holding the user's gids, and assignments to it are ignored.
-ALL_GROUPS=(state hover refresh lifecycle)
+ALL_GROUPS=(state panel hover refresh lifecycle)
 RUN_GROUPS=("${ALL_GROUPS[@]}")
 THEMES=(dark light)
 A11Y_SHOTS=(normal warning critical model-scoped error service-major over-pace rate-limited rate-limited-day no-data)
@@ -109,10 +109,10 @@ shoots() {
 
 IND="Main.panel.statusArea['$UUID']"
 BLOCK_ROWS="$IND._blocks.flatMap(b => [b._name.text, b._percent.text, b._caption.text])"
-PANEL_LABELS="$IND._panelQuotas.get_children().map(c => c.text ?? '').filter(t => t !== '')"
-PANEL_QUOTAS="$IND._panelQuotas.get_children()
-    .filter(c => /cq-panel-quota/.test(c.get_style_class_name() ?? ''))
-    .map(c => c.text)"
+PANEL_LABELS="$IND._panelCells.map(c => c.label.text)"
+PANEL_QUOTAS="$IND._panelCells
+    .filter(c => /cq-panel-quota/.test(c.label.get_style_class_name() ?? ''))
+    .map(c => c.label.text)"
 CRITICAL_COLOR="$IND._blocks[1]._percent.get_theme_node().get_foreground_color().to_string()"
 
 assert_rows_filled() {
@@ -183,7 +183,7 @@ prove_state() {
         "shell_eval \"$IND._blocks = []; $IND._render(); 'ok'\" >/dev/null" \
         assert_block_count_probe
     prove 'panel agrees with blocks' \
-        "shell_eval \"$IND._panelQuotas.get_children().find(c => c.text)?.set_text('S 0%'); 'ok'\" >/dev/null" \
+        "shell_eval \"${PANEL_CELLS}[0].label.set_text('S 0%'); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_panel_matches_probe
     prove 'header states the retry time while blocked, the last refresh otherwise' \
@@ -232,6 +232,126 @@ group_state() {
     done
     assert_theme_differs
     [ "${#SHOTS[@]}" -eq 0 ] || { normalize; overview; }
+}
+
+PANEL_CELLS="$IND._panelCells"
+SHOWN_CELLS="$PANEL_CELLS.filter(c => c.actor.visible)"
+PANEL_NATURAL="$IND.container.get_preferred_width(-1)[1]"
+
+assert_panel_cells() {
+    assert_eq "$1 panel shows $2 cell(s)" "$2" "$(probe "$SHOWN_CELLS.length")"
+}
+
+assert_panel_drops_from_the_right() {
+    assert_eq "$1 panel drops from the right" 'true' \
+        "$(probe "(() => {
+            const kept = $IND._panelKeepOrder.map(c => c.actor.visible);
+            return kept.every((visible, n) => n === 0 || !visible || kept[n - 1]);
+        })()")"
+}
+
+assert_panel_within_budget() {
+    assert_eq "$1 panel fits the space the shell gives it" 'true' \
+        "$(probe "$SHOWN_CELLS.length === 0 || $PANEL_NATURAL <= $IND._panelBudget()")"
+}
+
+assert_panel_separators() {
+    assert_eq "$1 only a value with something before it carries a dot" 'true' \
+        "$(probe "(() => {
+            let earlier = false;
+            return $PANEL_CELLS.every(cell => {
+                const want = cell.actor.visible && earlier;
+                earlier = earlier || cell.actor.visible;
+                return !cell.dot || cell.dot.visible === want;
+            });
+        })()")"
+}
+
+assert_panel_keeps_icon() {
+    assert_eq "$1 the icon is the floor" 'true' "$(probe "$IND._icon.visible")"
+}
+
+assert_panel_shape() {
+    assert_panel_drops_from_the_right "$1"
+    assert_panel_within_budget "$1"
+    assert_panel_separators "$1"
+    assert_panel_keeps_icon "$1"
+}
+
+assert_panel_cells_probe() { assert_panel_cells control 3; }
+assert_panel_drops_from_the_right_probe() { assert_panel_drops_from_the_right control; }
+assert_panel_within_budget_probe() { assert_panel_within_budget control; }
+assert_panel_separators_probe() { assert_panel_separators control; }
+
+refit_panel() {
+    shell_eval "$IND._fitPanel(); 'ok'" >/dev/null
+}
+
+# A fit still queued for the next redraw would land on top of a deliberate break and
+# repair it, which reads as an assertion that cannot fail.
+settle_panel() {
+    for _ in $(seq 20); do
+        [ "$(probe "$IND._fitLaterId")" = '0' ] && { sleep 0.5; return 0; }
+        sleep 0.5
+    done
+    die 'the panel never stopped refitting'
+}
+
+# Every restore is the fit itself: repairing the actors by hand would prove the
+# assertion and not the fit.
+prove_panel() {
+    settle_panel
+    prove 'panel shows every value it has room for' \
+        "shell_eval \"${PANEL_CELLS}[0].actor.visible = false; 'ok'\" >/dev/null" \
+        refit_panel \
+        assert_panel_cells_probe
+    prove 'panel drops from the right' \
+        "shell_eval \"$IND._panelKeepOrder[1].actor.visible = false; 'ok'\" >/dev/null" \
+        refit_panel \
+        assert_panel_drops_from_the_right_probe
+    prove 'only a value with something before it carries a dot' \
+        "shell_eval \"${PANEL_CELLS}[1].dot.visible = false; 'ok'\" >/dev/null" \
+        refit_panel \
+        assert_panel_separators_probe
+}
+
+prove_panel_squeezed() {
+    settle_panel
+    prove 'panel fits the space the shell gives it' \
+        "shell_eval \"$IND._showPanelCells($PANEL_CELLS.length); 'ok'\" >/dev/null" \
+        refit_panel \
+        assert_panel_within_budget_probe
+}
+
+group_panel() {
+    echo 'panel:'
+    render_state model-scoped
+    prove_panel
+    assert_panel_cells 'wide' 3
+    assert_panel_shape 'wide'
+    render_state model-scoped-issue
+    assert_panel_cells 'widest' 4
+    assert_panel_shape 'widest'
+    local scenario
+    for scenario in narrow-two narrow-one narrow-icon narrow-issue; do
+        render_state "$scenario"
+        [ "$scenario" = 'narrow-one' ] && prove_panel_squeezed
+        assert_panel_cells "$scenario" "$(narrow_cells "$scenario")"
+        assert_panel_shape "$scenario"
+    done
+    assert_eq 'the incident emoji outlives every value' 'true' \
+        "$(probe "${PANEL_CELLS}[$PANEL_CELLS.length - 1].actor.visible")"
+    assert_panel_refits_unprompted
+}
+
+# Nothing calls _fitPanel here: taking the space back has to be enough on its own,
+# the way another indicator leaving the panel is.
+assert_panel_refits_unprompted() {
+    render_state narrow-icon
+    assert_panel_cells 'squeezed' 0
+    shell_eval "$FILLER?.destroy(); $FILLER = null; 'ok'" >/dev/null
+    sleep 1
+    assert_panel_cells 'space returned' 3
 }
 
 QS="Main.panel.statusArea.quickSettings"
@@ -510,6 +630,7 @@ main() {
     attach_session || die 'preview.sh did not publish a session'
     freeze
     runs_group state && group_state
+    runs_group panel && group_panel
     runs_group hover && group_hover
     runs_group refresh && group_refresh
     runs_group lifecycle && group_lifecycle

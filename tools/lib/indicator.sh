@@ -2,9 +2,11 @@
 
 SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-reset
            long-name locale rate-limited rate-limited-day error token-expired loading refreshing fresh no-data
+           model-scoped-issue narrow-two narrow-one narrow-icon narrow-issue
            service-degraded service-partial service-major service-maintenance
            service-error)
 PICKED=()
+FILLER='global.cqPanelFiller'
 
 # Every state below is fabricated, so the real endpoint must never answer over the
 # top of it. Stubbing the instance method also spares the shared API rate limit.
@@ -90,6 +92,40 @@ setup_quotas() {
     echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)];"
 }
 
+# The emulated monitor cannot be resized once the shell is up, so the space is taken
+# away from the other side. Sizing the filler from the ladder the extension just
+# measured keeps a scenario on the rung it names; a pixel width would drift with the
+# font and the rendered text.
+squeeze_panel() {
+    cat <<JS
+        const room = i._panelBudget();
+        const rung = i._panelNaturalWidth(Math.min($1, i._panelCells.length));
+        i._fitPanel();
+        const width = Math.max(0, Math.floor(room - rung));
+        if (width > 0) {
+            $FILLER = new imports.gi.Clutter.Actor({width, height: 1});
+            Main.panel._rightBox.add_child($FILLER);
+        }
+        i._fitPanel();
+JS
+}
+
+narrow_cells() {
+    case "$1" in
+        narrow-two|narrow-issue) echo 2 ;;
+        narrow-one) echo 1 ;;
+        narrow-icon) echo 0 ;;
+        *) echo '' ;;
+    esac
+}
+
+squeeze_for() {
+    local cells
+    cells="$(narrow_cells "$1")"
+    [ -n "$cells" ] || return 0
+    squeeze_panel "$cells"
+}
+
 setup_for() {
     case "$1" in
         normal) echo "i._quotas = [q('S','Session (5h)',7,'normal',270,SESSION), q('W','Weekly',12,'normal',9000,WEEK)];" ;;
@@ -111,17 +147,24 @@ setup_for() {
         refreshing) echo "$(setup_quotas) i._refreshing = true;" ;;
         fresh) echo "$(setup_quotas) i._fetchedAt = new Date();" ;;
         no-data) echo "i._fetchedAt = null; i._error = 'Cannot reach api.anthropic.com';" ;;
+        model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = 'Usage request failed (HTTP 503)'; i._serviceStatus = 'partial_outage';" ;;
+        narrow-*) setup_for model-scoped ;;
         service-*) echo "$(setup_quotas) i._error = 'Usage request failed (HTTP 503)'; i._serviceStatus = '$(service_status "$1")';" ;;
         *) die "unknown scenario $1" ;;
     esac
 }
 
+# The filler is dropped before the state is built and re-added after the render,
+# because sizing it needs the ladder of the state being rendered, not the last one's.
 render_state() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         $QUOTA
+        $FILLER?.destroy(); $FILLER = null;
         i._quotas = []; i._error = null; i._serviceStatus = null; i._blockedUntil = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._locale = 'en-US';
         $(setup_for "$1")
-        i.menu.open(false); i._render(); 'ok'" >/dev/null
+        i.menu.open(false); i._render();
+        $(squeeze_for "$1")
+        'ok'" >/dev/null
 }
 
 close_menu() {

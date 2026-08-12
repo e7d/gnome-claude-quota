@@ -1,6 +1,13 @@
-.cq-panel {
+/* Outranks the shipped #panel .panel-button .system-status-icon, which keeps a 4px
+   margin the first block's own padding already provides. */
+#panel .panel-button .panel-status-indicators-box .cq-panel-icon {
+    padding: 0;
+    margin: 0;
+}
+
+.cq-panel-cell {
+    padding-left: 6px;
     spacing: 6px;
-    padding-right: 10px;
 }
 
 /* Colour emoji render taller than the text beside them, so an uncapped glyph
