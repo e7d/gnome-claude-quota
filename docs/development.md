@@ -32,10 +32,22 @@ Bare — no path argument. `node --test test/` fails on node 24, which tries to 
 ## Seeing what rendered
 
 ```bash
-./tools/preview.sh
+tools/preview.sh --dark --scenario=loading
 ```
 
-That renders every popup state into `preview/` (gitignored), one PNG per theme/scenario plus an `overview.png` contact sheet. It runs a throwaway shell, so it picks up changed `extension.js` without a logout, and every state is fabricated in the running shell, so it never calls the usage endpoint.
+`preview.sh` owns one named nested shell — `preview` by default — and sets the shape of the extension inside it: theme, scenario, popup position. It runs a throwaway shell, so it picks up changed `extension.js` without a logout, and a fabricated scenario never calls the usage endpoint.
+
+Recalled while that session is up, from another terminal or as `--watch`'s own restart, it changes the shape live instead of tearing the shell down and starting a new one. **An option you leave out is left alone** — `tools/preview.sh --light` repaints and changes nothing else, whatever theme, scenario or popup position was last applied. On a fresh session the flags' own defaults apply: windowed, live data, popup closed. `--stop` tears the named session down.
+
+`--capture` writes the canonical three-state tile — resting, hovered, pressed-with-popup-open, stacked into one PNG — to `preview/<theme>-<scenario>.png` and prints that path, so the form for a screenshot while nobody is watching is:
+
+```bash
+tools/preview.sh --headless --detach --scenario=loading --capture
+```
+
+headless because a window is for a human, detached because the call should return, not block.
+
+**The devkit window is fixed at its native 1280x800 and cannot be resized from outside the session.** Neither binary offers a geometry flag: `gnome-shell --help-all` pairs `--devkit` (no geometry) with `--virtual-monitor WxH` as independent options, and `mutter-devkit --help-all` has no options at all beyond GApplication boilerplate. `MUTTER_DEBUG_DUMMY_MODE_SPECS` does not exist in this system's libmutter at all — it belongs to the dummy/headless KMS backend, not the native backend `--devkit` uses, and setting it changes nothing. The only gschema, `org.gnome.mutter.devkit`, has a single key, `launchers`, unrelated to size. The nested session does export `org.gnome.Mutter.Devkit` on its bus, but introspection shows it carries no methods or signals — only a read-only `Env` property — and exposes no `org.gtk.Actions` interface, so the window's own Monitors menu cannot be driven from outside either. Pairing the two flags does not help: `gnome-shell --devkit --virtual-monitor 1440x900` yields *two* monitors, `1440x900` as the primary and the native `1280x800` as the one the viewer actually shows, so the extension's panel lands on a display the window never renders — which is why the harness offers no size flag for `--windowed`: there is nothing to wire it to. The headless backend has no such gap: it takes its size from `--virtual-monitor`, set to `1440x900` in `DEVKIT_MONITOR` (`tools/lib/devkit.sh`).
 
 The mechanics, in case a state needs adding by hand:
 
@@ -55,11 +67,11 @@ Geometry questions are better answered from the actors than from pixels. Measuri
 ## Asserting what it does
 
 ```bash
-./tools/e2e.sh
 ./tools/e2e.sh --group=hover
+./tools/e2e.sh --group=state --dark-only --scenario=loading
 ```
 
-The same throwaway shell as the preview, driven for verdicts instead of pixels. Four groups run in the order below, and `--group=<name>` runs one of them; the theme and scenario flags are `preview.sh`'s.
+The same throwaway shell as the preview, driven for verdicts instead of pixels — and shooting the grid as it goes. Four groups run in the order below, and `--group=<name>` runs one of them; the scenario flag is shared with `preview.sh`, but the theme flag is not: e2e keeps `--dark-only`/`--light-only` rather than `preview.sh`'s recall-friendly `--dark`/`--light`, since a run asserts a whole matrix rather than shaping one live session.
 
 | Group | What it holds to account |
 | --- | --- |
@@ -69,6 +81,8 @@ The same throwaway shell as the preview, driven for verdicts instead of pixels. 
 | `lifecycle` | disable releases the timer, cancels the in-flight fetch and empties the panel entry; enable registers exactly one indicator |
 
 `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. The `state` group is also what writes `preview/`, so a run excluding it leaves whatever was already there for `npm run a11y` to score.
+
+Shooting every scenario is the default, which is also why a bare `npm run e2e` now costs minutes rather than the seconds a narrowed run takes — 24 scenarios in both themes is 48 tiles plus `overview.png`. Two flags trade shots for speed in opposite directions: `--a11y` narrows the shoot to the ten scenarios `npm run a11y` actually scores, and `--assert` shoots nothing at all, leaving `preview/` untouched, for a run where only behaviour is in question. `--group=`, `--scenario=` and `--dark-only`/`--light-only` narrow the same way they always did.
 
 **Every assertion is proven able to fail, on every run.** `prove` evaluates a check three times — untouched, with a deliberate runtime mutation applied, then after the restore — and requires it to pass, fail and pass again. A check that survives its own break is a dead check, and the run stops there, non-zero, with its reason on stderr:
 
@@ -122,7 +136,7 @@ The service-status line is the only activatable row; everything else comes from 
 - **The tick is drawn on integer pixels.** A 2px rect at a fractional x antialiases across three columns, which is what "the tick looks 3px wide" means every time.
 - **The bar is deliberately shorter than its actor**: 6px of bar inside 12px of `.cq-bar`, so the tick can stand 2px proud above and below it (`TICK_OVERHANG`). Painted inside a 6px actor it can only ever be flush, and a flush tick disappears into the fill it is meant to mark.
 - **The excess past the tick keeps the brand orange.** It used to turn salmon (dark) or crimson (light), which read as a different measurement rather than as the same bar continuing. Geometry carries the verdict now: fill past the tick is over pace, and `-barlevel-overdrive-color` is gone with the classes that set it.
-- **The tick colour is plain white on dark, plain black on light**, and `tools/a11y.js` measures all four pairs — tick against fill and against track, per scheme — at the 3:1 WCAG threshold for a non-text mark. `tickFindings()` in `tools/contrast.js` reads the declared colours and blends the translucent track over the popup surface, because the pixel scan cannot reach a 2px mark inside a region. Worst pair is white on `#d97757` at **3.12:1**: it passes, with little room, so darkening the fill or the tick is the lever if that ever has to move.
+- **The tick colour is plain white on dark, plain black on light**, and `tools/a11y.js` measures all four pairs — tick against fill and against track, per scheme — at the 3:1 WCAG threshold for a non-text mark. `tickFindings()` in `tools/lib/contrast.js` reads the declared colours and blends the translucent track over the popup surface, because the pixel scan cannot reach a 2px mark inside a region. Worst pair is white on `#d97757` at **3.12:1**: it passes, with little room, so darkening the fill or the tick is the lever if that ever has to move.
 - **The popup surfaces those blends sit on are the shipped theme's**, sampled once rather than declared: `magick preview/dark-normal.png -crop 1x1+24+236 -format '%[pixel:p{0,0}]' info:` gave `#36363a` dark and `#fafafb` light. Re-sample them if a GNOME release repaints its menus.
 
 ## The status page

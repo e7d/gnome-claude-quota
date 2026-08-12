@@ -10,7 +10,8 @@ Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`]
 | --- | --- | --- |
 | `extension.js` | GNOME Shell (GJS) | Actors, signals, timers, D-Bus. The only file allowed to touch the shell. |
 | `lib/*.js` | Shell **and** `node --test` | Pure logic: formatting, policy, model, theme, cache, HTTP shaping. |
-| `tools/*.sh`, `tools/*.js` | Your machine | Development tooling. Never shipped to users. |
+| `tools/*.sh`, `tools/*.js` | Your machine | Entrypoints. Never shipped to users. |
+| `tools/lib/*` | Your machine | Sourced or imported by the entrypoints, never run directly. |
 | `test/*.test.js` | `node --test` | Unit tests for `lib/` and `tools/`. |
 
 **Every `lib/` module except `usage.js` must stay free of `gi://`.** Those six are imported by the Node test runner as well as the shell, and one `gi://` import makes the whole module untestable. `lib/usage.js` is the deliberate exception — it wraps Soup and Gio for HTTP, and is consequently the one module with no unit tests, so keep it thin and put any decision it would make into `policy.js` instead. When you want a unit test for logic stuck inside `extension.js`, move the logic to `lib/` first; that is the intended direction of travel.
@@ -21,25 +22,24 @@ Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_bloc
 
 `npm test` — the unit suite. `TZ` is pinned to `UTC` in the script; the suite asserts absolute times and would otherwise fail outside UTC.
 
-**When a change affects what the popup or panel looks like, shoot the affected scenarios headless and look at the result.** That is the fast path and the default:
+**When a change affects what the popup or panel looks like, put the state on screen and look at it.**
 
-```bash
-npm run preview -- --dark-only --scenario=loading --scenario=no-data
-```
+    npm run preview -- --dark --scenario=loading
 
-Seconds, versus a few minutes for the full matrix. Headless is the default and is what you want — a window is for a human watching, not for you. A subset run leaves the other screenshots alone. Reach for `--windowed` only when the user asked to watch, and for the full run only before treating `overview.png` as complete or when handing the set over.
+That opens a Mutter devkit window and blocks. Recall it from another terminal to
+change the shape live — `--light`, `--open`, `--scenario=no-data` — and only what
+you name changes. `--headless --detach --capture` shoots the tile instead of
+showing it, which is the form to reach for when nobody is watching.
 
-Every screenshot stacks the panel button's three states: resting, hovered, then pressed with the popup open below it. If a change concerns a state no scenario covers, add the scenario to `SCENARIOS` and `setup_for` in `tools/indicator.sh` rather than eyeballing it once by hand.
+Every screenshot stacks the panel button's three states: resting, hovered, then pressed with the popup open below it. If a change concerns a state no scenario covers, add the scenario to `SCENARIOS` and `setup_for` in `tools/lib/indicator.sh` rather than eyeballing it once by hand.
 
-**When a change affects how the extension behaves rather than how it looks, `npm run e2e` is the fast path instead.** A preview subset tells you what a state looks like; e2e tells you whether it still works — 23 scenarios asserted in both themes, plus the hover, refresh and lifecycle groups, in about two minutes. Narrow it the same way while iterating:
+**For a screenshot that is also asserted, narrow the suite instead:**
 
-```bash
-npm run e2e -- --group=refresh
-```
+    npm run e2e -- --group=state --dark-only --scenario=loading
 
-Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
+A bare `npm run e2e` now shoots every scenario in both themes by default — 24 × 2, minutes rather than seconds. `--a11y` narrows the shoot to the ten scenarios `npm run a11y` scores; `--assert` shoots nothing at all, which is the form to reach for when only behaviour, not pixels, is in question. Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
 
-`npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last preview or full e2e run — the e2e state group shoots the nine scenarios it scores, and a narrowed run leaves the rest as they were. It exits non-zero on a finding.
+`npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last capture or full e2e run — the e2e state group shoots the ten scenarios it scores, and a narrowed run leaves the rest as they were. It exits non-zero on a finding.
 
 `npm run dev` and `npm run dev:watch` run a throwaway nested shell for interactive work. Prefer a preview subset when you only need to see a result; a nested session is for behaviour you have to drive.
 
@@ -57,11 +57,11 @@ Suppressing a shell behaviour to satisfy a measurement is the wrong trade in bot
 
 **GNOME caches extension modules for the life of a shell process.** Disabling and re-enabling the extension re-runs the *old* code. Watch mode restarts the whole nested shell for this reason; never replace that with a disable/enable cycle.
 
-**Never touch the host GNOME session.** Every dconf write belongs inside the private `dbus-run-session` that `tools/devkit.sh` sets up — `XDG_CONFIG_HOME` alone does not sandbox dconf, and a write issued outside that session lands in the live database and has already wiped the user's extension list twice. After anything that starts a shell, confirm the host is intact: `sha256sum ~/.config/dconf/user` and the length of `gsettings get org.gnome.shell enabled-extensions`.
+**Never touch the host GNOME session.** Every dconf write belongs inside the private `dbus-run-session` that `tools/lib/devkit.sh` sets up — `XDG_CONFIG_HOME` alone does not sandbox dconf, and a write issued outside that session lands in the live database and has already wiped the user's extension list twice. After anything that starts a shell, confirm the host is intact: `sha256sum ~/.config/dconf/user` and the length of `gsettings get org.gnome.shell enabled-extensions`.
 
-**Kill nested shells by pid only.** The host session's process is also called `gnome-shell`; matching by name kills the user's desktop. `tools/devkit.sh` `stop_shell` does it correctly. Also beware `pgrep -f` matching the very command that runs it, which makes a dead session look alive.
+**Kill nested shells by pid only.** The host session's process is also called `gnome-shell`; matching by name kills the user's desktop. `tools/lib/devkit.sh` `stop_shell` does it correctly. Also beware `pgrep -f` matching the very command that runs it, which makes a dead session look alive.
 
-**Editing a running `.sh` corrupts it.** Bash re-reads the script by byte offset, so stop a watcher before editing `tools/dev.sh`.
+**Editing a running `.sh` corrupts it.** Bash re-reads the script by byte offset, so stop a watcher (`npm run dev:watch`) before editing `tools/preview.sh`.
 
 **`preview/` is gitignored.** The screenshots are local artifacts whose exact dimensions shift with the live quota text, and a full run deletes them all before it starts.
 

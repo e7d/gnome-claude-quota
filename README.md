@@ -101,76 +101,86 @@ npm test
 
 ## Development
 
-A running GNOME session caches extension code for its whole lifetime, so testing a change otherwise means logging out. `npm run dev` instead starts a throwaway nested shell that runs this extension and nothing else:
+A running GNOME session caches extension code for its whole lifetime, so testing a change otherwise means logging out. `tools/preview.sh` instead owns one named nested shell that runs this extension and nothing else, and can be recalled to reshape it live instead of restarting it:
 
 ```bash
-npm run dev          # nested shell in a window, Ctrl-C to stop
+npm run dev          # tools/preview.sh --windowed, Ctrl-C to stop
 npm run dev:watch    # same, restarted on every source edit
 ```
 
-This needs the extension installed as a symlink to *this* checkout, as in the second install recipe above; `tools/dev.sh` refuses to start otherwise rather than silently running some other copy.
+This needs the extension installed as a symlink to *this* checkout, as in the second install recipe above; `preview.sh` refuses to start otherwise rather than silently running some other copy.
 
-Both are thin wrappers around `tools/dev.sh`. Pass its flags through `npm` with a `--` separator, or call the script directly:
+Both are thin wrappers. Pass flags through `npm` with a `--` separator, or call the script directly:
 
 ```bash
-npm run dev -- --watch --light
-tools/dev.sh --watch --light
+npm run preview -- --dark --scenario=loading
+tools/preview.sh --dark --scenario=loading
 ```
 
 | Flag | Effect |
 | --- | --- |
-| `--watch` | Restart the shell whenever a source file changes |
-| `--windowed` | Show the session in a Mutter devkit window (default here) |
+| `--session=<name>` | Name the session (default `preview`) |
+| `--windowed` | Show the session in a Mutter devkit window (default) |
 | `--headless` | Run with no window, driven over D-Bus |
-| `--dark` | Force `prefer-dark` |
-| `--light` | Force `prefer-light` |
-| `-h`, `--help` | Print the flags and exit |
+| `--dark`, `--light` | Force a colour scheme |
+| `--scenario=<name>` | Render a fabricated state |
+| `--live` | Render real data (default) |
+| `--close` | Leave the popup closed and the pointer away (default) |
+| `--hover` | Leave the pointer on the panel button |
+| `--open` | Leave the popup open |
+| `--capture` | Shoot `preview/<theme>-<scenario>.png` of the shape applied |
+| `--watch` | Restart the shell whenever a source file changes, replaying the shape |
+| `--detach` | Start the session and return instead of blocking |
+| `--stop` | Tear the session down |
+| `-h`, `--help` | Print the flags and the scenario names, and exit |
+
+Calling `preview.sh` again while its session is up changes the shape instead of starting a second one, and **an option you leave out is left alone** — `tools/preview.sh --light` repaints and changes nothing else. On a fresh session the defaults above apply.
 
 Each script checks what it needs up front and names everything that is missing at once. Shared: `gnome-shell`, `dbus-run-session`, `dconf`, `gsettings`, `gdbus`. `--watch` also wants `find`, `stat`, `sha256sum` and `xargs`; `preview.sh` and `e2e.sh` want ImageMagick's `magick`, and skip `overview.png` alone if `montage` is absent.
 
-`--windowed` needs the `mutter-devkit` package, matching your `mutter` version. That one only warns rather than failing: the session still runs, there is just nothing to look at.
+`--windowed` needs the `mutter-devkit` package, matching your `mutter` version; that one only warns rather than failing, so the session still runs with nothing to look at. Its window is fixed at its native 1280×800 and cannot be resized from outside the session — no flag on either binary, no environment variable, no gschema key, and no D-Bus method or action; sizing exists only in the devkit window's own Monitors menu, by hand. A windowed session therefore shows a narrower panel than a headless capture of the same state. `--headless` is unaffected: it takes its size from `--virtual-monitor` instead, fixed at 1440×900 in `tools/lib/devkit.sh`.
 
 Without `--dark` or `--light` the colour scheme resets to the GNOME default rather than inheriting your desktop, as do the wallpaper and accent colour, so a session looks the same on any machine. Your own settings are untouched: the nested shell gets a private copy of dconf, and every write to it happens inside that session's own bus.
 
-Watch mode restarts the whole shell rather than reloading the extension, because a disable/enable cycle re-runs the cached modules and would silently ignore your edit.
+`--watch` restarts the whole shell rather than reloading the extension, because a disable/enable cycle re-runs the cached modules and would silently ignore your edit — and editing `tools/preview.sh` itself while a watcher is running corrupts it mid-read, so stop the watcher first.
 
-`npm run preview` regenerates the screenshots in `preview/`. It takes the same `--windowed` / `--headless` pair, defaulting to headless — the opposite of `dev.sh` — so add `--windowed` to watch it work:
-
-```bash
-npm run preview -- --windowed
-```
-
-A full run is a few minutes, so it also takes flags to shoot a subset while iterating on one state — seconds rather than minutes:
-
-| Flag | Effect |
-| --- | --- |
-| `--dark-only` / `--light-only` | Shoot one theme instead of both |
-| `--scenario=<name>` | Shoot one scenario; repeat the flag for several |
-| `-h`, `--help` | Print the flags and the scenario names, and exit |
+`--capture` is the fast path for a screenshot while nobody is watching:
 
 ```bash
-npm run preview -- --dark-only --scenario=loading --scenario=no-data
+npm run preview -- --headless --detach --scenario=loading --capture
 ```
 
-An unknown scenario name is refused with the list of valid ones rather than silently shooting nothing. A subset run leaves the other screenshots alone instead of wiping `preview/`, but it also renormalises and retiles only what it shot — so finish with a full run before treating `overview.png` as complete.
+which shoots one tile and prints the path it wrote, then returns instead of blocking. The scenarios live in the `SCENARIOS` array in `tools/lib/indicator.sh`, each paired with a `setup_for` case that fabricates the state. `preview/` is gitignored: the shots are local artifacts, and their exact dimensions vary with whatever your live quota text happens to be.
 
 Each `<theme>-<scenario>.png` stacks three shots of the same state, one per panel-button state: resting with the pointer parked away, hovered with the menu still shut, then pressed with the menu open. All three are cropped to the same width, and every stack is then padded to the tallest one, so the panel row sits at the same place in all of them. The hovered band is not decoration — the pill the theme paints under a hover is a surface the quota colours have to sit on, and `npm run a11y` cannot judge a surface no screenshot contains. That is what lets `overview.png` be scanned as a grid — a contrast regression shows up as one tile differing from its neighbours rather than something you have to hunt for.
 
-The scenarios live in the `SCENARIOS` array in `tools/indicator.sh`, each paired with a `setup_for` case that fabricates the state. `preview/` is gitignored: the shots are local artifacts, and their exact dimensions vary with whatever your live quota text happens to be.
-
-`npm run e2e` boots the same throwaway shell and asserts what it finds there: that every popup row is filled, that the panel labels agree with the blocks beneath them, that a severity repaints between the two schemes, that only a panel button takes a hover, that a refresh spins its icon and leaves nothing spinning, and that disabling the extension releases its timer and its in-flight fetch.
+`npm run e2e` boots a throwaway shell of its own, asserts what it finds there — that every popup row is filled, that the panel labels agree with the blocks beneath them, that a severity repaints between the two schemes, that only a panel button takes a hover, that a refresh spins its icon and leaves nothing spinning, and that disabling the extension releases its timer and its in-flight fetch — and shoots the grid as it goes.
 
 ```bash
-npm run e2e                                    # every group, both themes
+npm run e2e                                    # every scenario, both themes — minutes
 npm run e2e -- --group=hover                   # one group
 npm run e2e -- --group=state --dark-only --scenario=normal
+npm run e2e -- --assert                        # behaviour only, shoots nothing
 ```
 
-A full run asserts 24 scenarios in both themes and costs about two minutes. It takes `preview`'s flags — `--windowed` / `--headless`, `--dark-only` / `--light-only`, `--scenario=` — plus `--group=<name>` to run one of `state`, `hover`, `refresh` and `lifecycle`.
+| Flag | Effect |
+| --- | --- |
+| `--headless` | Run with no window, driven over D-Bus (default) |
+| `--windowed` | Show the session in a Mutter devkit window |
+| `--dark-only` / `--light-only` | Assert one theme instead of both |
+| `--scenario=<name>` | Assert one scenario; repeat the flag for several |
+| `--group=<name>` | Run one group; repeat the flag for several |
+| `--a11y` | Shoot only the ten scenarios `npm run a11y` scores |
+| `--assert` | Shoot nothing, leaving `preview/` alone |
+| `-h`, `--help` | Print the flags, the groups and the scenario names, and exit |
 
-The state group also photographs ten of those scenarios in both themes, so a full `npm run e2e` leaves `preview/` holding the 20 shots `npm run a11y` scores, plus the contact sheet. That is what CI runs. Reach for `npm run preview` when you want the whole matrix on screen — 24 scenarios in both themes, 48 shots — rather than the subset colour is measured from.
+Groups: `state`, `hover`, `refresh`, `lifecycle`. `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. `state` is what shoots the grid, so a run excluding it leaves `preview/` exactly as it was.
 
-The three scripts share `tools/devkit.sh`, which owns the session lifecycle — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. `tools/indicator.sh` drives the extension into a state and `tools/capture.sh` turns that state into a PNG, so `preview.sh` and `e2e.sh` are drivers over one shared layer and a fix to any of it lands in one place.
+Shooting every scenario is now the default, so a bare `npm run e2e` costs minutes — 24 scenarios in both themes is 48 tiles plus `overview.png`. The fast path while iterating is a narrowed run (`--group=`, `--scenario=`, `--dark-only`) or `--assert` when only behaviour, not pixels, is in question.
+
+Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
+
+`tools/lib/devkit.sh` owns the session lifecycle shared by all three scripts — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. `tools/lib/indicator.sh` drives the extension into a state, `tools/lib/capture.sh` turns that state into a PNG, and `tools/lib/assert.sh` holds the assertion primitives, so `preview.sh` and `e2e.sh` are drivers over one shared layer and a fix to any of it lands in one place. Nothing under `tools/lib/` is meant to be run directly.
 
 `npm run a11y` reads those screenshots back and measures colour contrast, so a scheme that leaves a label unreadable fails a check instead of waiting to be noticed:
 
