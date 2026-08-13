@@ -14,13 +14,14 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
+import {credentialsRenewed} from './lib/credentials.js';
 import {captionLine, percentLine, rateLimitMessage, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
-import {isBlocked, markExpired, nextPollSeconds, rateLimitBlock, serviceIssue, shouldFetchOnOpen} from './lib/policy.js';
-import {StatusClient, UsageClient} from './lib/usage.js';
+import {blockReason, isBlocked, markExpired, nextPollSeconds, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
+import {StatusClient, UsageClient, credentialExpiry, credentialsPath} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
@@ -28,6 +29,7 @@ const UNKNOWN_SERVICE = 'unknown';
 const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
 const TICK_OVERHANG = 2;
+const CREDENTIALS_SETTLE_SECONDS = 2;
 
 // The insensitive pseudo-class the shipped theme paints at 50% alpha is what a
 // non-reactive item gets, and every child label inherits it.
@@ -154,9 +156,13 @@ class Indicator extends PanelMenu.Button {
         this._serviceStatus = null;
         this._refreshing = false;
         this._fetchedAt = null;
-        this._blockedUntil = null;
+        this._block = null;
         this._rateLimitStreak = 0;
         this._timerId = null;
+        this._credentialsMonitor = null;
+        this._credentialsSignal = 0;
+        this._credentialsSettleId = 0;
+        this._seenExpiry = this._credentialExpiry();
         this._limits = [];
         this._locale = timeLocale({
             LC_ALL: GLib.getenv('LC_ALL'),
@@ -229,11 +235,12 @@ class Indicator extends PanelMenu.Button {
             if (!open)
                 return;
             this._render();
-            if (shouldFetchOnOpen(this._fetchedAt, new Date(), this._blockedUntil))
+            if (shouldFetchOnOpen(this._fetchedAt, new Date(), this._block?.until))
                 this._refresh('popup-stale');
         });
         this.connect('destroy', () => this._onDestroy());
         this._watchPanelSpace();
+        this._watchCredentials();
         this._loadCache();
         this._render();
         this._refresh('startup');
@@ -305,6 +312,50 @@ class Indicator extends PanelMenu.Button {
         return Main.getStyleVariant() === 'light' ? 'light' : 'dark';
     }
 
+    // Claude Code replaces the file rather than editing it in place, and a monitor
+    // on the file itself stops following at the first replace.
+    _watchCredentials() {
+        const file = Gio.File.new_for_path(credentialsPath());
+        try {
+            this._credentialsMonitor = file.get_parent()
+                .monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
+        } catch (error) {
+            logError(error);
+            return;
+        }
+        this._credentialsSignal = this._credentialsMonitor.connect('changed', (monitor, changed) => {
+            if (changed.get_basename() === file.get_basename())
+                this._settleCredentials();
+        });
+    }
+
+    // One replace arrives as several events, and every one of them that reached a
+    // fetch would spend a request against a five-per-five-minutes budget.
+    _settleCredentials() {
+        if (this._credentialsSettleId)
+            GLib.Source.remove(this._credentialsSettleId);
+        this._credentialsSettleId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_LOW, CREDENTIALS_SETTLE_SECONDS, () => {
+                this._credentialsSettleId = 0;
+                this._onCredentialsWritten();
+                return GLib.SOURCE_REMOVE;
+            });
+    }
+
+    _credentialExpiry() {
+        return credentialExpiry();
+    }
+
+    _onCredentialsWritten() {
+        const expiry = this._credentialExpiry();
+        if (!credentialsRenewed(this._seenExpiry, expiry))
+            return;
+        this._seenExpiry = expiry;
+        this._block = null;
+        this._rateLimitStreak = 0;
+        this._refresh('credentials');
+    }
+
     _scheduleNext(seconds) {
         if (this._timerId) {
             GLib.Source.remove(this._timerId);
@@ -319,8 +370,8 @@ class Indicator extends PanelMenu.Button {
 
     async _refresh(trigger) {
         const now = new Date();
-        if (isBlocked(this._blockedUntil, now)) {
-            this._scheduleNext(nextPollSeconds((this._blockedUntil - now) / 1000));
+        if (isBlocked(this._block?.until, now)) {
+            this._scheduleNext(nextPollSeconds((this._block.until - now) / 1000));
             this._render();
             return;
         }
@@ -344,18 +395,22 @@ class Indicator extends PanelMenu.Button {
         this._renderSafely();
         if (!result.serverError)
             return;
-        await this._refreshServiceStatus(cancellable);
+        await this._refreshServiceStatus(cancellable, trigger);
         if (this._destroyed || this._cancellable !== cancellable)
             return;
         this._renderSafely();
     }
 
-    async _refreshServiceStatus(cancellable) {
+    async _refreshServiceStatus(cancellable, trigger) {
+        let result;
         try {
-            this._serviceStatus = await this._status.fetch(cancellable) ?? UNKNOWN_SERVICE;
+            result = await this._status.fetch(cancellable);
         } catch {
             this._serviceStatus = UNKNOWN_SERVICE;
+            return;
         }
+        this._recordAttempt({...result, expired: false, retryAfter: null, rateLimited: false}, trigger, 'status');
+        this._serviceStatus = result.value ?? UNKNOWN_SERVICE;
     }
 
     _renderSafely() {
@@ -368,15 +423,19 @@ class Indicator extends PanelMenu.Button {
 
     async _fetchResult(cancellable, trigger) {
         try {
-            const {payload, status, headers} = await this._client.fetch(cancellable);
+            const {payload, status, headers, body, durationMs, expiresAt} = await this._client.fetch(cancellable);
             return this._recordAttempt({
                 payload,
                 error: null,
                 retryAfter: null,
                 rateLimited: false,
                 serverError: false,
+                expired: false,
                 status,
                 headers,
+                body,
+                durationMs,
+                expiresAt,
             }, trigger);
         } catch (error) {
             if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
@@ -387,20 +446,29 @@ class Indicator extends PanelMenu.Button {
                 retryAfter: error.retryAfter ?? null,
                 rateLimited: error.rateLimited ?? false,
                 serverError: error.serverError ?? false,
+                expired: error.expired ?? false,
                 status: error.status ?? null,
                 headers: error.headers ?? {},
+                body: error.body ?? null,
+                durationMs: error.durationMs ?? null,
+                expiresAt: error.expiresAt ?? null,
             }, trigger);
         }
     }
 
-    _recordAttempt(result, trigger) {
+    _recordAttempt(result, trigger, endpoint = 'usage') {
         this._appendAttempt(attemptRecord({
             now: new Date(),
             trigger,
+            endpoint,
             outcome: outcomeFor(result),
             status: result.status,
             retryAfter: result.retryAfter,
+            durationMs: result.durationMs,
+            tokenExpiresAt: result.expiresAt,
+            tokenExpired: result.expired,
             headers: result.headers,
+            body: result.body,
         }));
         return result;
     }
@@ -411,23 +479,25 @@ class Indicator extends PanelMenu.Button {
             this._quotas = quotas(result.payload, new Date());
             this._error = null;
             this._serviceStatus = null;
-            this._blockedUntil = null;
+            this._block = null;
             this._rateLimitStreak = 0;
             this._fetchedAt = new Date();
+            this._seenExpiry = result.expiresAt ?? this._seenExpiry;
             this._saveCache();
             this._scheduleNext(nextPollSeconds(null));
             return;
         }
-        if (result.rateLimited) {
+        const reason = blockReason(result);
+        if (reason !== null) {
             const block = rateLimitBlock(result.retryAfter, new Date(), this._rateLimitStreak);
             this._rateLimitStreak += 1;
-            this._blockedUntil = block.until;
+            this._block = {until: block.until, reason};
             this._scheduleNext(nextPollSeconds(block.seconds));
-            this._error = null;
+            this._error = reason === RATE_LIMIT ? null : result.error;
             this._serviceStatus = null;
             return;
         }
-        this._blockedUntil = null;
+        this._block = null;
         this._scheduleNext(nextPollSeconds(result.retryAfter));
         this._error = result.error;
         // Named before status.claude.com has answered, so the line appears with the
@@ -436,10 +506,11 @@ class Indicator extends PanelMenu.Button {
     }
 
     _renderMessage(now, hasQuotas) {
-        const silenced = isBlocked(this._blockedUntil, now);
+        const throttleUntil = throttledUntil(this._block);
+        const silenced = isBlocked(throttleUntil, now);
         const issue = silenced ? null : serviceIssue(this._serviceStatus);
         const error = silenced || issue || this._error === null ? '' : this._error;
-        const throttled = rateLimitMessage(this._blockedUntil, now, this._locale);
+        const throttled = rateLimitMessage(throttleUntil, now, this._locale);
         const loading = issue === null && error === '' && !hasQuotas && !silenced;
         const message = loading ? 'Loading…' : throttled || error;
         this._refreshLabel.text = refreshLine(this._fetchedAt, now, this._locale);
@@ -453,7 +524,7 @@ class Indicator extends PanelMenu.Button {
     }
 
     _renderActions(now) {
-        this._refreshButton.reactive = !this._refreshing && !isBlocked(this._blockedUntil, now);
+        this._refreshButton.reactive = !this._refreshing && !isBlocked(this._block?.until, now);
         this._refreshButton.opacity = this._refreshButton.reactive ? 255 : CAPTION_OPACITY;
         if (this._refreshing)
             this._startSpinner();
@@ -666,6 +737,15 @@ class Indicator extends PanelMenu.Button {
         if (this._fitLaterId) {
             global.compositor.get_laters().remove(this._fitLaterId);
             this._fitLaterId = 0;
+        }
+        if (this._credentialsSettleId) {
+            GLib.Source.remove(this._credentialsSettleId);
+            this._credentialsSettleId = 0;
+        }
+        if (this._credentialsMonitor) {
+            this._credentialsMonitor.disconnect(this._credentialsSignal);
+            this._credentialsMonitor.cancel();
+            this._credentialsMonitor = null;
         }
         this._panelSignals.forEach(([actor, id]) => actor.disconnect(id));
         this._panelSignals = [];

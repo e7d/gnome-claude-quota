@@ -138,7 +138,7 @@ assert_rate_limit_note() {
         "$(probe "$IND._refreshLabel.text.startsWith('Last refresh')")"
     assert_eq "$1 the rate-limit row tracks the block" 'true' \
         "$(probe "(/Rate limited/.test($IND._messageLabel.text) && $IND._message.visible)
-            === ($IND._blockedUntil > new Date())")"
+            === ($IND._block?.until > new Date())")"
 }
 
 assert_state() {
@@ -212,9 +212,13 @@ preview() {
 
 # The theme is set once per row rather than per scenario: set_theme sleeps two
 # seconds, and preview.sh leaves an omitted dimension alone.
+# Every state the tiles show is a settled one, and the transitions into them only
+# decide how long a shot must wait. Shooting with them off is the same pixels sooner,
+# and it pins the spinner to one angle instead of wherever the shot landed.
 group_state() {
     prepare_out "$(subset_kind)"
     prove_state
+    set_animations false
     local theme scenario shot
     for theme in "${THEMES[@]}"; do
         preview "--$theme" >/dev/null
@@ -230,6 +234,7 @@ group_state() {
             assert_state "$theme-$scenario"
         done
     done
+    set_animations true
     assert_theme_differs
     [ "${#SHOTS[@]}" -eq 0 ] || { normalize; overview; }
 }
@@ -290,9 +295,9 @@ refit_panel() {
 # A fit still queued for the next redraw would land on top of a deliberate break and
 # repair it, which reads as an assertion that cannot fail.
 settle_panel() {
-    for _ in $(seq 20); do
-        [ "$(probe "$IND._fitLaterId")" = '0' ] && { sleep 0.5; return 0; }
-        sleep 0.5
+    for _ in $(seq 70); do
+        [ "$(probe "$IND._fitLaterId")" = '0' ] && { await_paint; return 0; }
+        sleep 0.15
     done
     die 'the panel never stopped refitting'
 }
@@ -366,7 +371,7 @@ reopen_menu() {
     close_menu
     point_at away
     open_menu
-    sleep 1
+    await_paint
 }
 
 assert_panel_matches_platform() {
@@ -503,7 +508,7 @@ stub_attempt_log() {
 restore_attempt_log() {
     shell_eval "delete $IND._client.fetch;
         delete $IND._attemptsPath;
-        $IND._blockedUntil = null;
+        $IND._block = null;
         $IND._refresh = () => {};
         $IND._render();
         'ok'" >/dev/null
@@ -511,11 +516,17 @@ restore_attempt_log() {
     ATTEMPTS_LOG=''
 }
 
-# A 429 arms _blockedUntil, and a blocked _refresh makes no upstream attempt and
+# A 429 arms _block, and a blocked _refresh makes no upstream attempt and
 # therefore no record — so the block is cleared before each deliberate attempt.
 log_attempt() {
-    shell_eval "$IND._blockedUntil = null; $IND._refresh('$1'); 'ok'" >/dev/null
-    sleep 1
+    local before
+    before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    shell_eval "$IND._block = null; $IND._refresh('$1'); 'ok'" >/dev/null
+    for _ in $(seq 100); do
+        [ "$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)" -gt "$before" ] && return 0
+        sleep 0.1
+    done
+    die "the $1 attempt was never logged"
 }
 
 last_attempt_field() {
@@ -538,6 +549,81 @@ prove_attempt_log() {
         assert_attempt_logged
 }
 
+# The endpoint answers a run of 401s with an hour's block, so a token already past
+# its expiry must cost no request — and must arm nothing, since only a new token
+# ends the wait.
+stub_expired_token() {
+    shell_eval "$IND._client.fetch = () => Promise.reject(Object.assign(
+        new Error('Token expired, run Claude Code once'),
+        {expired: true, status: null, headers: {}, body: null, durationMs: null,
+         expiresAt: new Date(Date.now() - 3600000)}));
+        'ok'" >/dev/null
+    log_attempt timer
+}
+
+stub_server_unauthorized() {
+    shell_eval "$IND._client.fetch = () => Promise.reject(Object.assign(
+        new Error('Token expired, run Claude Code once'),
+        {status: 401, headers: {}, body: null, durationMs: null, expiresAt: null}));
+        'ok'" >/dev/null
+    log_attempt timer
+}
+
+assert_expired_token_declined() {
+    assert_eq 'an expired token is logged as declined, not as a server refusal' 'token-expired' \
+        "$(last_attempt_field outcome)"
+    assert_eq 'declining to send arms no block' 'true' "$(probe "$IND._block === null")"
+}
+
+wake_on_renewed_token() {
+    shell_eval "globalThis._wokeWith = null;
+        $IND._refresh = trigger => { globalThis._wokeWith = trigger; };
+        $IND._credentialExpiry = () => new Date(Date.now() + 3600000);
+        $IND._seenExpiry = new Date(Date.now() - 3600000);
+        $IND._block = {until: new Date(Date.now() + 900000), reason: 'rate-limit'};
+        $IND._onCredentialsWritten();
+        'ok'" >/dev/null
+}
+
+# The hour-long block is scoped to the token that earned it, so the same file
+# rewritten with no newer token must leave the block standing.
+wake_on_same_token() {
+    shell_eval "globalThis._wokeWith = null;
+        $IND._refresh = trigger => { globalThis._wokeWith = trigger; };
+        $IND._credentialExpiry = () => new Date(Date.now() + 3600000);
+        $IND._seenExpiry = new Date(Date.now() + 3600000);
+        $IND._block = {until: new Date(Date.now() + 900000), reason: 'rate-limit'};
+        $IND._onCredentialsWritten();
+        'ok'" >/dev/null
+}
+
+assert_credentials_wake() {
+    assert_eq 'a renewed token clears the block it can no longer be subject to' 'true' \
+        "$(probe "$IND._block === null")"
+    assert_eq 'a renewed token refreshes at once' 'true' \
+        "$(probe "globalThis._wokeWith === 'credentials'")"
+}
+
+prove_credentials_recovery() {
+    stub_expired_token
+    prove 'an expired token costs no request' \
+        stub_server_unauthorized \
+        stub_expired_token \
+        assert_expired_token_declined
+    wake_on_renewed_token
+    prove 'a renewed token ends the block' \
+        wake_on_same_token \
+        wake_on_renewed_token \
+        assert_credentials_wake
+}
+
+restore_credentials_stubs() {
+    shell_eval "delete $IND._credentialExpiry;
+        delete globalThis._wokeWith;
+        $IND._block = null;
+        'ok'" >/dev/null
+}
+
 group_refresh() {
     echo 'refresh:'
     render_state normal
@@ -554,6 +640,10 @@ group_refresh() {
     stub_attempt_log
     prove_attempt_log
     assert_attempt_logged
+    prove_credentials_recovery
+    assert_expired_token_declined
+    assert_credentials_wake
+    restore_credentials_stubs
     restore_attempt_log
 }
 
@@ -562,9 +652,9 @@ park_indicator() {
 }
 
 wait_for_teardown() {
-    for _ in $(seq 30); do
+    for _ in $(seq 150); do
         [ "$(probe "Object.keys(Main.panel.statusArea).includes('$UUID')")" = 'false' ] && return 0
-        sleep 1
+        sleep 0.2
     done
     return 0
 }
@@ -572,9 +662,9 @@ wait_for_teardown() {
 # _refresh only schedules the next poll once its fetch settles, so the first read
 # after wait_for_indicator measures _timerId null with _refreshing still true.
 wait_for_polling() {
-    for _ in $(seq 30); do
+    for _ in $(seq 150); do
         [ "$(probe "$IND._timerId !== null")" = 'true' ] && return 0
-        sleep 1
+        sleep 0.2
     done
     return 0
 }
@@ -626,7 +716,7 @@ main() {
     own_session
     local backend_flag=--headless
     [ "$DEVKIT_HEADLESS" -eq 1 ] || backend_flag=--windowed
-    "$PREVIEW" --session=e2e "$backend_flag" --detach --live >/dev/null
+    "$PREVIEW" --session=e2e "$backend_flag" --detach --scenario=normal >/dev/null
     attach_session || die 'preview.sh did not publish a session'
     freeze
     runs_group state && group_state

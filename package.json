@@ -9,6 +9,7 @@
     "preview": "tools/preview.sh",
     "e2e": "tools/e2e.sh",
     "a11y": "tools/a11y.sh",
+    "logs": "node tools/logs.js",
     "attribution": "node tools/quota-attribution.js"
   }
 }

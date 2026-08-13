@@ -14,9 +14,11 @@ Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`]
 | `tools/lib/*` | Your machine | Sourced or imported by the entrypoints, never run directly. |
 | `test/*.test.js` | `node --test` | Unit tests for `lib/` and `tools/`. |
 
-**Every `lib/` module except `usage.js` must stay free of `gi://`.** Those six are imported by the Node test runner as well as the shell, and one `gi://` import makes the whole module untestable. `lib/usage.js` is the deliberate exception — it wraps Soup and Gio for HTTP, and is consequently the one module with no unit tests, so keep it thin and put any decision it would make into `policy.js` instead. When you want a unit test for logic stuck inside `extension.js`, move the logic to `lib/` first; that is the intended direction of travel.
+**Every `lib/` module except `usage.js` must stay free of `gi://`.** All of them are imported by the Node test runner as well as the shell, and one `gi://` import makes the whole module untestable. `lib/usage.js` is the deliberate exception — it wraps Soup and Gio for HTTP, and is consequently the one module with no unit tests, so keep it thin and put any decision it would make into `policy.js` instead. When you want a unit test for logic stuck inside `extension.js`, move the logic to `lib/` first; that is the intended direction of travel.
 
-Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_blockedUntil`, `_refreshing`, `_fetchedAt`) are the truth, and `_render()` derives every actor from them. Never mutate an actor outside a render path; set the state and re-render.
+Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_block`, `_refreshing`, `_fetchedAt`) are the truth, and `_render()` derives every actor from them. Never mutate an actor outside a render path; set the state and re-render.
+
+`_block` is one object (`{until, reason}`) or `null`, deliberately: it was briefly two fields and the harness caught them out of sync on the first run.
 
 ## Checking your work
 
@@ -43,6 +45,10 @@ A bare `npm run e2e` now shoots every scenario in both themes by default — 24 
 
 `npm run dev` and `npm run dev:watch` run a throwaway nested shell for interactive work. Reach for a headless `--capture` when you only need to see a result; a windowed session is for behaviour a human has to drive, and `--watch` refuses to attach to a session someone else already owns.
 
+**A nested session spends no requests, and it must stay that way.** It runs with a `HOME` of its own holding no credentials, so the startup fetch is refused before a socket opens; scenarios are fabricated and `--live` reads your cached `usage.json` rather than the endpoint. If you add a code path that fetches for real, you are reintroducing the thing that made the tooling outspend the product three to one — `docs/development.md` § The tooling spends nothing has the measurements. The check is cheap: `wc -l ~/.cache/claude-quota/attempts.jsonl` before and after a run, and it must not move.
+
+`npm run logs` prints what the extension actually exchanged with the two endpoints — every request and every one it declined to send, with statuses, `retry-after`, and error bodies. **Reach for it before theorising about a refusal**, and before adding instrumentation: it is already recording, and `--all --runs` shows a bad morning in a dozen lines. `docs/development.md` § Reading the exchange log carries the fields and the redaction rule; § Rate limits carries the two measured limiters and why a `401` is the expensive one.
+
 `README.md` § Development is the user-facing reference for all of these and their flags. Update it in the same change when you alter a flag or add a script.
 
 ## Behave like the platform
@@ -64,5 +70,7 @@ Suppressing a shell behaviour to satisfy a measurement is the wrong trade in bot
 **Editing a running `.sh` corrupts it.** Bash re-reads the script by byte offset, so stop a watcher (`npm run dev:watch`) before editing `tools/preview.sh`.
 
 **`preview/` is gitignored.** The screenshots are local artifacts whose exact dimensions shift with the live quota text, and a full run deletes them all before it starts.
+
+**Retrying a `401` is the one mistake that costs an hour.** Three consecutive auth failures and the endpoint blocks the account for 3600 s, so anything that polls has to check `expiresAt` before spending a request, and treat a server `401` as a reason to back off rather than a reason to try again in five minutes. The block is scoped to the token that earned it, so a newly written `~/.claude/.credentials.json` ends it — which is why the extension watches that file rather than waiting the hour out. `docs/development.md` § Rate limits has the measurements.
 
 **Verify against a real shell, not by reading the code.** Shell widget behaviour is frequently not what the API names suggest: `hover: false` on a menu item does not stop the `:hover` pseudo-class (that is `track_hover`), overriding `activate()` does not stop the menu closing (the `activate` *signal* does that), and `warp_pointer` silently does nothing under the devkit backend. Assert the property back over `Eval` before believing a fix.

@@ -8,10 +8,13 @@ RUNTIME_ROOT="${CLAUDE_QUOTA_RUNTIME:-${XDG_RUNTIME_DIR:-/tmp}/claude-quota}"
 use_session() {
     RUN="$RUNTIME_ROOT/$1"
     CFG="$RUN/config"
+    SANDBOX_HOME="$RUN/home"
     BUS_FILE="$RUN/bus"
     PID_FILE="$RUN/pid"
     LOG="$RUN/shell.log"
     STATE_FILE="$RUN/state"
+    HOST_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/claude-quota/usage.json"
+    SANDBOX_CACHE="$SANDBOX_HOME/.cache/claude-quota/usage.json"
 }
 
 session_live() {
@@ -132,14 +135,34 @@ backend_args() {
     fi
 }
 
+# The nested shell gets a HOME of its own so the extension finds no credentials
+# there and cannot spend a request at startup — three consecutive 401s earn the
+# account an hour's block, and the tooling used to outspend the product three to
+# one. It also keeps the token out of the nested session altogether, and sends its
+# cache and attempt log to the sandbox instead of over the host's evidence.
+prepare_home() {
+    mkdir -p "$SANDBOX_HOME/.local/share/gnome-shell/extensions"
+    ln -sfn "$ROOT" "$SANDBOX_HOME/.local/share/gnome-shell/extensions/$UUID"
+}
+
+seed_cache() {
+    mkdir -p "$(dirname "$SANDBOX_CACHE")"
+    cp "$1" "$SANDBOX_CACHE"
+}
+
+host_cache_path() {
+    printf '%s\n' "$HOST_CACHE"
+}
+
 # XDG_CONFIG_HOME does not sandbox dconf, so a write hoisted out of this
 # dbus-run-session lands in the live session's database instead.
 start_shell() {
     mkdir -p "$RUN"
+    prepare_home
     local backend
     mapfile -t backend < <(backend_args)
     # shellcheck disable=SC2016
-    XDG_CONFIG_HOME="$CFG" dbus-run-session -- bash -c '
+    HOME="$SANDBOX_HOME" XDG_CONFIG_HOME="$CFG" dbus-run-session -- bash -c '
         echo "$DBUS_SESSION_BUS_ADDRESS" > "$1"
         echo $$ > "$2"
         dconf write /org/gnome/shell/enabled-extensions "['"'"'$3'"'"']"
@@ -152,9 +175,9 @@ start_shell() {
         eval "$4"
         exec gnome-shell "${@:5}" --unsafe-mode
     ' _ "$BUS_FILE" "$PID_FILE" "$UUID" "$DEVKIT_SETUP" "${backend[@]}" >"$LOG" 2>&1 &
-    for _ in $(seq 60); do
+    for _ in $(seq 300); do
         [ -s "$BUS_FILE" ] && break
-        sleep 1
+        sleep 0.2
     done
     [ -s "$BUS_FILE" ] || die 'shell never published a bus address'
     DBUS_SESSION_BUS_ADDRESS="$(cat "$BUS_FILE")"
@@ -164,6 +187,44 @@ start_shell() {
 shell_eval() {
     gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
         --method org.gnome.Shell.Eval "$1" 2>/dev/null
+}
+
+eval_json() {
+    shell_eval "JSON.stringify($1)" | unwrap
+}
+
+# Eval answers from the actor tree while a screenshot reads the framebuffer, so a
+# change is observable over D-Bus several frames before it is on screen.
+await_paint() {
+    sleep 0.05
+}
+
+STYLE_SETTLE=''
+
+# Hover and open both repaint the panel button through a CSS transition, so a shot
+# taken before it lands catches a colour that belongs to neither state.
+await_style() {
+    [ -n "$STYLE_SETTLE" ] || STYLE_SETTLE="$(style_settle_seconds)"
+    sleep "$STYLE_SETTLE"
+}
+
+style_settle_seconds() {
+    if [ "$(eval_json "imports.gi.St.Settings.get().enable_animations")" = 'true' ]; then
+        awk -v ms="$(eval_json "Main.panel.statusArea['$UUID'].get_theme_node().get_transition_duration()")" \
+            'BEGIN { print (ms + 16) / 1000 }'
+    else
+        echo 0.05
+    fi
+}
+
+set_animations() {
+    XDG_CONFIG_HOME="$CFG" gsettings set org.gnome.desktop.interface enable-animations "$1"
+    STYLE_SETTLE=''
+    await_paint
+}
+
+elapsed_since() {
+    awk -v started="$1" -v now="$(date +%s%N)" 'BEGIN { printf "%.1f", (now - started) / 1000000000 }'
 }
 
 shell_settle() {
@@ -179,25 +240,34 @@ is_true() {
 }
 
 wait_for_indicator() {
-    for _ in $(seq 60); do
+    for _ in $(seq 240); do
         is_true "$(shell_eval "Object.keys(Main.panel.statusArea).includes('$UUID').toString()")" &&
             return 0
-        sleep 1
+        sleep 0.25
     done
     die "indicator $UUID never appeared"
 }
 
+# The shell opens the overview again a second or so into startup, well after the
+# indicator appears, and a hide issued while that show animates is swallowed — as is
+# one from a 'showing' or 'shown' handler, and clearing sessionMode.hasOverview does
+# not stop it either. Taking show away is what holds; the loop still hides, for an
+# overview already on its way up. The original is kept so a session driven by hand can
+# put it back.
 hide_overview() {
-    local stable=0
-    for _ in $(seq 30); do
+    shell_eval "globalThis._cqOverviewShow ??= Main.overview.show.bind(Main.overview);
+        Main.overview.show = () => {};
+        'ok'" >/dev/null
+    local quiet=0
+    for _ in $(seq 150); do
         if is_true "$(shell_eval 'Main.overview.visible.toString()')"; then
-            stable=0
+            quiet=0
             shell_eval "Main.overview.hide(); 'ok'" >/dev/null
         else
-            stable=$((stable + 1))
-            [ "$stable" -ge 3 ] && return 0
+            quiet=$((quiet + 1))
+            [ "$quiet" -ge 5 ] && return 0
         fi
-        sleep 1
+        sleep 0.2
     done
     echo "$DEVKIT_NAME: overview would not stay hidden" >&2
 }

@@ -37,7 +37,7 @@ tools/preview.sh --dark --scenario=loading
 
 `preview.sh` owns one named nested shell — `preview` by default — and sets the shape of the extension inside it: theme, scenario, popup position. It runs a throwaway shell, so it picks up changed `extension.js` without a logout, and a fabricated scenario never calls the usage endpoint.
 
-Recalled while that session is up, from another terminal or as `--watch`'s own restart, it changes the shape live instead of tearing the shell down and starting a new one. **An option you leave out is left alone** — `tools/preview.sh --light` repaints and changes nothing else, whatever theme, scenario or popup position was last applied. On a fresh session the flags' own defaults apply: windowed, live data, popup closed. `--stop` tears the named session down.
+Recalled while that session is up, from another terminal or as `--watch`'s own restart, it changes the shape live instead of tearing the shell down and starting a new one. **An option you leave out is left alone** — `tools/preview.sh --light` repaints and changes nothing else, whatever theme, scenario or popup position was last applied. On a fresh session the flags' own defaults apply: windowed, your last-cached values, popup closed. `--stop` tears the named session down.
 
 `--capture` writes the canonical three-state tile — resting, hovered, pressed-with-popup-open, stacked into one PNG — to `preview/<theme>-<scenario>.png` and prints that path, so the form for a screenshot while nobody is watching is:
 
@@ -46,6 +46,8 @@ tools/preview.sh --headless --detach --scenario=loading --capture
 ```
 
 headless because a window is for a human, detached because the call should return, not block.
+
+**The overview cannot open in a nested session, deliberately.** The shell opens it again a second or so into startup, long after the indicator appears, and a hide issued while that show animates is swallowed — as is one from a `showing` or `shown` handler, and clearing `sessionMode.hasOverview` does not stop it either. So `hide_overview` takes `Main.overview.show` away for the life of the shell, which is what keeps it from drifting up over the panel mid-run and poisoning tiles. It applies to windowed sessions too, so Super and the Activities corner do nothing there. To get it back in a session you are driving by hand, restore the parked original over Eval: `Main.overview.show = globalThis._cqOverviewShow`.
 
 **Resize the devkit window and the emulated monitor follows it.** Dragging it from its native 1280x800 to 1862x1045 moved `Main.layoutManager.primaryMonitor` and the panel with it, live, no restart — which is how you widen a windowed session enough for a third quota to render without ellipses. There is no way to ask for a size in advance, though, and no way to set one from outside the session. Neither binary offers a geometry flag: `gnome-shell --help-all` pairs `--devkit` (no geometry) with `--virtual-monitor WxH` as independent options, and `mutter-devkit --help-all` has no options at all beyond GApplication boilerplate. `MUTTER_DEBUG_DUMMY_MODE_SPECS` does not exist in this system's libmutter at all — it belongs to the dummy/headless KMS backend, not the native backend `--devkit` uses, and setting it changes nothing. The only gschema, `org.gnome.mutter.devkit`, has a single key, `launchers`, unrelated to size. The nested session does export `org.gnome.Mutter.Devkit` on its bus, but introspection shows it carries no methods or signals — only a read-only `Env` property — and exposes no `org.gtk.Actions` interface, so the window's own Monitors menu cannot be driven from outside either. Pairing the two flags does not help: `gnome-shell --devkit --virtual-monitor 1440x900` yields *two* monitors, `1440x900` as the primary and the native `1280x800` as the one the viewer actually shows, so the extension's panel lands on a display the window never renders — which is why the harness offers no size flag for `--windowed`: the only thing that sizes that window is the pointer. The headless backend has no such gap: it takes its size from `--virtual-monitor`, set to `1440x900` in `DEVKIT_MONITOR` (`tools/lib/devkit.sh`), so a fresh windowed session starts narrower than a headless capture of the same state until you drag it.
 
@@ -99,7 +101,7 @@ The attempt-log control is the one break that runs real code rather than mutatin
 
 ## Attributing a 429
 
-Every upstream attempt appends one JSON object to `~/.cache/claude-quota/attempts.jsonl`, beside the cache: the instant, the trigger (`startup`, `timer`, `manual`, `popup-stale`), the outcome, the HTTP status, the `retry-after` and whatever `anthropic-ratelimit-*` headers the response carried. No token, no request body, no response body — `lib/attempts.js` keeps header names by prefix, so an unfamiliar credential header is dropped without having to be anticipated, and `test/attempts.test.js` asserts a record built from a response carrying an `Authorization` header holds no part of it. The file is capped at 2000 records, trimmed on write.
+Every upstream attempt appends one JSON object to `~/.cache/claude-quota/attempts.jsonl`, beside the cache — see § Reading the exchange log for the fields and the reader. The file is capped at 2000 records, trimmed on write.
 
 ```bash
 npm run attribution                  # or: node tools/quota-attribution.js --window=20
@@ -113,11 +115,53 @@ Birth times come from `fs.statSync().birthtimeMs`. If any file reports `0` the t
 
 ## Rate limits
 
-The usage endpoint answers `429` with `retry-after: 119`, and every Claude extension on the machine shares that allowance. Do not poll it in a loop while debugging: a burst pins the window, and each retry inside it re-arms the limit. `lib/policy.js` exists to keep the extension itself out of that state.
+`/api/oauth/usage` has **two** limiters, and they are worth telling apart because only one of them is about how often you ask.
 
-`tools/preview.sh` stubs the indicator's `_refresh` before capturing, so the whole matrix costs at most the one fetch the shell makes at startup. `tools/e2e.sh` inherits that stub, and its refresh group — which has to remove it to make the button do anything — replaces `_fetchCycle` with a promise that never resolves, so asserting the spinner still spends nothing.
+| Trigger | Answer | Measured |
+| --- | --- | --- |
+| Request burst | `429`, `retry-after: 300` | the 6th request inside ~4 s; five in a row succeed |
+| Consecutive auth failures | `429`, `retry-after: 3600` | the 4th attempt after three `401`s five minutes apart |
 
-What is measured is the *recovery*, not the budget: a `429` asks for 119 s and 139 s of silence restored a `200`. Nothing observed so far reports how many requests the window allows, or how much of it the neighbouring extensions have already spent. Treat any interval shorter than `POLL_SECONDS` as unmeasured until a successful response is shown to carry `anthropic-ratelimit-*` headers — the attempts log records them whenever they appear, so § Attributing a 429 is where that answer will show up first. The first `200` recorded that way, on 2026-08-11, carried none at all: `rateLimitHeaders` came back `{}`. Whether a `429` carries them is still unobserved, and it is the one response that would settle the budget question outright.
+Measured 2026-08-13 against the live endpoint. No successful response has ever carried an `anthropic-ratelimit-*` header, so the allowance is not discoverable from a `200`; both figures above come from provoking the refusal and reading `retry-after`. The burst allowance is shared by everything on the machine holding the same token, Claude Code included, so a poll landing beside a Claude Code session start can be refused through no fault of its own.
+
+The hour-long one is the expensive mistake, and it is **caused by us, not suffered by us**: a token that has expired answers `401`, and a poller that keeps its five-minute cadence through three of them earns an hour in which nothing works. That is the whole of the morning failure recorded on 2026-08-13 — the token lapsed overnight, nothing refreshed it until Claude Code next ran, and by then the block had been armed.
+
+Three things keep the extension out of it, and each has a proof in the refresh group:
+
+- **`lib/credentials.js` reads `expiresAt` beside the token**, and `UsageClient.fetch` refuses to send at all once it is past — with a minute of skew, since a token that dies in flight answers `401` just the same. A declined attempt is logged as `token-expired` and arms no block, because only a new token can end the wait.
+- **A server `401` arms a block like a `429` does** (`blockReason` in `lib/policy.js`), so a token that is revoked rather than expired cannot be asked three times in fifteen minutes either. It does not claim the throttle line: `throttledUntil` hands that to a rate limit alone, so the popup says what is actually wrong.
+- **The block is scoped to the token that earned it**, which is why a `Gio.FileMonitor` on `~/.claude` watches for `.credentials.json` being replaced. A newer `expiresAt` means a newer token, and the block it cannot be subject to is dropped and a refresh runs at once. Without it the indicator waits out an hour that stopped applying the moment Claude Code wrote the file — 26 minutes of it, on the morning this was found. The monitor watches the *directory* because the file is replaced rather than edited, and a two-second settle collapses one replace's several events into one request.
+
+### The tooling spends nothing
+
+It used to spend more than the product did. On 2026-08-13 the log held **21 `startup` attempts against the extension's own 7 `timer` polls**: `_init` calls `_refresh('startup')` before any harness code can stub anything, so every nested session bought one request, and a run of them is what earned the burst `429`s.
+
+A nested shell now gets a **HOME of its own** (`$RUN/home`, `prepare_home` in `tools/lib/devkit.sh`), with this checkout symlinked into its `.local/share/gnome-shell/extensions` and no `.claude` in it. The startup fetch still happens; `readCredentials()` finds nothing and throws, so no socket is opened. The record it leaves says as much — `status: null, durationMs: null` is the signature of an attempt that never left the process. Cache and attempt log land in the sandbox too, so a nested run no longer writes over the evidence on the host.
+
+Measured after the change: a full `--assert` run adds **zero** records to the host log, against one per session before.
+
+Changing `HOME` moves the font cache, so it was checked rather than assumed: the same tile shot under the real and the sandboxed home differs by 14 pixels, while two shots **under the same code a minute apart** differ by 158 — the wall-clock digits in the captions are an order of magnitude noisier than the change. Identical tile dimensions are the load-bearing part, since a font fallback would shift text width and with it the crop.
+
+`--live` no longer means "let it fetch". It seeds the sandbox cache from the host's own `~/.cache/claude-quota/usage.json` and renders through `_loadCache()`, injected exactly like any other scenario — your real current values, no request. Absent that cache it dies if you asked for `--live` explicitly, and falls back to `--scenario=normal` with a line on stderr when it was merely the default, so fabricated numbers are never passed off as yours.
+
+Do not poll the endpoint in a loop while debugging: a burst pins the window, and each retry inside it re-arms it. `tools/preview.sh` also stubs the indicator's `_refresh` before capturing. `tools/e2e.sh` inherits that stub, and its refresh group — which has to remove it to make the button do anything — replaces `_fetchCycle` with a promise that never resolves, so asserting the spinner still spends nothing.
+
+## Reading the exchange log
+
+Every attempt against either endpoint appends one JSON object to `~/.cache/claude-quota/attempts.jsonl`, including the ones declined before a request was sent:
+
+```bash
+npm run logs                         # today, one line per exchange
+npm run logs -- --all --runs         # every record, consecutive outcomes collapsed
+npm run logs -- --detail             # response headers and error bodies too
+npm run logs -- --outcome=rate-limited --tail=20
+```
+
+A record carries the instant, the endpoint (`usage` or `status`), the trigger (`startup`, `timer`, `manual`, `popup-stale`, `credentials`), the outcome (`ok`, `rate-limited`, `unauthorized`, `token-expired`, `error`), the HTTP status, the `retry-after`, the round trip in milliseconds, the token expiry known at request time, the response headers worth keeping, and the response body of anything that failed.
+
+Two deliberate omissions. **Headers are kept by allowlist, never by denylist** — `content-type`, `request-id`, `retry-after`, `x-should-retry` and the `anthropic-ratelimit-*` / `ratelimit-*` families — because a denylist leaks the one credential-bearing header nobody anticipated, and `test/attempts.test.js` asserts a record built from a response carrying an `Authorization` header holds no part of it. **A successful body is dropped**, since the quota payload is already in the cache file and logging it again would push the failures that matter out of the 2000-record window.
+
+The log is what diagnosed the 2026-08-13 morning failure after the fact, from a shell that had already been restarted twice. Reach for it before theorising: `--runs` shows the shape of a bad morning in a dozen lines.
 
 ## Popup actions
 

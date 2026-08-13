@@ -112,6 +112,8 @@ npm run dev:watch    # same, restarted on every source edit
 
 This needs the extension installed as a symlink to *this* checkout, as in the second install recipe above; `preview.sh` refuses to start otherwise rather than silently running some other copy.
 
+The nested session runs with a home directory of its own, holding no credentials, so **it never calls the usage endpoint** — scenarios are fabricated, and `--live` renders the values your own panel last cached. Nothing you run here spends a request or touches your real cache.
+
 Both are thin wrappers. Pass flags through `npm` with a `--` separator, or call the script directly:
 
 ```bash
@@ -126,7 +128,7 @@ tools/preview.sh --dark --scenario=loading
 | `--headless` | Run with no window, driven over D-Bus |
 | `--dark`, `--light` | Force a colour scheme |
 | `--scenario=<name>` | Render a fabricated state |
-| `--live` | Render real data (default) |
+| `--live` | Render your own last-cached values (default) — reads the cache, never the endpoint |
 | `--close` | Leave the popup closed and the pointer away (default) |
 | `--hover` | Leave the pointer on the panel button |
 | `--open` | Leave the popup open |
@@ -195,7 +197,15 @@ It wants `magick` and `node`, prints the pairs it measured per file and a total,
 
 It also measures the pace tick, which no screenshot can settle: a 2px mark inside a bar is a region by the scanner's own rules, so its four pairs come from the declared colours instead — the tick against the bar's fill and against its track, in both schemes, at the 3:1 WCAG threshold for a non-text mark. Those four print with the rest and count towards the same exit code.
 
-`npm run attribution` answers a different question: when the usage endpoint starts refusing with `429`, what is spending the allowance. Every upstream attempt the extension makes appends one line to `~/.cache/claude-quota/attempts.jsonl` — the instant, what triggered it, the outcome, the status, the `retry-after` and any `anthropic-ratelimit-*` headers, and never a token or a body. The tool joins that against Claude Code's own session starts, taken from transcript birth times and metadata only, and prints both per hour with a verdict:
+`npm run logs` shows what the extension actually exchanged with the two endpoints. Every attempt appends one line to `~/.cache/claude-quota/attempts.jsonl`, including the ones declined before a request was sent — the instant, the endpoint, what triggered it, the outcome, the status, the `retry-after`, the round trip, the token expiry known at the time, the response headers worth keeping and the body of anything that failed. Never a token: headers are kept by allowlist, so an unfamiliar credential header is dropped without having to be anticipated.
+
+```bash
+npm run logs                              # today, one line per exchange
+npm run logs -- --all --runs              # consecutive outcomes collapsed into runs
+npm run logs -- --detail                  # headers and error bodies too
+```
+
+`npm run attribution` answers a different question over the same log: when the usage endpoint starts refusing with `429`, what is spending the allowance. It joins the log against Claude Code's own session starts, taken from transcript birth times and metadata only, and prints both per hour with a verdict:
 
 ```bash
 npm run attribution                       # ±10 minutes around a session start

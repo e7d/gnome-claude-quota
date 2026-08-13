@@ -6,16 +6,42 @@ import {
     POLL_SECONDS,
     RATE_LIMIT_CAP_SECONDS,
     RATE_LIMIT_FLOOR_SECONDS,
+    RATE_LIMIT,
     SERVICE_ERROR,
+    UNAUTHORIZED,
+    blockReason,
     isBlocked,
     rateLimitBlock,
     markExpired,
     nextPollSeconds,
     serviceIssue,
     shouldFetchOnOpen,
+    throttledUntil,
 } from '../lib/policy.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
+
+test('a refusal from the server arms a block whichever refusal it was', () => {
+    assert.equal(blockReason({rateLimited: true, status: 429}), RATE_LIMIT);
+    assert.equal(blockReason({rateLimited: false, status: 401}), UNAUTHORIZED);
+});
+
+test('declining to send on a token we know is expired arms no block', () => {
+    assert.equal(blockReason({rateLimited: false, expired: true, status: null}), null);
+});
+
+test('an ordinary failure arms no block', () => {
+    assert.equal(blockReason({rateLimited: false, status: 503}), null);
+    assert.equal(blockReason({rateLimited: false, status: null}), null);
+});
+
+test('only a rate limit may claim the throttle line', () => {
+    const until = new Date('2026-08-04T08:51:00Z');
+    assert.equal(throttledUntil({until, reason: RATE_LIMIT}), until);
+    assert.equal(throttledUntil({until, reason: UNAUTHORIZED}), null);
+    assert.equal(throttledUntil(null), null);
+    assert.equal(throttledUntil(undefined), null);
+});
 
 test('nextPollSeconds falls back to the steady-state interval without a retry-after', () => {
     assert.equal(nextPollSeconds(null), POLL_SECONDS);

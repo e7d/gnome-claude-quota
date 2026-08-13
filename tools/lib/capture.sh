@@ -36,33 +36,31 @@ shoot() {
         "$@" false "$path" >/dev/null || die "screenshot failed for $path"
 }
 
-# An already-open menu never repositions itself, so without this cycle the measured
-# crop belongs to the previous scenario's narrower panel button.
+# An already-open menu neither repositions nor reallocates itself, so the cycle below
+# is what stops it being drawn against the previous scenario's panel button — measured
+# 305px out. The pointer moves before the menu opens, never after: a motion landing
+# inside an open menu closes it.
 capture() {
-    local name="$1" box rect panel
+    local name="$1" box rect panel started
+    started="$(date +%s%N)"
     close_menu
-    sleep 1
+    point_at pill
     open_menu
-    sleep 1
     box="$(popup_box)"
     [ -n "$box" ] || die "could not measure the popup for $name"
     read -r -a rect <<<"$box"
     panel="$(panel_height)"
-    close_menu
-    sleep 1
-    point_at away
-    sleep 1
-    shoot "$RUN/closed.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
-    point_at pill
-    sleep 1
-    shoot "$RUN/hovered.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
-    open_menu
-    sleep 1
-    [ "$(popup_box)" = "$box" ] || die "the popup moved between measuring and shooting $name"
+    await_style
     shoot "$RUN/open.png" "${rect[@]}"
+    close_menu
+    await_style
+    shoot "$RUN/hovered.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
+    point_at away
+    shoot "$RUN/closed.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
     magick "$RUN/closed.png" "$RUN/hovered.png" "$RUN/open.png" \
         -background none -smush 8 "$OUT/$name.png"
     SHOTS+=("$OUT/$name.png")
+    printf '  capture %s %ss\n' "$name" "$(elapsed_since "$started")" >&2
     echo "$OUT/$name.png"
 }
 

@@ -14,6 +14,7 @@ DEVKIT_HEADLESS=0
 SESSION='preview'
 WANT_THEME=''
 WANT_DATA=''
+DATA_EXPLICIT=0
 WANT_POPUP=''
 WANT_BACKEND=''
 DETACH=0
@@ -34,7 +35,7 @@ Options:
   --headless         Run with no window, driven over D-Bus
   --dark, --light    Force a colour scheme
   --scenario=<name>  Render a fabricated state
-  --live             Render real data (default)
+  --live             Render your own last-cached values (default; issues no request)
   --close            Leave the popup closed and the pointer away (default)
   --hover            Leave the pointer on the panel button
   --open             Leave the popup open
@@ -62,7 +63,7 @@ for arg in "$@"; do
         --headless) WANT_BACKEND=headless ;;
         --dark|--light) WANT_THEME="${arg#--}" ;;
         --scenario=*) WANT_DATA="${arg#*=}"; PICKED=("${arg#*=}") ;;
-        --live) WANT_DATA=live ;;
+        --live) WANT_DATA=live; DATA_EXPLICIT=1 ;;
         --close|--hover|--open) WANT_POPUP="${arg#--}" ;;
         --capture) CAPTURE=1 ;;
         --detach) DETACH=1 ;;
@@ -79,14 +80,28 @@ apply_theme() {
     state_set theme "$WANT_THEME"
 }
 
+# Showing real values means the ones the extension last cached, injected like any
+# other scenario. It used to mean un-stubbing _refresh, which spent a request per
+# session — 21 of them in one afternoon against the product's 7.
+seed_live_cache() {
+    local cache
+    cache="$(host_cache_path)"
+    if [ -s "$cache" ]; then
+        seed_cache "$cache"
+        return 0
+    fi
+    [ "$DATA_EXPLICIT" -eq 1 ] &&
+        die "--live needs $cache: open the popup on your own panel once, so a fetch is cached"
+    echo "$DEVKIT_NAME: no cached usage at $cache — showing --scenario=normal instead" >&2
+    WANT_DATA=normal
+    return 0
+}
+
 apply_data() {
     [ -n "$WANT_DATA" ] || return 0
-    if [ "$WANT_DATA" = 'live' ]; then
-        unfreeze
-    else
-        freeze
-        render_state "$WANT_DATA"
-    fi
+    freeze
+    [ "$WANT_DATA" = 'live' ] && seed_live_cache
+    render_state "$WANT_DATA"
     state_set data "$WANT_DATA"
 }
 

@@ -39,9 +39,19 @@ function nearAnyStart(at, sessionStarts, windowMs) {
     return sessionStarts.some(start => Math.abs(at - start) <= windowMs);
 }
 
+const RATE_LIMIT_PREFIXES = ['anthropic-ratelimit-', 'ratelimit-', 'x-ratelimit-'];
+
+// The log keeps every header worth keeping, of which the allowance-bearing ones are
+// a subset — counting a request-id as one would report a budget nobody stated.
+// Records written before the field was renamed carry the old name.
+function rateLimitOnly(headers) {
+    return Object.fromEntries(Object.entries(headers)
+        .filter(([name]) => RATE_LIMIT_PREFIXES.some(prefix => name.startsWith(prefix))));
+}
+
 function headersFrom(limitedAttempts) {
     return limitedAttempts
-        .map(({record}) => record.rateLimitHeaders ?? {})
+        .map(({record}) => rateLimitOnly(record.headers ?? record.rateLimitHeaders ?? {}))
         .findLast(headers => Object.keys(headers).length > 0) ?? {};
 }
 

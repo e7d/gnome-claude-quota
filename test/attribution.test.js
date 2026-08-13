@@ -8,7 +8,11 @@ function attempt(ts, overrides = {}) {
 }
 
 function limited(ts, headers = {}) {
-    return attempt(ts, {outcome: 'rate-limited', status: 429, retryAfter: 119, rateLimitHeaders: headers});
+    return attempt(ts, {outcome: 'rate-limited', status: 429, retryAfter: 119, headers});
+}
+
+function legacyLimited(ts, rateLimitHeaders) {
+    return attempt(ts, {outcome: 'rate-limited', status: 429, retryAfter: 119, rateLimitHeaders, headers: undefined});
 }
 
 function at(hour, minute = 0) {
@@ -42,6 +46,22 @@ test('rate-limit headers on a 429 answer the question directly', () => {
         'anthropic-ratelimit-requests-reset': '2026-08-11T12:00:00Z',
     };
     const answer = verdict({attempts: [attempt(at(9)), limited(at(10), headers)], sessionStarts: []});
+    assert.equal(answer.label, 'rate-limit-headers');
+    assert.deepEqual(answer.headers, headers);
+});
+
+test('a header that states no allowance does not pass as one', () => {
+    const answer = verdict({
+        attempts: [attempt(at(9)), limited(at(10), {'retry-after': '3600', 'request-id': 'req_123'})],
+        sessionStarts: [],
+    });
+    assert.notEqual(answer.label, 'rate-limit-headers');
+    assert.deepEqual(answer.headers, {});
+});
+
+test('a record written before the header field was renamed still answers', () => {
+    const headers = {'anthropic-ratelimit-requests-remaining': '0'};
+    const answer = verdict({attempts: [attempt(at(9)), legacyLimited(at(10), headers)], sessionStarts: []});
     assert.equal(answer.label, 'rate-limit-headers');
     assert.deepEqual(answer.headers, headers);
 });

@@ -61,19 +61,18 @@
     font-weight: 500;
 }
 
+/* The shadow is depth, not contrast: it sits the tick above the bar rather than in it,
+   so both schemes carry the same one. */
 .cq-bar {
     height: 12px;
     -barlevel-height: 6px;
     -cq-tick-width: 2px;
-}
-
-/* A white tick on the fill is the weakest of the four pairs a11y measures, so it is
-   the one carrying a shadow; the light scheme's black tick gains nothing from a
-   black band beside it and only reads thicker for it. */
-.cq-bar-dark {
-    color: #ffffff;
     -cq-tick-shadow-width: 1px;
     -cq-tick-shadow-color: rgba(0, 0, 0, 0.3);
+}
+
+.cq-bar-dark {
+    color: #ffffff;
     -barlevel-background-color: rgba(255, 255, 255, 0.1);
     -barlevel-active-background-color: #d97757;
 }
