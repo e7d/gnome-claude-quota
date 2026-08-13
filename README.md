@@ -39,6 +39,8 @@ The popup displays the remaining time until each quota resets.
 
 The extension polls every 5 minutes, and again when you open the popup if the cached data is more than a minute old.
 
+Before asking the endpoint anything, it looks at Claude Code's own cache. Claude Code stores the same payload in `~/.claude.json` and refreshes it whenever you open its usage view, so if its copy is newer than ours, the extension adopts it and sends nothing — the two tools share one set of numbers instead of each buying their own. It is read-only: the extension never writes to that file. A copy belonging to a different account, or one with no readable timestamp, is ignored rather than trusted.
+
 Whatever asks — the timer, the popup, the button — **no two requests go out less than 2 minutes apart**. The allowance is five requests per five minutes and it is shared with Claude Code itself, so the extension keeps to a share of it rather than racing for the window. A request refused by that floor is not dropped: it is scheduled for the moment the floor lifts, so opening the popup on minute-old data does bring the next poll forward, just no closer than the floor allows.
 
 The popup's first line carries `Last refresh: 10:48 AM` with a circular-arrow button on the right. Clicking it polls and **leaves the popup open**, so the numbers land in front of you. The icon spins while the poll is in flight and the button is insensitive until it finishes, so a poll cannot be fired twice.

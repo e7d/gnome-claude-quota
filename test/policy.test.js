@@ -12,16 +12,48 @@ import {
     UNAUTHORIZED,
     blockReason,
     isBlocked,
+    maxAgeFor,
     minIntervalWait,
     rateLimitBlock,
     markExpired,
     nextPollSeconds,
+    pollDelay,
     serviceIssue,
     shouldFetchOnOpen,
     throttledUntil,
 } from '../lib/policy.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
+
+test('a manual click always sends, however fresh the numbers are', () => {
+    assert.equal(maxAgeFor('manual'), 0);
+    assert.equal(pollDelay(now, now, maxAgeFor('manual')), 0);
+});
+
+test('a popup open accepts data up to the open-refresh age', () => {
+    assert.equal(maxAgeFor('popup-stale'), OPEN_REFRESH_SECONDS);
+});
+
+test('every other trigger accepts data up to the poll interval', () => {
+    assert.equal(maxAgeFor('timer'), POLL_SECONDS);
+    assert.equal(maxAgeFor('startup'), POLL_SECONDS);
+    assert.equal(maxAgeFor('credentials'), POLL_SECONDS);
+    assert.equal(maxAgeFor(undefined), POLL_SECONDS);
+});
+
+test('data younger than the trigger accepts is left alone, and the wait is its remainder', () => {
+    assert.equal(pollDelay(new Date(now.getTime() - 100_000), now, POLL_SECONDS), 200);
+});
+
+test('data at or past the age the trigger accepts calls for a request', () => {
+    assert.equal(pollDelay(new Date(now.getTime() - POLL_SECONDS * 1000), now, POLL_SECONDS), 0);
+    assert.equal(pollDelay(new Date(now.getTime() - 3_600_000), now, POLL_SECONDS), 0);
+});
+
+test('holding nothing calls for a request whatever the trigger', () => {
+    assert.equal(pollDelay(null, now, POLL_SECONDS), 0);
+    assert.equal(pollDelay(new Date('nonsense'), now, POLL_SECONDS), 0);
+});
 
 test('the first request of a session waits for nothing', () => {
     assert.equal(minIntervalWait(null, now), 0);

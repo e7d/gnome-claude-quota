@@ -516,13 +516,16 @@ restore_attempt_log() {
     ATTEMPTS_LOG=''
 }
 
-# A 429 arms _block and every send starts the minimum interval, and a _refresh
-# stopped by either makes no upstream attempt and therefore no record — so both
-# gates are cleared before each deliberate attempt.
+# Three things stop a _refresh short of an upstream attempt, and any of them
+# leaves the log unchanged, which reads as a dead assertion: an armed block, the
+# minimum interval, and data too fresh for the trigger to want more. All three are
+# cleared before each deliberate attempt.
 log_attempt() {
     local before
     before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
-    shell_eval "$IND._block = null; $IND._lastRequestAt = null; $IND._refresh('$1'); 'ok'" >/dev/null
+    shell_eval "$IND._block = null; $IND._lastRequestAt = null;
+        $IND._fetchedAt = new Date(Date.now() - 3600000);
+        $IND._refresh('$1'); 'ok'" >/dev/null
     for _ in $(seq 100); do
         [ "$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)" -gt "$before" ] && return 0
         sleep 0.1
@@ -605,6 +608,49 @@ assert_credentials_wake() {
         "$(probe "globalThis._wokeWith === 'credentials'")"
 }
 
+# Adoption is tried before the block and the interval, so a fresher shared cache
+# has to satisfy a refresh that would otherwise have spent a request.
+stub_shared_usage() {
+    shell_eval "$IND._sharedUsage = () => ({
+        fetchedAt: new Date(),
+        limits: [{kind: 'session', group: 'session', percent: 41, severity: 'normal',
+                  resets_at: new Date(Date.now() + 3600000).toISOString(), scope: null}],
+    });
+    $IND._block = null; $IND._lastRequestAt = null; $IND._fetchedAt = new Date(Date.now() - 3600000);
+    'ok'" >/dev/null
+}
+
+stub_stale_shared_usage() {
+    shell_eval "$IND._sharedUsage = () => null;
+    $IND._block = null; $IND._lastRequestAt = null; $IND._fetchedAt = new Date(Date.now() - 3600000);
+    'ok'" >/dev/null
+}
+
+assert_shared_adopted() {
+    local before after
+    before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    shell_eval "$IND._refresh('timer'); 'ok'" >/dev/null
+    sleep 1
+    after="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    assert_eq 'a fresher shared cache is adopted' '41' "$(probe "$IND._quotas[0].percent")"
+    assert_eq 'adopting spends no request' 'true' "$(probe "$IND._lastRequestAt === null")"
+    assert_eq 'the adoption is recorded' 'adopted' \
+        "$(tail -n 1 "$ATTEMPTS_LOG" | sed -n 's/.*"outcome":"\([^"]*\)".*/\1/p')"
+    assert_ne 'the adoption reached the log' "$before" "$after"
+}
+
+restore_shared_usage() {
+    shell_eval "delete $IND._sharedUsage; $IND._block = null; 'ok'" >/dev/null
+}
+
+prove_shared_adoption() {
+    stub_shared_usage
+    prove 'a fresher shared cache is used instead of a request' \
+        stub_stale_shared_usage \
+        stub_shared_usage \
+        assert_shared_adopted
+}
+
 stub_reachable_endpoint() {
     shell_eval "$IND._client.fetch = () => Promise.reject(Object.assign(
         new Error('Cannot reach api.anthropic.com'),
@@ -682,6 +728,9 @@ group_refresh() {
     stub_attempt_log
     prove_attempt_log
     assert_attempt_logged
+    prove_shared_adoption
+    assert_shared_adopted
+    restore_shared_usage
     prove_request_floor
     assert_floor_holds
     prove_credentials_recovery

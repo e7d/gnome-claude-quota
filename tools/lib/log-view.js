@@ -1,4 +1,4 @@
-export const OUTCOMES = ['ok', 'rate-limited', 'unauthorized', 'token-expired', 'error'];
+export const OUTCOMES = ['ok', 'adopted', 'rate-limited', 'unauthorized', 'token-expired', 'error'];
 
 export function selectRecords(records, {since, until, outcome, endpoint, tail} = {}) {
     const kept = records.filter(record => record.ts >= (since ?? '')

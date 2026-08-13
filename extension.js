@@ -15,13 +15,14 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
+import {fresherThan} from './lib/shared-usage.js';
 import {captionLine, percentLine, rateLimitMessage, refreshLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
-import {blockReason, isBlocked, markExpired, minIntervalWait, nextPollSeconds, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
-import {StatusClient, UsageClient, credentialExpiry, credentialsPath} from './lib/usage.js';
+import {blockReason, isBlocked, markExpired, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
+import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
@@ -369,8 +370,47 @@ class Indicator extends PanelMenu.Button {
         });
     }
 
+    _sharedUsage() {
+        return sharedUsage();
+    }
+
+    // Claude Code holds the same payload under its own cache, so whichever of the
+    // two was fetched later is the one worth showing — and adopting it costs no
+    // request, which is why it is tried before the block and the interval.
+    _adoptShared(now) {
+        const shared = this._sharedUsage();
+        if (!fresherThan(shared, this._fetchedAt))
+            return;
+        this._limits = shared.limits;
+        this._quotas = quotas({limits: shared.limits}, now);
+        this._error = null;
+        this._serviceStatus = null;
+        this._fetchedAt = shared.fetchedAt;
+        this._saveCache();
+        this._appendAttempt(attemptRecord({
+            now,
+            trigger: 'shared',
+            endpoint: 'claude-code',
+            outcome: 'adopted',
+            status: null,
+            retryAfter: null,
+            durationMs: null,
+            tokenExpiresAt: null,
+            tokenExpired: false,
+            headers: {},
+            body: null,
+        }));
+    }
+
     async _refresh(trigger) {
         const now = new Date();
+        this._adoptShared(now);
+        const settled = pollDelay(this._fetchedAt, now, maxAgeFor(trigger));
+        if (settled > 0) {
+            this._scheduleNext(settled);
+            this._renderSafely();
+            return;
+        }
         if (isBlocked(this._block?.until, now)) {
             this._scheduleNext(nextPollSeconds((this._block.until - now) / 1000));
             this._render();
