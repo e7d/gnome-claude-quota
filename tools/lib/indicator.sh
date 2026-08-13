@@ -160,13 +160,18 @@ setup_for() {
     esac
 }
 
+fixture_locales() {
+    [ "$DEVKIT_LOCALE" = 'C' ] || return 0
+    printf "%s" "i._locale = 'en-US'; i._percentLocale = 'en-US';"
+}
+
 # The filler is dropped before the state is built and re-added after the render,
 # because sizing it needs the ladder of the state being rendered, not the last one's.
 render_state() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         $QUOTA
         $FILLER?.destroy(); $FILLER = null;
-        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._locale = 'en-US'; i._percentLocale = 'en-US';
+        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); $(fixture_locales)
         $(setup_for "$1")
         i.menu.open(false); i._render();
         $(squeeze_for "$1")
