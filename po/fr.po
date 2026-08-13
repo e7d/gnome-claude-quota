@@ -44,15 +44,15 @@ msgstr[1] "{m} min restantes"
 
 #: lib/format.js:90
 msgid "Last refresh: {time}"
-msgstr "Dernier relevé : {time}"
+msgstr "Dernière mise à jour : {time}"
 
 #: lib/format.js:99
 msgid "retry at {time}"
-msgstr "nouvel essai à {time}"
+msgstr "prochain essai à {time}"
 
 #: lib/format.js:100
 msgid "retry {time}"
-msgstr "nouvel essai {time}"
+msgstr "prochain essai {time}"
 
 #: lib/format.js:106
 msgid "until {time}"
@@ -118,8 +118,8 @@ msgstr "api.anthropic.com injoignable"
 
 #: lib/usage.js:117
 msgid "Usage request failed (HTTP {status})"
-msgstr "Échec de la requête d'usage (HTTP {status})"
+msgstr "Échec de la requête (HTTP {status})"
 
 #: lib/usage.js:124
 msgid "Unexpected response from the usage endpoint"
-msgstr "Réponse inattendue du point d'accès d'usage"
+msgstr "Réponse inattendue du point d'accès"
