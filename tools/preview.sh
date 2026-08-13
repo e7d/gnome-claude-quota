@@ -35,6 +35,7 @@ Options:
   --headless         Run with no window, driven over D-Bus
   --dark, --light    Force a colour scheme
   --scenario=<name>  Render a fabricated state
+  --locale=<tag>     Locale for the nested session (default C, e.g. fr_FR.UTF-8)
   --live             Render your own last-cached values (default; issues no request)
   --close            Leave the popup closed and the pointer away (default)
   --hover            Leave the pointer on the panel button
@@ -63,6 +64,7 @@ for arg in "$@"; do
         --headless) WANT_BACKEND=headless ;;
         --dark|--light) WANT_THEME="${arg#--}" ;;
         --scenario=*) WANT_DATA="${arg#*=}"; PICKED=("${arg#*=}") ;;
+        --locale=*) DEVKIT_LOCALE="${arg#*=}" ;;
         --live) WANT_DATA=live; DATA_EXPLICIT=1 ;;
         --close|--hover|--open) WANT_POPUP="${arg#--}" ;;
         --capture) CAPTURE=1 ;;

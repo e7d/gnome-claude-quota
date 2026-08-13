@@ -4,6 +4,7 @@ UUID='claude-quota@e7d.io'
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLED="$HOME/.local/share/gnome-shell/extensions/$UUID"
 RUNTIME_ROOT="${CLAUDE_QUOTA_RUNTIME:-${XDG_RUNTIME_DIR:-/tmp}/claude-quota}"
+DEVKIT_LOCALE="${DEVKIT_LOCALE:-C}"
 
 use_session() {
     RUN="$RUNTIME_ROOT/$1"
@@ -123,6 +124,7 @@ devkit_flag() {
     case "$1" in
         --headless) DEVKIT_HEADLESS=1 ;;
         --windowed) DEVKIT_HEADLESS=0 ;;
+        --locale=*) DEVKIT_LOCALE="${1#*=}" ;;
         *) return 1 ;;
     esac
 }
@@ -162,7 +164,8 @@ start_shell() {
     local backend
     mapfile -t backend < <(backend_args)
     # shellcheck disable=SC2016
-    HOME="$SANDBOX_HOME" XDG_CONFIG_HOME="$CFG" dbus-run-session -- bash -c '
+    HOME="$SANDBOX_HOME" XDG_CONFIG_HOME="$CFG" \
+    LANG="$DEVKIT_LOCALE" LC_ALL="$DEVKIT_LOCALE" dbus-run-session -- bash -c '
         echo "$DBUS_SESSION_BUS_ADDRESS" > "$1"
         echo $$ > "$2"
         dconf write /org/gnome/shell/enabled-extensions "['"'"'$3'"'"']"

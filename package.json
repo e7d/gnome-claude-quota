@@ -4,12 +4,14 @@
   "type": "module",
   "scripts": {
     "lint": "oxlint",
-    "test": "TZ=UTC node --test",
+    "test": "TZ=UTC LC_ALL=C node --test",
     "dev": "tools/preview.sh --windowed",
     "dev:watch": "tools/preview.sh --windowed --watch",
     "preview": "tools/preview.sh",
     "e2e": "tools/e2e.sh",
     "a11y": "tools/a11y.sh",
+    "i18n": "tools/i18n.sh",
+    "i18n:check": "tools/i18n.sh --check",
     "logs": "node tools/logs.js",
     "attribution": "node tools/quota-attribution.js"
   },
