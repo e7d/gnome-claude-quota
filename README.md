@@ -184,7 +184,7 @@ npm run e2e -- --assert                        # behaviour only, shoots nothing
 
 Groups: `state`, `panel`, `hover`, `refresh`, `lifecycle`. `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. `state` is what shoots the grid, so a run excluding it leaves `preview/` exactly as it was.
 
-Shooting every scenario is now the default, so a bare `npm run e2e` costs minutes — 29 scenarios in both themes is 58 tiles plus `overview.png`. The fast path while iterating is a narrowed run (`--group=`, `--scenario=`, `--dark-only`) or `--assert` when only behaviour, not pixels, is in question.
+Shooting every scenario is now the default, so a bare `npm run e2e` costs minutes — 31 scenarios in both themes is 62 tiles plus `overview.png`. The fast path while iterating is a narrowed run (`--group=`, `--scenario=`, `--dark-only`) or `--assert` when only behaviour, not pixels, is in question.
 
 Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
 
@@ -236,7 +236,7 @@ The screenshots need a whole GNOME session, so every step runs inside an image b
 
 Two of the waived pill greys exist only for CI. A shell running in a container paints the top bar transparent as soon as a pointer device exists, where the same GNOME on a workstation paints it opaque black — so CI shoots GNOME's pill over the desktop rather than over the panel, and lands on `#5e5e61` / `#46464a` instead of `#2b2b2b` / `#474747`. Everything else in the shots is byte-identical between the two, ink colours included. The cause sits inside GNOME's own panel styling; version, renderer, wallpaper, dconf, animation timing, colour scheme and session mode were each measured and excluded.
 
-The e2e step asserts all 29 scenarios in both themes and photographs ten of them: `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major`, `over-pace`, `rate-limited`, `rate-limited-day` and `no-data`. Between them they render every colour `a11y` can measure — each severity, the pace verdict, the status button, the error surface and the empty-state text. The scenarios left out differ in text rather than in colour, and photographing all 58 would cost minutes per run to say the same thing.
+The e2e step asserts all 31 scenarios in both themes and photographs ten of them: `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major`, `over-pace`, `rate-limited`, `rate-limited-day` and `no-data`. Between them they render every colour `a11y` can measure — each severity, the pace verdict, the status button, the error surface and the empty-state text. The scenarios left out differ in text rather than in colour, and photographing all 62 would cost minutes per run to say the same thing.
 
 It replaced a step that shot six of those scenarios and asserted nothing: the screenshots are never uploaded, so all a preview run could prove was that six states rendered without throwing. An assertion is a property read back over `Eval` and costs a fraction of a screenshot, so the same shell boot now checks every state and every interaction, and still produces the shots the contrast scan scores.
 

@@ -16,9 +16,9 @@ Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`]
 
 **Every `lib/` module except `usage.js` must stay free of `gi://`.** All of them are imported by the Node test runner as well as the shell, and one `gi://` import makes the whole module untestable. `lib/usage.js` is the deliberate exception — it wraps Soup and Gio for HTTP, and is consequently the one module with no unit tests, so keep it thin and put any decision it would make into `policy.js` instead. When you want a unit test for logic stuck inside `extension.js`, move the logic to `lib/` first; that is the intended direction of travel.
 
-Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_block`, `_refreshing`, `_fetchedAt`) are the truth, and `_render()` derives every actor from them. Never mutate an actor outside a render path; set the state and re-render.
+Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_service`, `_block`, `_refreshing`, `_fetchedAt`) are the truth, and `_render()` derives every actor from them. Never mutate an actor outside a render path; set the state and re-render.
 
-`_block` is one object (`{until, reason}`) or `null`, deliberately: it was briefly two fields and the harness caught them out of sync on the first run.
+`_block` is one object (`{until, reason}`) or `null`, deliberately: it was briefly two fields and the harness caught them out of sync on the first run. `_service` (`{status, until}` or `null`) follows the same rule for the same reason.
 
 ## Checking your work
 
@@ -39,7 +39,7 @@ Every screenshot stacks the panel button's three states: resting, hovered, then 
 
     npm run e2e -- --group=state --dark-only --scenario=loading
 
-A bare `npm run e2e` now shoots every scenario in both themes by default — 24 × 2, minutes rather than seconds. `--a11y` narrows the shoot to the ten scenarios `npm run a11y` scores; `--assert` shoots nothing at all, which is the form to reach for when only behaviour, not pixels, is in question. Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
+A bare `npm run e2e` now shoots every scenario in both themes by default — 31 × 2, minutes rather than seconds. `--a11y` narrows the shoot to the ten scenarios `npm run a11y` scores; `--assert` shoots nothing at all, which is the form to reach for when only behaviour, not pixels, is in question. Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
 
 `npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last capture or full e2e run — the e2e state group shoots the ten scenarios it scores, and a narrowed run leaves the rest as they were. It exits non-zero on a finding.
 

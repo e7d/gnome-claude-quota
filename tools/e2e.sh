@@ -141,12 +141,28 @@ assert_rate_limit_note() {
             === ($IND._block?.until > new Date())")"
 }
 
+assert_incident_window() {
+    assert_eq "$1 the incident line names an end exactly when the window has one" 'true' \
+        "$(probe "/until /.test($IND._issueItem.label.text)
+            === ($IND._issueItem.visible && $IND._service?.until > new Date())")"
+}
+
+# The popup is as wide as its widest item, so the incident line staying inside the
+# quota body is what keeps a named window from stretching every row that carries one.
+assert_incident_within_popup() {
+    assert_eq "$1 the incident line never widens the popup" 'true' \
+        "$(probe "!$IND._issueItem.visible ||
+            $IND._issueItem.get_preferred_width(-1)[1] <= $IND._body.get_preferred_width(-1)[1]")"
+}
+
 assert_state() {
     assert_rows_filled "$1"
     assert_no_placeholders "$1"
     assert_block_count "$1"
     assert_panel_matches "$1"
     assert_rate_limit_note "$1"
+    assert_incident_window "$1"
+    assert_incident_within_popup "$1"
 }
 
 assert_theme_differs() {
@@ -167,6 +183,8 @@ assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
 assert_panel_matches_probe() { assert_panel_matches control; }
 assert_rate_limit_note_probe() { assert_rate_limit_note control; }
+assert_incident_window_probe() { assert_incident_window control; }
+assert_incident_within_popup_probe() { assert_incident_within_popup control; }
 
 prove_state() {
     render_state normal
@@ -190,6 +208,15 @@ prove_state() {
         "shell_eval \"$IND._refreshLabel.text = 'retry at 9:00'; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_rate_limit_note_probe
+    render_state service-maintenance-day
+    prove 'incident line names the end of the window' \
+        "shell_eval \"$IND._issueItem.label.text = '🚧 Under maintenance'; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
+        assert_incident_window_probe
+    prove 'incident line stays inside the popup' \
+        "shell_eval \"$IND._issueItem.label.text = 'until '.repeat(40); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
+        assert_incident_within_popup_probe
 }
 
 subset_kind() {

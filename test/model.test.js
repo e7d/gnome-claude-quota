@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-import {claudeCodeStatus, quotas} from '../lib/model.js';
+import {claudeCodeService, quotas} from '../lib/model.js';
 
 const now = new Date('2026-08-10T08:49:59.966Z');
 const zeroScopedNow = new Date('2026-08-04T07:51:00Z');
@@ -19,27 +19,89 @@ function statusPayload() {
     return JSON.parse(readFileSync(new URL('./fixtures/status.json', import.meta.url), 'utf8'));
 }
 
-test('claudeCodeStatus reads the Claude Code component, not the page-wide indicator', () => {
-    assert.equal(claudeCodeStatus(statusPayload()), 'degraded_performance');
+const statusNow = new Date('2026-08-13T12:00:00Z');
+
+function maintenance(overrides = {}) {
+    return {
+        status: 'in_progress',
+        scheduled_for: '2026-08-13T11:30:00.000Z',
+        scheduled_until: '2026-08-13T14:30:00.000Z',
+        components: [{id: 'yyzkbfz2thpt', name: 'Claude Code'}],
+        ...overrides,
+    };
+}
+
+function maintaining(windows) {
+    return {...statusPayload(), scheduled_maintenances: windows};
+}
+
+test('claudeCodeService reads the Claude Code component, not the page-wide indicator', () => {
+    assert.equal(claudeCodeService(statusPayload(), statusNow).status, 'degraded_performance');
 });
 
-test('claudeCodeStatus ignores a sibling component in a worse state', () => {
+test('claudeCodeService ignores a sibling component in a worse state', () => {
     const page = statusPayload();
     assert.equal(page.components.find(entry => entry.id === 'k8w3r06qmzrp').status, 'major_outage');
-    assert.equal(claudeCodeStatus(page), 'degraded_performance');
+    assert.equal(claudeCodeService(page, statusNow).status, 'degraded_performance');
 });
 
-test('claudeCodeStatus returns null when the component is absent', () => {
+test('claudeCodeService reports no status when the component is absent', () => {
     const page = statusPayload();
     page.components = page.components.filter(entry => entry.id !== 'yyzkbfz2thpt');
-    assert.equal(claudeCodeStatus(page), null);
+    assert.equal(claudeCodeService(page, statusNow).status, null);
 });
 
-test('claudeCodeStatus returns null for a malformed or empty payload', () => {
-    assert.equal(claudeCodeStatus(null), null);
-    assert.equal(claudeCodeStatus({}), null);
-    assert.equal(claudeCodeStatus({components: 'nope'}), null);
-    assert.equal(claudeCodeStatus({components: [{id: 'yyzkbfz2thpt'}]}), null);
+test('claudeCodeService reports no status for a malformed or empty payload', () => {
+    assert.deepEqual(claudeCodeService(null, statusNow), {status: null, until: null});
+    assert.deepEqual(claudeCodeService({}, statusNow), {status: null, until: null});
+    assert.deepEqual(claudeCodeService({components: 'nope'}, statusNow), {status: null, until: null});
+    assert.equal(claudeCodeService({components: [{id: 'yyzkbfz2thpt'}]}, statusNow).status, null);
+});
+
+test('a maintenance window underway on Claude Code carries its end', () => {
+    const service = claudeCodeService(maintaining([maintenance()]), statusNow);
+    assert.deepEqual(service.until, new Date('2026-08-13T14:30:00.000Z'));
+});
+
+test('a window being verified is still underway', () => {
+    const service = claudeCodeService(maintaining([maintenance({status: 'verifying'})]), statusNow);
+    assert.deepEqual(service.until, new Date('2026-08-13T14:30:00.000Z'));
+});
+
+test('a window not yet started or already completed carries no end', () => {
+    for (const status of ['scheduled', 'completed']) {
+        const service = claudeCodeService(maintaining([maintenance({status})]), statusNow);
+        assert.equal(service.until, null, status);
+    }
+});
+
+test('a window that has overrun its estimate carries no end', () => {
+    const overrun = maintenance({scheduled_until: '2026-08-13T11:45:00.000Z'});
+    assert.equal(claudeCodeService(maintaining([overrun]), statusNow).until, null);
+});
+
+test('a window on another component carries no end', () => {
+    const elsewhere = maintenance({components: [{id: 'rwppv331jlwc', name: 'claude.ai'}]});
+    assert.equal(claudeCodeService(maintaining([elsewhere]), statusNow).until, null);
+});
+
+test('overlapping windows are over when the last of them ends', () => {
+    const windows = [
+        maintenance({scheduled_until: '2026-08-13T13:00:00.000Z'}),
+        maintenance({scheduled_until: '2026-08-13T16:00:00.000Z'}),
+    ];
+    assert.deepEqual(claudeCodeService(maintaining(windows), statusNow).until,
+        new Date('2026-08-13T16:00:00.000Z'));
+});
+
+test('a window with an unparseable or missing end carries no end', () => {
+    assert.equal(claudeCodeService(maintaining([maintenance({scheduled_until: 'soon'})]), statusNow).until, null);
+    assert.equal(claudeCodeService(maintaining([maintenance({scheduled_until: null})]), statusNow).until, null);
+    assert.equal(claudeCodeService({scheduled_maintenances: 'nope'}, statusNow).until, null);
+});
+
+test('a degraded component with no maintenance window carries no end', () => {
+    assert.equal(claudeCodeService(statusPayload(), statusNow).until, null);
 });
 
 test('every populated limit renders, named after its kind or its model', () => {

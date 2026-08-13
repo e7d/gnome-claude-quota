@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {WINDOW_LENGTH_MS, absoluteTime, captionLine, percentLine, rateLimitLine, rateLimitMessage, refreshLine, relativeDuration, timeLocale, windowProgress} from '../lib/format.js';
+import {WINDOW_LENGTH_MS, absoluteTime, captionLine, percentLine, rateLimitLine, rateLimitMessage, refreshLine, relativeDuration, serviceUntilLine, timeLocale, windowProgress} from '../lib/format.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
 
@@ -138,6 +138,19 @@ test('rateLimitLine carries the weekday when the retry falls on another day', ()
 
 test('rateLimitLine says nothing when nothing is holding the poll back', () => {
     assert.equal(rateLimitLine(null, now, 'en-GB'), '');
+});
+
+test('serviceUntilLine names the time the window ends', () => {
+    assert.equal(serviceUntilLine(new Date('2026-08-04T14:29:40Z'), now, 'en-GB'), 'until 14:30');
+});
+
+test('serviceUntilLine carries the weekday when the window outlasts the day', () => {
+    assert.equal(serviceUntilLine(new Date('2026-08-05T02:30:00Z'), now, 'en-GB'), 'until Wed 02:30');
+});
+
+test('serviceUntilLine says nothing without an end, or once the end has passed', () => {
+    assert.equal(serviceUntilLine(null, now, 'en-GB'), '');
+    assert.equal(serviceUntilLine(new Date('2026-08-04T07:50:00Z'), now, 'en-GB'), '');
 });
 
 test('rateLimitMessage names the hold and the time it lifts', () => {

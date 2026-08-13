@@ -16,7 +16,7 @@ import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {fresherThan} from './lib/shared-usage.js';
-import {captionLine, percentLine, rateLimitMessage, refreshLine, timeLocale} from './lib/format.js';
+import {captionLine, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
@@ -26,7 +26,7 @@ import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsag
 
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
-const UNKNOWN_SERVICE = 'unknown';
+const UNKNOWN_SERVICE = {status: 'unknown', until: null};
 const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
 const TICK_OVERHANG = 2;
@@ -154,7 +154,7 @@ class Indicator extends PanelMenu.Button {
         this._issueLast = false;
         this._fitLaterId = 0;
         this._error = null;
-        this._serviceStatus = null;
+        this._service = null;
         this._refreshing = false;
         this._fetchedAt = null;
         this._block = null;
@@ -384,7 +384,7 @@ class Indicator extends PanelMenu.Button {
         this._limits = shared.limits;
         this._quotas = quotas({limits: shared.limits}, now);
         this._error = null;
-        this._serviceStatus = null;
+        this._service = null;
         this._fetchedAt = shared.fetchedAt;
         this._saveCache();
         this._appendAttempt(attemptRecord({
@@ -453,11 +453,11 @@ class Indicator extends PanelMenu.Button {
         try {
             result = await this._status.fetch(cancellable);
         } catch {
-            this._serviceStatus = UNKNOWN_SERVICE;
+            this._service = UNKNOWN_SERVICE;
             return;
         }
         this._recordAttempt({...result, expired: false, retryAfter: null, rateLimited: false}, trigger, 'status');
-        this._serviceStatus = result.value ?? UNKNOWN_SERVICE;
+        this._service = result.value ?? UNKNOWN_SERVICE;
     }
 
     _renderSafely() {
@@ -531,7 +531,7 @@ class Indicator extends PanelMenu.Button {
             this._limits = Array.isArray(result.payload?.limits) ? result.payload.limits : [];
             this._quotas = quotas(result.payload, new Date());
             this._error = null;
-            this._serviceStatus = null;
+            this._service = null;
             this._block = null;
             this._rateLimitStreak = 0;
             this._fetchedAt = new Date();
@@ -547,7 +547,7 @@ class Indicator extends PanelMenu.Button {
             this._block = {until: block.until, reason};
             this._scheduleNext(nextPollSeconds(block.seconds));
             this._error = reason === RATE_LIMIT ? null : result.error;
-            this._serviceStatus = null;
+            this._service = null;
             return;
         }
         this._block = null;
@@ -555,25 +555,53 @@ class Indicator extends PanelMenu.Button {
         this._error = result.error;
         // Named before status.claude.com has answered, so the line appears with the
         // first failed poll and is only ever refined, never introduced late.
-        this._serviceStatus = result.serverError ? UNKNOWN_SERVICE : null;
+        this._service = result.serverError ? UNKNOWN_SERVICE : null;
     }
 
     _renderMessage(now, hasQuotas) {
         const throttleUntil = throttledUntil(this._block);
         const silenced = isBlocked(throttleUntil, now);
-        const issue = silenced ? null : serviceIssue(this._serviceStatus);
+        const issue = silenced ? null : serviceIssue(this._service?.status);
         const error = silenced || issue || this._error === null ? '' : this._error;
         const throttled = rateLimitMessage(throttleUntil, now, this._locale);
         const loading = issue === null && error === '' && !hasQuotas && !silenced;
         const message = loading ? 'Loading…' : throttled || error;
         this._refreshLabel.text = refreshLine(this._fetchedAt, now, this._locale);
         this._issueItem.visible = issue !== null;
-        if (issue)
-            this._issueItem.label.text = `${issue.emoji} ${issue.text}`;
+        this._renderIssue(issue, now);
         this._messageLabel.text = message;
         this._message.visible = message !== '';
         this._messageSeparator.visible = (issue !== null || error !== '' || throttled !== '') && hasQuotas;
         this._body.visible = !loading;
+    }
+
+    // Cleared rather than left behind when there is no issue: a hidden row that keeps
+    // the last incident's wording hands it back the moment the next one differs.
+    _renderIssue(issue, now) {
+        if (issue === null) {
+            this._issueItem.label.text = '';
+            return;
+        }
+        const label = `${issue.emoji} ${issue.text}`;
+        const until = serviceUntilLine(this._service?.until, now, this._locale);
+        if (until === '') {
+            this._issueItem.label.text = label;
+            return;
+        }
+        this._issueItem.label.text = `${label} · ${until}`;
+        if (!this._issueFits())
+            this._issueItem.label.text = `${label}\n${until}`;
+    }
+
+    // The popup is as wide as its widest item, so a window that does not fit beside
+    // the wording would stretch every quota row to carry it. Measured against the
+    // quota body rather than a pixel budget: that is the width the popup already has.
+    _issueFits() {
+        if (this._issueItem.get_stage() === null)
+            return true;
+        const [, issueWidth] = this._issueItem.get_preferred_width(-1);
+        const [, bodyWidth] = this._body.get_preferred_width(-1);
+        return issueWidth <= bodyWidth;
     }
 
     _renderActions(now) {
@@ -672,7 +700,7 @@ class Indicator extends PanelMenu.Button {
                 }),
             });
         }
-        const issue = serviceIssue(this._serviceStatus);
+        const issue = serviceIssue(this._service?.status);
         this._issueLast = issue !== null;
         if (issue) {
             labels.push({

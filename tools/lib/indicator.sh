@@ -4,7 +4,7 @@ SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-r
            long-name locale rate-limited rate-limited-day error token-expired loading refreshing fresh no-data
            model-scoped-issue narrow-two narrow-one narrow-icon narrow-issue
            service-degraded service-partial service-major service-maintenance
-           service-error)
+           service-maintenance-until service-maintenance-day service-error)
 PICKED=()
 FILLER='global.cqPanelFiller'
 
@@ -87,9 +87,19 @@ service_status() {
         service-degraded) echo 'degraded_performance' ;;
         service-partial) echo 'partial_outage' ;;
         service-major) echo 'major_outage' ;;
-        service-maintenance) echo 'under_maintenance' ;;
+        service-maintenance*) echo 'under_maintenance' ;;
         service-error) echo 'unknown' ;;
         *) die "unknown service scenario $1" ;;
+    esac
+}
+
+# Only a maintenance window has a published end, and the day it lands on decides
+# whether the wording still fits beside it.
+service_until() {
+    case "$1" in
+        service-maintenance-until) echo 'new Date(Date.now() + 7200000)' ;;
+        service-maintenance-day) echo 'new Date(Date.now() + 26 * 3600000)' ;;
+        *) echo 'null' ;;
     esac
 }
 
@@ -153,9 +163,9 @@ setup_for() {
         refreshing) echo "$(setup_quotas) i._refreshing = true;" ;;
         fresh) echo "$(setup_quotas) i._fetchedAt = new Date();" ;;
         no-data) echo "i._fetchedAt = null; i._error = 'Cannot reach api.anthropic.com';" ;;
-        model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = 'Usage request failed (HTTP 503)'; i._serviceStatus = 'partial_outage';" ;;
+        model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = 'Usage request failed (HTTP 503)'; i._service = {status: 'partial_outage', until: null};" ;;
         narrow-*) setup_for model-scoped ;;
-        service-*) echo "$(setup_quotas) i._error = 'Usage request failed (HTTP 503)'; i._serviceStatus = '$(service_status "$1")';" ;;
+        service-*) echo "$(setup_quotas) i._error = 'Usage request failed (HTTP 503)'; i._service = {status: '$(service_status "$1")', until: $(service_until "$1")};" ;;
         *) die "unknown scenario $1" ;;
     esac
 }
@@ -166,7 +176,7 @@ render_state() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         $QUOTA
         $FILLER?.destroy(); $FILLER = null;
-        i._quotas = []; i._error = null; i._serviceStatus = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._locale = 'en-US';
+        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._locale = 'en-US';
         $(setup_for "$1")
         i.menu.open(false); i._render();
         $(squeeze_for "$1")
