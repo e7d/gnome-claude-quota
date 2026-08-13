@@ -15,8 +15,6 @@ export function summarize(records) {
     return {total: records.length, byOutcome};
 }
 
-// A refusal is only legible next to what preceded it, so the streak that earned it
-// is measured here rather than left for a reader to count by eye.
 export function refusalRuns(records) {
     const runs = [];
     for (const record of records) {

@@ -39,11 +39,13 @@ The popup displays the remaining time until each quota resets.
 
 The extension polls every 5 minutes, and again when you open the popup if the cached data is more than a minute old.
 
+Whatever asks — the timer, the popup, the button — **no two requests go out less than 2 minutes apart**. The allowance is five requests per five minutes and it is shared with Claude Code itself, so the extension keeps to a share of it rather than racing for the window. A request refused by that floor is not dropped: it is scheduled for the moment the floor lifts, so opening the popup on minute-old data does bring the next poll forward, just no closer than the floor allows.
+
 The popup's first line carries `Last refresh: 10:48 AM` with a circular-arrow button on the right. Clicking it polls and **leaves the popup open**, so the numbers land in front of you. The icon spins while the poll is in flight and the button is insensitive until it finishes, so a poll cannot be fired twice.
 
 There is no `Up to date` state: the timestamp beside the button already says how fresh the numbers are.
 
-The button also goes insensitive while a `429` is in force, because that allowance is shared with every other Claude extension on the machine. Nothing in either response reports how much of it is left, so the extension declines to be what spends it.
+The button goes insensitive while a `429` is in force, and while the 2-minute floor between requests has not lifted — in both cases because clicking it could not send anything. Nothing in either response reports how much of the allowance is left, so the extension declines to be what spends it.
 
 ## Service problems
 

@@ -20,7 +20,7 @@ import {quotas} from './lib/model.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
-import {blockReason, isBlocked, markExpired, nextPollSeconds, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
+import {blockReason, isBlocked, markExpired, minIntervalWait, nextPollSeconds, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
@@ -157,6 +157,7 @@ class Indicator extends PanelMenu.Button {
         this._refreshing = false;
         this._fetchedAt = null;
         this._block = null;
+        this._lastRequestAt = null;
         this._rateLimitStreak = 0;
         this._timerId = null;
         this._credentialsMonitor = null;
@@ -375,6 +376,12 @@ class Indicator extends PanelMenu.Button {
             this._render();
             return;
         }
+        const wait = minIntervalWait(this._lastRequestAt, now);
+        if (wait > 0) {
+            this._scheduleNext(wait);
+            this._render();
+            return;
+        }
         const cancellable = new Gio.Cancellable();
         this._cancellable?.cancel();
         this._cancellable = cancellable;
@@ -456,7 +463,13 @@ class Indicator extends PanelMenu.Button {
         }
     }
 
+    _markSent(result, endpoint) {
+        if (endpoint === 'usage' && result.durationMs !== null)
+            this._lastRequestAt = new Date();
+    }
+
     _recordAttempt(result, trigger, endpoint = 'usage') {
+        this._markSent(result, endpoint);
         this._appendAttempt(attemptRecord({
             now: new Date(),
             trigger,
@@ -524,7 +537,8 @@ class Indicator extends PanelMenu.Button {
     }
 
     _renderActions(now) {
-        this._refreshButton.reactive = !this._refreshing && !isBlocked(this._block?.until, now);
+        this._refreshButton.reactive = !this._refreshing && !isBlocked(this._block?.until, now)
+            && minIntervalWait(this._lastRequestAt, now) === 0;
         this._refreshButton.opacity = this._refreshButton.reactive ? 255 : CAPTION_OPACITY;
         if (this._refreshing)
             this._startSpinner();

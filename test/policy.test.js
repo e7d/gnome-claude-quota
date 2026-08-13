@@ -6,11 +6,13 @@ import {
     POLL_SECONDS,
     RATE_LIMIT_CAP_SECONDS,
     RATE_LIMIT_FLOOR_SECONDS,
+    MIN_REQUEST_SECONDS,
     RATE_LIMIT,
     SERVICE_ERROR,
     UNAUTHORIZED,
     blockReason,
     isBlocked,
+    minIntervalWait,
     rateLimitBlock,
     markExpired,
     nextPollSeconds,
@@ -20,6 +22,30 @@ import {
 } from '../lib/policy.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
+
+test('the first request of a session waits for nothing', () => {
+    assert.equal(minIntervalWait(null, now), 0);
+    assert.equal(minIntervalWait(undefined, now), 0);
+    assert.equal(minIntervalWait(new Date('nonsense'), now), 0);
+});
+
+test('a request inside the minimum interval waits out its remainder', () => {
+    assert.equal(minIntervalWait(new Date(now.getTime() - 30_000), now), MIN_REQUEST_SECONDS - 30);
+    assert.equal(minIntervalWait(now, now), MIN_REQUEST_SECONDS);
+});
+
+test('a remainder is rounded up, so the wait never lands a second early', () => {
+    assert.equal(minIntervalWait(new Date(now.getTime() - 30_500), now), MIN_REQUEST_SECONDS - 30);
+});
+
+test('a request past the minimum interval waits for nothing', () => {
+    assert.equal(minIntervalWait(new Date(now.getTime() - MIN_REQUEST_SECONDS * 1000), now), 0);
+    assert.equal(minIntervalWait(new Date(now.getTime() - 3_600_000), now), 0);
+});
+
+test('the interval leaves room for the other tenant of a five-per-five-minutes allowance', () => {
+    assert.equal(300 / MIN_REQUEST_SECONDS < 5, true);
+});
 
 test('a refusal from the server arms a block whichever refusal it was', () => {
     assert.equal(blockReason({rateLimited: true, status: 429}), RATE_LIMIT);

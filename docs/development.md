@@ -144,6 +144,8 @@ Changing `HOME` moves the font cache, so it was checked rather than assumed: the
 
 `--live` no longer means "let it fetch". It seeds the sandbox cache from the host's own `~/.cache/claude-quota/usage.json` and renders through `_loadCache()`, injected exactly like any other scenario — your real current values, no request. Absent that cache it dies if you asked for `--live` explicitly, and falls back to `--scenario=normal` with a line on stderr when it was merely the default, so fabricated numbers are never passed off as yours.
 
+Every outbound request also passes a single floor: `minIntervalWait` in `lib/policy.js` refuses any send inside `MIN_REQUEST_SECONDS` of the last one that actually left the process, whatever triggered it. `_refresh` is the only funnel, so the timer, a popup open, the button and a credentials renewal are all gated by it. A refused refresh is rescheduled for the moment the floor lifts rather than dropped, so no intent is lost and the rate is still bounded at one request per two minutes — two of the five the window allows, leaving the rest for Claude Code. `_lastRequestAt` advances only when `durationMs` is non-null, so an attempt declined over an expired token costs nothing against it.
+
 Do not poll the endpoint in a loop while debugging: a burst pins the window, and each retry inside it re-arms it. `tools/preview.sh` also stubs the indicator's `_refresh` before capturing. `tools/e2e.sh` inherits that stub, and its refresh group — which has to remove it to make the button do anything — replaces `_fetchCycle` with a promise that never resolves, so asserting the spinner still spends nothing.
 
 ## Reading the exchange log

@@ -516,12 +516,13 @@ restore_attempt_log() {
     ATTEMPTS_LOG=''
 }
 
-# A 429 arms _block, and a blocked _refresh makes no upstream attempt and
-# therefore no record — so the block is cleared before each deliberate attempt.
+# A 429 arms _block and every send starts the minimum interval, and a _refresh
+# stopped by either makes no upstream attempt and therefore no record — so both
+# gates are cleared before each deliberate attempt.
 log_attempt() {
     local before
     before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
-    shell_eval "$IND._block = null; $IND._refresh('$1'); 'ok'" >/dev/null
+    shell_eval "$IND._block = null; $IND._lastRequestAt = null; $IND._refresh('$1'); 'ok'" >/dev/null
     for _ in $(seq 100); do
         [ "$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)" -gt "$before" ] && return 0
         sleep 0.1
@@ -604,6 +605,47 @@ assert_credentials_wake() {
         "$(probe "globalThis._wokeWith === 'credentials'")"
 }
 
+stub_reachable_endpoint() {
+    shell_eval "$IND._client.fetch = () => Promise.reject(Object.assign(
+        new Error('Cannot reach api.anthropic.com'),
+        {status: null, headers: {}, body: null, durationMs: 7, expiresAt: null}));
+        'ok'" >/dev/null
+}
+
+spend_one_request() {
+    shell_eval "$IND._block = null; $IND._lastRequestAt = null; 'ok'" >/dev/null
+    log_attempt timer
+}
+
+hold_floor() {
+    shell_eval "$IND._block = null; $IND._lastRequestAt = new Date(); 'ok'" >/dev/null
+}
+
+drop_floor() {
+    shell_eval "$IND._block = null; $IND._lastRequestAt = null; 'ok'" >/dev/null
+}
+
+assert_floor_holds() {
+    local before after
+    before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    shell_eval "$IND._refresh('manual'); 'ok'" >/dev/null
+    sleep 1
+    after="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    assert_eq 'a request inside the minimum interval is never sent' "$before" "$after"
+    assert_eq 'the refresh button is insensitive while the interval holds' 'false' \
+        "$(probe "$IND._refreshButton.reactive")"
+}
+
+prove_request_floor() {
+    stub_reachable_endpoint
+    spend_one_request
+    hold_floor
+    prove 'the minimum interval between requests' \
+        drop_floor \
+        hold_floor \
+        assert_floor_holds
+}
+
 prove_credentials_recovery() {
     stub_expired_token
     prove 'an expired token costs no request' \
@@ -640,6 +682,8 @@ group_refresh() {
     stub_attempt_log
     prove_attempt_log
     assert_attempt_logged
+    prove_request_floor
+    assert_floor_holds
     prove_credentials_recovery
     assert_expired_token_declined
     assert_credentials_wake
