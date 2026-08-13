@@ -2,6 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
+"POT-Creation-Date: 2026-08-13 21:04+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -11,5 +12,114 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
+#: extension.js:146
+msgid "Claude Quota"
+msgstr ""
+
+#: extension.js:579
 msgid "Loading…"
 msgstr "Chargement…"
+
+#: lib/format.js:29
+msgid "{d}d {h}h left"
+msgid_plural "{d}d {h}h left"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/format.js:36
+msgid "{h}h {m}m left"
+msgid_plural "{h}h {m}m left"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/format.js:46
+msgid "now"
+msgstr ""
+
+#: lib/format.js:52
+msgid "{m}m left"
+msgid_plural "{m}m left"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/format.js:90
+msgid "Last refresh: {time}"
+msgstr ""
+
+#: lib/format.js:99
+msgid "retry at {time}"
+msgstr ""
+
+#: lib/format.js:100
+msgid "retry {time}"
+msgstr ""
+
+#: lib/format.js:106
+msgid "until {time}"
+msgstr ""
+
+#: lib/format.js:111 lib/usage.js:110
+msgid "Rate limited"
+msgstr ""
+
+#: lib/model.js:9
+msgid "Session (5h)"
+msgstr ""
+
+#: lib/model.js:9
+msgid "Weekly"
+msgstr ""
+
+#: lib/model.js:11
+msgctxt "panel initial"
+msgid "S"
+msgstr ""
+
+#: lib/model.js:12
+msgctxt "panel initial"
+msgid "W"
+msgstr ""
+
+#: lib/policy.js:15
+msgid "Degraded performance"
+msgstr ""
+
+#: lib/policy.js:16
+msgid "Partial outage"
+msgstr ""
+
+#: lib/policy.js:17
+msgid "Major outage"
+msgstr ""
+
+#: lib/policy.js:18
+msgid "Under maintenance"
+msgstr ""
+
+#: lib/policy.js:21
+msgid "Service error"
+msgstr ""
+
+#: lib/usage.js:26
+msgid "Cannot read ~/.claude/.credentials.json"
+msgstr ""
+
+#: lib/usage.js:30
+msgid "No Claude token in ~/.claude/.credentials.json"
+msgstr ""
+
+#: lib/usage.js:84 lib/usage.js:107
+msgid "Token expired, run Claude Code once"
+msgstr ""
+
+#: lib/usage.js:96
+msgid "Cannot reach api.anthropic.com"
+msgstr ""
+
+#: lib/usage.js:117
+msgid "Usage request failed (HTTP {status})"
+msgstr ""
+
+#: lib/usage.js:124
+msgid "Unexpected response from the usage endpoint"
+msgstr ""

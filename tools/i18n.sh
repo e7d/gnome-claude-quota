@@ -6,7 +6,8 @@ DOMAIN=claude-quota
 POT="$ROOT/po/$DOMAIN.pot"
 LANGS=(fr)
 
-KEYWORDS=('--keyword=_' '--keyword=N_' '--keyword=n_:1,2' '--keyword=p_:1c,2' '--keyword=describe:1')
+KEYWORDS=('--keyword=_' '--keyword=N_' '--keyword=n_:1,2' '--keyword=p_:1c,2'
+    '--keyword=describe:1' '--keyword=fail:1')
 
 extract() {
     (cd "$ROOT" && xgettext --language=JavaScript --from-code=UTF-8 \

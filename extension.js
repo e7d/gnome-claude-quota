@@ -16,6 +16,7 @@ import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {errorText} from './lib/errors.js';
+import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {fresherThan} from './lib/shared-usage.js';
 import {captionLine, numberLocale, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
@@ -142,7 +143,7 @@ class QuotaBlock extends St.BoxLayout {
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
     _init(iconPath) {
-        super._init(0.5, 'Claude Quota');
+        super._init(0.5, _('Claude Quota'));
         this._client = new UsageClient();
         this._status = new StatusClient();
         this._settings = St.Settings.get();
@@ -232,6 +233,8 @@ class Indicator extends PanelMenu.Button {
         this._bodyBox.add_child(this._blockBox);
         this._body.add_child(this._bodyBox);
         this._issueItem = new PopupMenu.PopupMenuItem('');
+        this._issueItem.label.clutter_text.line_wrap = true;
+        this._issueItem.label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         this._issueItem.connect('activate', () => Gio.AppInfo.launch_default_for_uri(STATUS_URL, null));
         this._messageSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this.menu.addMenuItem(this._body);
@@ -573,7 +576,7 @@ class Indicator extends PanelMenu.Button {
         const error = silenced || issue || this._error === null ? '' : errorText(this._error);
         const throttled = rateLimitMessage(throttleUntil, now, this._locale);
         const loading = issue === null && error === '' && !hasQuotas && !silenced;
-        const message = loading ? 'Loading…' : throttled || error;
+        const message = loading ? _('Loading…') : throttled || error;
         this._refreshLabel.text = refreshLine(this._fetchedAt, now, this._locale);
         this._issueItem.visible = issue !== null;
         this._renderIssue(issue, now);
@@ -849,6 +852,11 @@ class Indicator extends PanelMenu.Button {
 
 export default class ClaudeQuotaExtension extends Extension {
     enable() {
+        setTranslator({
+            gettext: this.gettext.bind(this),
+            ngettext: this.ngettext.bind(this),
+            pgettext: this.pgettext.bind(this),
+        });
         this._indicator = new Indicator(`${this.path}/icons/claude-quota-symbolic.svg`);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }
@@ -856,5 +864,6 @@ export default class ClaudeQuotaExtension extends Extension {
     disable() {
         this._indicator?.destroy();
         this._indicator = null;
+        resetTranslator();
     }
 }
