@@ -13,6 +13,8 @@ Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`]
 | `tools/*.sh`, `tools/*.js` | Your machine | Entrypoints. Never shipped to users. |
 | `tools/lib/*` | Your machine | Sourced or imported by the entrypoints, never run directly. |
 | `test/*.test.js` | `node --test` | Unit tests for `lib/` and `tools/`. |
+| `po/*.po`, `po/*.pot` | Translators | The wording. Regenerate with `npm run i18n` after any string change. |
+| `locale/**/*.mo` | GNOME Shell | Compiled and committed, because the checkout is what a user installs. Never edited. |
 
 **Every `lib/` module except `usage.js` must stay free of `gi://`.** All of them are imported by the Node test runner as well as the shell, and one `gi://` import makes the whole module untestable. `lib/usage.js` is the deliberate exception — it wraps Soup and Gio for HTTP, and is consequently the one module with no unit tests, so keep it thin and put any decision it would make into `policy.js` instead. When you want a unit test for logic stuck inside `extension.js`, move the logic to `lib/` first; that is the intended direction of travel.
 
@@ -24,7 +26,9 @@ Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_serv
 
 `npm run lint` — oxlint over every `.js` in the repo, silent when clean. `.oxlintrc.json` runs `correctness`, `suspicious` and `perf`, and switches `no-underscore-dangle` off because `_private` is the shell's own convention and 324 findings would have buried everything else. The GJS-side `globals` block (`global`, `log`, `logError`, `TextDecoder`, `TextEncoder`) is what keeps `no-undef` usable across files that run in both the shell and Node — remove it and 12 real symbols read as undefined. Add a rule only with a run that proves it fires on this codebase.
 
-`npm test` — the unit suite. `TZ` is pinned to `UTC` in the script; the suite asserts absolute times and would otherwise fail outside UTC.
+`npm test` — the unit suite. `TZ` is pinned to `UTC` in the script; the suite asserts absolute times and would otherwise fail outside UTC. `LC_ALL` is pinned to `C` for the same reason applied to words and to `Intl.NumberFormat`.
+
+`npm run i18n:check` — fails when a msgid exists in the code but not in the committed catalog. Run it after touching any user-facing string; `xgettext` reads call sites literally, so a string reached through a wrapper or a constant is invisible to extraction until that wrapper is named in `tools/i18n.sh`.
 
 **When a change affects what the popup or panel looks like, put the state on screen and look at it.**
 
@@ -76,5 +80,7 @@ Suppressing a shell behaviour to satisfy a measurement is the wrong trade in bot
 **`preview/` is gitignored.** The screenshots are local artifacts whose exact dimensions shift with the live quota text, and a full run deletes them all before it starts.
 
 **Retrying a `401` is the one mistake that costs an hour.** Three consecutive auth failures and the endpoint blocks the account for 3600 s, so anything that polls has to check `expiresAt` before spending a request, and treat a server `401` as a reason to back off rather than a reason to try again in five minutes. The block is scoped to the token that earned it, so a newly written `~/.claude/.credentials.json` ends it — which is why the extension watches that file rather than waiting the hour out. `docs/development.md` § Rate limits has the measurements.
+
+**Translating a module constant where it is declared freezes English, silently.** `NAMES` and `SERVICE_ISSUES` are evaluated at import, before `enable()` installs a translator. Mark the msgid with `N_()` there and resolve it with `_()` where the value is read. Nothing errors, nothing warns, and the string is English forever.
 
 **Verify against a real shell, not by reading the code.** Shell widget behaviour is frequently not what the API names suggest: `hover: false` on a menu item does not stop the `:hover` pseudo-class (that is `track_hover`), overriding `activate()` does not stop the menu closing (the `activate` *signal* does that), and `warp_pointer` silently does nothing under the devkit backend. Assert the property back over `Eval` before believing a fix.

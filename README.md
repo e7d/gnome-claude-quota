@@ -114,7 +114,35 @@ The extension itself installs nothing — `node_modules/` exists for the linter 
 npm test
 ```
 
-`TZ` is pinned to `UTC` in the script because the test suite asserts absolute times and `Intl.DateTimeFormat` resolves against the system timezone.
+`TZ` is pinned to `UTC` in the script because the test suite asserts absolute times and `Intl.DateTimeFormat` resolves against the system timezone. `LC_ALL` is pinned to `C` for the same reason applied to words: no translator is installed under `node --test`, so every string asserts as English.
+
+## Translations
+
+The extension speaks the language of the session it runs in, through GNOME's own gettext. English is the source; French ships as a catalog.
+
+```bash
+npm run i18n           # extract po/claude-quota.pot, merge po/*.po, compile locale/**.mo
+npm run i18n:check     # exit non-zero if either is stale
+```
+
+`locale/**/*.mo` is compiled and committed, because this checkout is what a user installs — a translation that only appeared after `msgfmt` would not survive the trip. `npm run i18n:check` is what catches a string added to the code and never extracted, which otherwise renders in English with nothing to show it is missing.
+
+To see a language rendered rather than trust that it is:
+
+```bash
+npm run preview -- --live --locale=fr_FR.UTF-8 --capture
+npm run e2e -- --group=state --dark-only --locale=fr_FR.UTF-8
+```
+
+The locale must be generated on the host — `locale -a` lists what is. Without `--locale`, a nested shell runs under `C` so that a tile's clock and percent cannot drift with whoever is running it.
+
+Adding a language is a catalog and nothing else:
+
+```bash
+msginit --locale=de --input=po/claude-quota.pot --output=po/de.po
+# add de to LANGS in tools/i18n.sh, translate po/de.po, then:
+npm run i18n
+```
 
 ## Development
 

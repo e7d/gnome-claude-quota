@@ -44,7 +44,7 @@ msgstr[1] "{m} min restantes"
 
 #: lib/format.js:90
 msgid "Last refresh: {time}"
-msgstr "Dernière mise à jour : {time}"
+msgstr "Mise à jour : {time}"
 
 #: lib/format.js:99
 msgid "retry at {time}"
