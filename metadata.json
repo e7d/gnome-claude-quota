@@ -2,6 +2,7 @@
   "name": "Claude Quota",
   "description": "Claude session and weekly quota in the top bar, with reset times and window pace.",
   "uuid": "claude-quota@e7d.io",
+  "gettext-domain": "claude-quota",
   "shell-version": ["50"],
   "version": 1
 }
