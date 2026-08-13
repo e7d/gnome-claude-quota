@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
+import {resetTranslator, setTranslator} from '../lib/i18n.js';
 import {claudeCodeService, quotas} from '../lib/model.js';
 
 const now = new Date('2026-08-10T08:49:59.966Z');
@@ -228,4 +229,20 @@ test('two scoped quotas sharing an initial each get a distinct short', () => {
     assert.equal(first.name, 'Opus');
     assert.equal(second.name, 'Owl');
     assert.notEqual(first.short, second.short);
+});
+
+test('quota names and panel initials come from the catalog', () => {
+    setTranslator({
+        gettext: msgid => ({'Weekly': 'Hebdomadaire', 'Session (5h)': 'Session (5 h)'})[msgid] ?? msgid,
+        ngettext: (msgid, plural, count) => (count > 1 ? plural : msgid),
+        pgettext: (context, msgid) => ({W: 'H'})[msgid] ?? msgid,
+    });
+    const result = quotas({limits: [
+        {kind: 'session', group: 'session', percent: 20, resets_at: '2026-08-04T12:00:00Z'},
+        {kind: 'weekly_all', group: 'weekly', percent: 40, resets_at: '2026-08-08T12:00:00Z'},
+    ]}, new Date('2026-08-04T08:00:00Z'));
+    assert.deepEqual(result.map(quota => [quota.short, quota.name]),
+        [['S', 'Session (5 h)'], ['H', 'Hebdomadaire']]);
+    assert.equal(result[1].modelScoped, false);
+    resetTranslator();
 });

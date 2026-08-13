@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
+import {resetTranslator, setTranslator} from '../lib/i18n.js';
 import {
     OPEN_REFRESH_SECONDS,
     POLL_SECONDS,
@@ -239,4 +240,11 @@ test('markExpired does not mutate the input array or its entries', () => {
     assert.notEqual(result, quotas);
     assert.notEqual(result[0], quotas[0]);
     assert.equal(quotas[0].expired, undefined);
+});
+
+test('serviceIssue translates the wording and leaves the emoji alone', () => {
+    setTranslator({gettext: msgid => `fr:${msgid}`, ngettext: msgid => msgid, pgettext: (context, msgid) => msgid});
+    assert.deepEqual(serviceIssue('major_outage'), {emoji: '🔴', text: 'fr:Major outage'});
+    assert.deepEqual(serviceIssue('nonsense'), {emoji: '🚨', text: 'fr:Service error'});
+    resetTranslator();
 });
