@@ -16,7 +16,7 @@ import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {fresherThan} from './lib/shared-usage.js';
-import {captionLine, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
+import {captionLine, numberLocale, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
@@ -127,9 +127,9 @@ class QuotaBlock extends St.BoxLayout {
         this.add_child(this._caption);
     }
 
-    update({quota, now, scheme, locale}) {
+    update({quota, now, scheme, locale, percentLocale}) {
         this._name.text = quota.name;
-        this._percent.text = percentLine(quota);
+        this._percent.text = percentLine(quota, percentLocale);
         this._percent.style_class = quotaClass('cq-percent', quota, scheme);
         this._bar.value = quota.expired ? 0 : quota.percent / 100;
         this._bar.setPace(quota.expired ? null : quota.windowProgress);
@@ -169,6 +169,11 @@ class Indicator extends PanelMenu.Button {
         this._locale = timeLocale({
             LC_ALL: GLib.getenv('LC_ALL'),
             LC_TIME: GLib.getenv('LC_TIME'),
+            LANG: GLib.getenv('LANG'),
+        });
+        this._percentLocale = numberLocale({
+            LC_ALL: GLib.getenv('LC_ALL'),
+            LC_NUMERIC: GLib.getenv('LC_NUMERIC'),
             LANG: GLib.getenv('LANG'),
         });
         const box = new St.BoxLayout({style_class: 'panel-status-indicators-box'});
@@ -649,7 +654,8 @@ class Indicator extends PanelMenu.Button {
             });
         }
         quotaViews.forEach((quota, index) =>
-            this._blocks[index].update({quota, now, scheme, locale: this._locale}));
+            this._blocks[index].update({
+                quota, now, scheme, locale: this._locale, percentLocale: this._percentLocale}));
         const hasQuotas = quotaViews.length > 0;
         this._blockBox.visible = hasQuotas;
         this._renderMessage(now, hasQuotas);
@@ -685,7 +691,7 @@ class Indicator extends PanelMenu.Button {
         const labels = quotaViews.map(quota => ({
             dotted: true,
             label: new St.Label({
-                text: `${quota.short} ${percentLine(quota)}`,
+                text: `${quota.short} ${percentLine(quota, this._percentLocale)}`,
                 style_class: quotaClass('cq-panel-quota', quota, scheme),
                 y_align: Clutter.ActorAlign.CENTER,
             }),

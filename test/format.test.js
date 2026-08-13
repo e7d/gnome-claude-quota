@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {WINDOW_LENGTH_MS, absoluteTime, captionLine, percentLine, rateLimitLine, rateLimitMessage, refreshLine, relativeDuration, serviceUntilLine, timeLocale, windowProgress} from '../lib/format.js';
+import {WINDOW_LENGTH_MS, absoluteTime, captionLine, numberLocale, percentLine, rateLimitLine, rateLimitMessage, refreshLine, remainingLine, serviceUntilLine, timeLocale, windowProgress} from '../lib/format.js';
+import {resetTranslator, setTranslator} from '../lib/i18n.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
 
@@ -84,25 +85,25 @@ test('every quota shape keeps the percent and caption rows filled', () => {
     }
 });
 
-test('relativeDuration renders days and hours past a day', () => {
-    assert.equal(relativeDuration(new Date('2026-08-08T07:59:00Z'), now), '4d 0h');
+test('remainingLine renders days and hours past a day', () => {
+    assert.equal(remainingLine(new Date('2026-08-08T07:59:00Z'), now), '4d 0h left');
 });
 
-test('relativeDuration zero-pads the minutes below a day', () => {
-    assert.equal(relativeDuration(new Date('2026-08-04T11:59:00Z'), now), '4h 08m');
+test('remainingLine zero-pads the minutes below a day', () => {
+    assert.equal(remainingLine(new Date('2026-08-04T11:59:00Z'), now), '4h 08m left');
 });
 
-test('relativeDuration drops to minutes below an hour', () => {
-    assert.equal(relativeDuration(new Date('2026-08-04T08:03:00Z'), now), '12m');
+test('remainingLine drops to minutes below an hour', () => {
+    assert.equal(remainingLine(new Date('2026-08-04T08:03:00Z'), now), '12m left');
 });
 
-test('relativeDuration reports a minute while any time remains', () => {
-    assert.equal(relativeDuration(new Date('2026-08-04T07:51:30Z'), now), '1m');
+test('remainingLine reports a minute while any time remains', () => {
+    assert.equal(remainingLine(new Date('2026-08-04T07:51:30Z'), now), '1m left');
 });
 
-test('relativeDuration collapses to now at and past the reset', () => {
-    assert.equal(relativeDuration(now, now), 'now');
-    assert.equal(relativeDuration(new Date('2026-08-04T07:00:00Z'), now), 'now');
+test('remainingLine collapses to now at and past the reset', () => {
+    assert.equal(remainingLine(now, now), 'now');
+    assert.equal(remainingLine(new Date('2026-08-04T07:00:00Z'), now), 'now');
 });
 
 test('absoluteTime shows only the time when the reset is today', () => {
@@ -186,3 +187,56 @@ test('windowProgress is null without a reset time', () => {
 });
 
 
+
+test('remainingLine agrees with the leading unit, not with a shared suffix', () => {
+    setTranslator({
+        gettext: msgid => msgid,
+        ngettext: (msgid, plural, count) => ({
+            '{d}d {h}h left': '{d} j {h} h restants',
+            '{h}h {m}m left': '{h} h {m} restantes',
+            '{m}m left': count > 1 ? '{m} min restantes' : '{m} min restante',
+        })[msgid],
+        pgettext: (context, msgid) => msgid,
+    });
+    assert.equal(remainingLine(new Date('2026-08-08T07:59:00Z'), now), '4 j 0 h restants');
+    assert.equal(remainingLine(new Date('2026-08-04T11:59:00Z'), now), '4 h 08 restantes');
+    assert.equal(remainingLine(new Date('2026-08-04T08:03:00Z'), now), '12 min restantes');
+    assert.equal(remainingLine(new Date('2026-08-04T07:51:30Z'), now), '1 min restante');
+    resetTranslator();
+});
+
+test('percentLine follows the number locale', () => {
+    assert.equal(percentLine({percent: 21}, 'en-US'), '21%');
+    assert.equal(percentLine({percent: 21}, 'fr-FR'), '21 %');
+    assert.equal(percentLine({percent: 100}, 'en-US'), '100%');
+});
+
+test('percentLine still refuses an expired or unknown value', () => {
+    assert.equal(percentLine({percent: 21, expired: true}, 'fr-FR'), '-');
+    assert.equal(percentLine({percent: null}, 'fr-FR'), '-');
+});
+
+test('numberLocale reads LC_NUMERIC ahead of LANG', () => {
+    assert.equal(numberLocale({LANG: 'en_US.UTF-8', LC_NUMERIC: 'fr_FR.UTF-8'}), 'fr-FR');
+    assert.equal(numberLocale({LANG: 'en_US.UTF-8'}), 'en-US');
+    assert.equal(numberLocale({LANG: 'C'}), undefined);
+});
+
+test('the translated lines route through the catalog', () => {
+    setTranslator({
+        gettext: msgid => ({
+            'Last refresh: {time}': 'Dernier relevé : {time}',
+            'retry at {time}': 'réessai à {time}',
+            'until {time}': "jusqu'à {time}",
+            'Rate limited': 'Quota de requêtes atteint',
+        })[msgid] ?? msgid,
+        ngettext: (msgid, plural, count) => (count > 1 ? plural : msgid),
+        pgettext: (context, msgid) => msgid,
+    });
+    assert.equal(refreshLine(new Date('2026-08-04T07:30:00Z'), now, 'fr-FR'), 'Dernier relevé : 7:30');
+    assert.equal(rateLimitLine(new Date('2026-08-04T08:05:00Z'), now, 'fr-FR'), 'réessai à 8:05');
+    assert.equal(serviceUntilLine(new Date('2026-08-04T09:00:00Z'), now, 'fr-FR'), "jusqu'à 9:00");
+    assert.ok(rateLimitMessage(new Date('2026-08-04T08:05:00Z'), now, 'fr-FR')
+        .startsWith('⏳ Quota de requêtes atteint · '));
+    resetTranslator();
+});
