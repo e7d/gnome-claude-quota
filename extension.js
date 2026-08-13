@@ -593,9 +593,8 @@ class Indicator extends PanelMenu.Button {
             this._issueItem.label.text = `${label}\n${until}`;
     }
 
-    // The popup is as wide as its widest item, so a window that does not fit beside
-    // the wording would stretch every quota row to carry it. Measured against the
-    // quota body rather than a pixel budget: that is the width the popup already has.
+    // The popup is as wide as its widest item, so a window that does not fit beside the
+    // wording would stretch every quota row — hence the body's width, not a pixel budget.
     _issueFits() {
         if (this._issueItem.get_stage() === null)
             return true;

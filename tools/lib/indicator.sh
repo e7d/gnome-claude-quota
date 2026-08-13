@@ -8,25 +8,15 @@ SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-r
 PICKED=()
 FILLER='global.cqPanelFiller'
 
-# Every state below is fabricated, so the real endpoint must never answer over the
-# top of it. Stubbing the instance method also spares the shared API rate limit.
-# Overriding _refresh alone only stops future calls: a fetch already in flight (the
-# enable-time refresh, or preview.sh's own --live startup) resumes inside its
-# original async body, where every guard asks whether _cancellable is still the one
-# that flight started with. Cancelling does not change that answer, so the tail
-# still renders over the fabricated state a few hundred ms later — mid-prove — and
-# still applies a response that arrived before the cancel did. Dropping the
-# reference is what supersedes the flight, the way _refresh supersedes its own
-# predecessor.
+# Every state below is fabricated, so a fetch already in flight must not render over
+# it: its guards ask whether _cancellable is still the one that flight started with,
+# and cancelling does not change that answer — dropping the reference supersedes it.
 freeze() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         i._cancellable?.cancel(); i._cancellable = null; i._refresh = () => {}; 'ok'" >/dev/null
 }
 
 # freeze sets _refresh as an own property, so delete restores the prototype method.
-# Nothing in preview.sh calls this: showing real values reads the cache instead, so
-# a nested session never has a reason to reach the endpoint. e2e's refresh group is
-# the one caller, and it stubs _fetchCycle before letting the button work.
 unfreeze() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         delete i._refresh; i._refresh('manual'); 'ok'" >/dev/null
