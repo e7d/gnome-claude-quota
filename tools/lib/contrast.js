@@ -37,9 +37,12 @@ export function chroma(color) {
     return Math.max(color.red, color.green, color.blue) - Math.min(color.red, color.green, color.blue);
 }
 
+function hexByte(value) {
+    return Math.round(value).toString(16).padStart(2, '0');
+}
+
 export function toHex(color) {
-    const channel = value => Math.round(value).toString(16).padStart(2, '0');
-    return `#${channel(color.red)}${channel(color.green)}${channel(color.blue)}`;
+    return `#${hexByte(color.red)}${hexByte(color.green)}${hexByte(color.blue)}`;
 }
 
 function mix(from, to, fraction) {

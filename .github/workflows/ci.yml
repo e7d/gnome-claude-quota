@@ -41,6 +41,12 @@ jobs:
           docker exec "$C" bash -c 'mkdir -p ~/.local/share/gnome-shell/extensions && ln -sfn /work ~/.local/share/gnome-shell/extensions/'"$UUID"
           docker exec -u root "$C" .github/logind-stub.sh
 
+      - name: install
+        run: docker exec "$C" npm ci
+
+      - name: lint
+        run: docker exec "$C" npm run lint
+
       - name: shellcheck
         run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh tools/lib/*.sh'
 

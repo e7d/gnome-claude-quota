@@ -48,5 +48,5 @@ test('serialize writes only the limits, never the rest of the payload', () => {
     const text = serialize(limits, fetchedAt);
     assert.equal(text.includes('spend'), false);
     assert.equal(text.includes('extra_usage'), false);
-    assert.deepEqual(Object.keys(JSON.parse(text)).sort(), ['fetchedAt', 'limits', 'version']);
+    assert.deepEqual(Object.keys(JSON.parse(text)).toSorted(), ['fetchedAt', 'limits', 'version']);
 });

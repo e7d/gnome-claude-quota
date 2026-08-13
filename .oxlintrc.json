@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["node_modules", "preview"],
+  "env": { "builtin": true },
+  "categories": { "correctness": "error", "suspicious": "error", "perf": "error" },
+  "rules": {
+    "no-underscore-dangle": "off",
+    "no-undef": "error",
+    "no-unused-vars": "error",
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error"
+  },
+  "overrides": [
+    {
+      "files": ["extension.js", "lib/*.js"],
+      "globals": {
+        "global": "readonly",
+        "log": "readonly",
+        "logError": "readonly",
+        "TextDecoder": "readonly",
+        "TextEncoder": "readonly"
+      }
+    },
+    {
+      "files": ["test/**/*.js", "tools/**/*.js"],
+      "env": { "node": true }
+    }
+  ]
+}

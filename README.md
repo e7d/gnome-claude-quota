@@ -97,6 +97,17 @@ Run that from the directory *containing* the clone, not from inside it. Inside, 
 
 On Wayland, a running shell session does not detect newly installed extensions until you log out and back in. If `gnome-extensions enable` reports `Extension "claude-quota@e7d.io" does not exist`, log out first. It is not a sign of a broken install.
 
+## Lint
+
+```bash
+npm ci                 # oxlint, the only dependency this repository has
+npm run lint
+```
+
+The extension itself installs nothing — `node_modules/` exists for the linter and stays out of git. [oxlint](https://oxc.rs) is a Rust linter that reads the whole repository in a few milliseconds, and it prints nothing when everything passes.
+
+`.oxlintrc.json` runs the `correctness`, `suspicious` and `perf` rule sets, plus `no-undef`, `no-unused-vars`, `eqeqeq`, `no-var` and `prefer-const`. It turns `no-underscore-dangle` off, because `_private` is GNOME Shell's own convention and enforcing the rule reported 324 violations of it. The files that run inside the shell get the globals that only exist there — `global`, `log`, `logError`, `TextDecoder`, `TextEncoder` — while `test/` and `tools/` are linted as Node.
+
 ## Tests
 
 ```bash
@@ -230,7 +241,7 @@ What that costs: text on a saturated background is never measured, nor is anythi
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs the same checks you would run by hand, in that order: `shellcheck -x` over `tools/`, `npm test`, `npm run e2e`, then `npm run a11y` over exactly what that run shot.
+`.github/workflows/ci.yml` runs the same checks you would run by hand, in that order: `npm ci` then `npm run lint`, `shellcheck -x` over `tools/`, `npm test`, `npm run e2e`, then `npm run a11y` over exactly what that run shot.
 
 The screenshots need a whole GNOME session, so every step runs inside an image built from `.github/ci.Dockerfile` — Arch plus `gnome-shell`, ImageMagick, Node and the fonts the shots depend on. Its tag is a digest of that Dockerfile and it lives in the Forgejo registry, so a run rebuilds the image only when the file changes and pulls it otherwise. `.github/logind-stub.sh` supplies the `org.freedesktop.login1` service that `gnome-shell` refuses to start without and no container provides.
 

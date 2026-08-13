@@ -1,6 +1,6 @@
 # claude-quota — agent instructions
 
-A GNOME Shell 50 extension showing Claude Code subscription quotas in the top bar. Plain GJS, no build step, no runtime dependencies, no npm packages.
+A GNOME Shell 50 extension showing Claude Code subscription quotas in the top bar. Plain GJS, no build step, no runtime dependencies — what ships to a user is the checkout itself. `oxlint` is the one devDependency, so `node_modules/` exists on a developer's machine and nowhere else.
 
 Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`](../AGENTS.md). Vendor-neutral rules — no WHAT comments, small functions, tests travel with code — live in `~/.config/agents/AGENTS.md` and are not restated here. On conflict, those win.
 
@@ -21,6 +21,8 @@ Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_serv
 `_block` is one object (`{until, reason}`) or `null`, deliberately: it was briefly two fields and the harness caught them out of sync on the first run. `_service` (`{status, until}` or `null`) follows the same rule for the same reason.
 
 ## Checking your work
+
+`npm run lint` — oxlint over every `.js` in the repo, silent when clean. `.oxlintrc.json` runs `correctness`, `suspicious` and `perf`, and switches `no-underscore-dangle` off because `_private` is the shell's own convention and 324 findings would have buried everything else. The GJS-side `globals` block (`global`, `log`, `logError`, `TextDecoder`, `TextEncoder`) is what keeps `no-undef` usable across files that run in both the shell and Node — remove it and 12 real symbols read as undefined. Add a rule only with a run that proves it fires on this codebase.
 
 `npm test` — the unit suite. `TZ` is pinned to `UTC` in the script; the suite asserts absolute times and would otherwise fail outside UTC.
 

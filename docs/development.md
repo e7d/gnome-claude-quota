@@ -19,6 +19,20 @@ Stylesheets behave differently: `loadExtension` calls `theme.load_stylesheet()` 
 
 That asymmetry is a trap worth remembering: a disable/enable cycle picks up CSS while silently keeping old JS, so a change can appear to work while the code under test never ran.
 
+## Linting
+
+```bash
+npx oxlint                           # or: npm run lint
+npx oxlint lib/policy.js             # one file
+npx oxlint -A all -D pedantic        # try a rule set on before adopting it
+```
+
+Silence means clean. The rule sets in `.oxlintrc.json` are `correctness`, `suspicious` and `perf`, and the ones left off were left off with a measurement: `style` reported 1835 findings, `restriction` 170 — mostly optional chaining, `++` and `console` in `tools/`, all of which this code uses deliberately — and `suspicious` brings `no-underscore-dangle`, whose 324 hits are the `_private` convention GNOME Shell itself follows. That last one is disabled by name rather than by dropping the whole set.
+
+`no-undef` is the rule worth keeping honest, and it only works because the shell-side files declare what the shell provides: `global`, `log`, `logError`, `TextDecoder`, `TextEncoder`. Deleting that block reports 12 undefined symbols across `extension.js` and `lib/`, which is the check that it is still load-bearing. `test/` and `tools/` are linted as Node instead, since they are the only files allowed to touch `process`.
+
+Before adding a rule, run it with `-A all -D <category>` and read what it says about *this* codebase. A rule that fires 300 times on a convention is a rule that will be ignored.
+
 ## Running the tests
 
 ```bash
