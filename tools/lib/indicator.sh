@@ -147,15 +147,15 @@ setup_for() {
         locale) echo "$(setup_quotas) i._locale = 'fr-FR';" ;;
         rate-limited) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._block = {until: new Date(Date.now() + 180000), reason: 'rate-limit'};" ;;
         rate-limited-day) echo "$(setup_quotas) i._fetchedAt = new Date(Date.now() - 26 * 3600000); i._block = {until: new Date(Date.now() + 26 * 3600000), reason: 'rate-limit'};" ;;
-        error) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = 'Cannot reach api.anthropic.com';" ;;
-        token-expired) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION)]; i._error = 'Token expired, run Claude Code once';" ;;
+        error) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = {msgid: 'Cannot reach api.anthropic.com', values: {}};" ;;
+        token-expired) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION)]; i._error = {msgid: 'Token expired, run Claude Code once', values: {}};" ;;
         loading) echo "i._fetchedAt = null;" ;;
         refreshing) echo "$(setup_quotas) i._refreshing = true;" ;;
         fresh) echo "$(setup_quotas) i._fetchedAt = new Date();" ;;
-        no-data) echo "i._fetchedAt = null; i._error = 'Cannot reach api.anthropic.com';" ;;
-        model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = 'Usage request failed (HTTP 503)'; i._service = {status: 'partial_outage', until: null};" ;;
+        no-data) echo "i._fetchedAt = null; i._error = {msgid: 'Cannot reach api.anthropic.com', values: {}};" ;;
+        model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = {msgid: 'Usage request failed (HTTP {status})', values: {status: 503}}; i._service = {status: 'partial_outage', until: null};" ;;
         narrow-*) setup_for model-scoped ;;
-        service-*) echo "$(setup_quotas) i._error = 'Usage request failed (HTTP 503)'; i._service = {status: '$(service_status "$1")', until: $(service_until "$1")};" ;;
+        service-*) echo "$(setup_quotas) i._error = {msgid: 'Usage request failed (HTTP {status})', values: {status: 503}}; i._service = {status: '$(service_status "$1")', until: $(service_until "$1")};" ;;
         *) die "unknown scenario $1" ;;
     esac
 }
@@ -166,7 +166,7 @@ render_state() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
         $QUOTA
         $FILLER?.destroy(); $FILLER = null;
-        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._locale = 'en-US';
+        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._locale = 'en-US'; i._percentLocale = 'en-US';
         $(setup_for "$1")
         i.menu.open(false); i._render();
         $(squeeze_for "$1")

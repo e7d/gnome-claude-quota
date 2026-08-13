@@ -15,6 +15,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
+import {errorText} from './lib/errors.js';
 import {fresherThan} from './lib/shared-usage.js';
 import {captionLine, numberLocale, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
@@ -479,6 +480,7 @@ class Indicator extends PanelMenu.Button {
             return this._recordAttempt({
                 payload,
                 error: null,
+                desc: null,
                 retryAfter: null,
                 rateLimited: false,
                 serverError: false,
@@ -495,6 +497,7 @@ class Indicator extends PanelMenu.Button {
             return this._recordAttempt({
                 payload: null,
                 error: error.message,
+                desc: error.desc ?? null,
                 retryAfter: error.retryAfter ?? null,
                 rateLimited: error.rateLimited ?? false,
                 serverError: error.serverError ?? false,
@@ -551,13 +554,13 @@ class Indicator extends PanelMenu.Button {
             this._rateLimitStreak += 1;
             this._block = {until: block.until, reason};
             this._scheduleNext(nextPollSeconds(block.seconds));
-            this._error = reason === RATE_LIMIT ? null : result.error;
+            this._error = reason === RATE_LIMIT ? null : result.desc;
             this._service = null;
             return;
         }
         this._block = null;
         this._scheduleNext(nextPollSeconds(result.retryAfter));
-        this._error = result.error;
+        this._error = result.desc;
         // Named before status.claude.com has answered, so the line appears with the
         // first failed poll and is only ever refined, never introduced late.
         this._service = result.serverError ? UNKNOWN_SERVICE : null;
@@ -567,7 +570,7 @@ class Indicator extends PanelMenu.Button {
         const throttleUntil = throttledUntil(this._block);
         const silenced = isBlocked(throttleUntil, now);
         const issue = silenced ? null : serviceIssue(this._service?.status);
-        const error = silenced || issue || this._error === null ? '' : this._error;
+        const error = silenced || issue || this._error === null ? '' : errorText(this._error);
         const throttled = rateLimitMessage(throttleUntil, now, this._locale);
         const loading = issue === null && error === '' && !hasQuotas && !silenced;
         const message = loading ? 'Loading…' : throttled || error;
