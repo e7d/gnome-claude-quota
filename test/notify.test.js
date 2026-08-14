@@ -99,3 +99,10 @@ test('a quota with no reset time still fires, under an empty window', () => {
     const result = plan([quota({percent: 78, resetsAt: null})]);
     assert.deepEqual(result.fired, {'session|warning': {window: ''}});
 });
+
+test('the returned bookkeeping never aliases the caller\'s entries', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const result = plan([quota({percent: 80})], fired);
+    assert.deepEqual(result.fired, fired);
+    assert.notEqual(result.fired['session|warning'], fired['session|warning']);
+});
