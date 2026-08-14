@@ -48,13 +48,16 @@ function notifyRow(settings, level) {
     return row;
 }
 
-function surfaceGroup(settings, {title, key}) {
-    const group = new Adw.PreferencesGroup({title});
-    SCOPES.forEach(scope => {
-        const row = new Adw.SwitchRow({title: _(scope.name)});
-        settings.bind(scope[key], row, 'active', Gio.SettingsBindFlags.DEFAULT);
-        group.add(row);
-    });
+function visibilityRow(settings, {title, key}) {
+    const row = new Adw.SwitchRow({title});
+    settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+    return row;
+}
+
+function quotaGroup(settings, scope) {
+    const group = new Adw.PreferencesGroup({title: _(scope.name)});
+    group.add(visibilityRow(settings, {title: _('Show in top bar'), key: scope.barKey}));
+    group.add(visibilityRow(settings, {title: _('Show in menu'), key: scope.menuKey}));
     return group;
 }
 
@@ -84,8 +87,7 @@ export default class ClaudeQuotaPreferences extends ExtensionPreferences {
         });
         clampToEachOther(settings, spins);
         page.add(thresholds);
-        page.add(surfaceGroup(settings, {title: _('Show in top bar'), key: 'barKey'}));
-        page.add(surfaceGroup(settings, {title: _('Show in menu'), key: 'menuKey'}));
+        SCOPES.forEach(scope => page.add(quotaGroup(settings, scope)));
         window.add(page);
     }
 }

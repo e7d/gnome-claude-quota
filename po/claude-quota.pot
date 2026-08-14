@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 18:29+0200\n"
+"POT-Creation-Date: 2026-08-14 21:01+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,15 +18,15 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: extension.js:153 extension.js:411
+#: extension.js:153 extension.js:421
 msgid "Claude Quota"
 msgstr ""
 
-#: extension.js:740
+#: extension.js:750
 msgid "Loading…"
 msgstr ""
 
-#: extension.js:840
+#: extension.js:851
 msgid "Every quota is hidden — see the extension settings"
 msgstr ""
 
@@ -50,16 +50,16 @@ msgstr ""
 msgid "Restore the default"
 msgstr ""
 
-#: prefs.js:78
-msgid "Thresholds"
-msgstr ""
-
-#: prefs.js:87
+#: prefs.js:59
 msgid "Show in top bar"
 msgstr ""
 
-#: prefs.js:88
+#: prefs.js:60
 msgid "Show in menu"
+msgstr ""
+
+#: prefs.js:81
+msgid "Thresholds"
 msgstr ""
 
 #: lib/format.js:29
