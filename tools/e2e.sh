@@ -243,9 +243,12 @@ PREVIEW="$ROOT/tools/preview.sh"
 # A dead session's attach_session fails, so preview.sh falls through to starting
 # a brand-new one and blocks in `wait` forever — a command substitution calling
 # it would then never return, hanging the suite instead of failing it.
+# --notify=off on every preview call, because a banner draws top-centre over a capture
+# rect that starts at y=0. The notify group drives the record itself instead, which is
+# what makes an assertion here repeatable rather than dependent on what a shoot left up.
 preview() {
     session_live || die 'the e2e session died'
-    "$PREVIEW" --session=e2e "$@"
+    "$PREVIEW" --session=e2e --notify=off "$@"
 }
 
 # The theme is set once per row rather than per scenario: set_theme sleeps two
@@ -955,6 +958,65 @@ group_notify() {
     await_prefs
     prove_polled_alert
     assert_polled_alert
+    prove_arc
+    assert_lifecycle_arc
+}
+
+SEVERITY_CLASSES="$IND._blocks.map(b => b._percent.get_style_class_name())"
+SEVERITY_COLOURS="$IND._blocks.map(b => b._percent.get_theme_node().get_foreground_color().to_string())"
+
+# The panel colour follows the payload's own severity while a notification follows the
+# user's thresholds, so the two are independent inputs and agree only when the payload
+# agrees with the configured percentages. Moving both together is the realistic shape,
+# and the only one in which their coherence is a property worth asserting at all.
+arc_step() {
+    shell_eval "const i = $IND;
+        i._quotas = i._quotas.map(q => ({...q, percent: $1, severity: '$2'}));
+        i._render(); 'ok'" >/dev/null
+    sync_alerts
+}
+
+assert_arc_colour() {
+    assert_eq "$1 colour follows severity" 'true' \
+        "$(probe "($SEVERITY_CLASSES).every(c => $2)")"
+}
+
+assert_arc_colour_probe() { assert_arc_colour control '/cq-warning-/.test(c)'; }
+
+# Percentages are moved without re-rendering the scenario, so resetsAt holds still and
+# every step is a quota that moved rather than a window that rolled.
+assert_lifecycle_arc() {
+    local amber red
+    reset_alerts
+    render_state normal
+    arc_step 0 normal
+    assert_arc_colour 'arc at 0%' '!/cq-(warning|critical)-/.test(c)'
+    assert_alert_keys 'arc at 0%' '[]'
+    arc_step 78 warning
+    assert_arc_colour 'arc at 78%' '/cq-warning-/.test(c)'
+    assert_alert_keys 'arc at 78%' "['Session (5h)|warning','Weekly|warning']"
+    amber="$(probe "($SEVERITY_COLOURS)[0]")"
+    arc_step 96 critical
+    assert_arc_colour 'arc at 96%' '/cq-critical-/.test(c)'
+    assert_alert_keys 'arc at 96%' "['Session (5h)|critical','Weekly|critical']"
+    red="$(probe "($SEVERITY_COLOURS)[0]")"
+    assert_ne 'arc paints warning and critical differently' "$amber" "$red"
+    arc_step 0 normal
+    assert_arc_colour 'arc back at 0%' '!/cq-(warning|critical)-/.test(c)'
+    assert_alert_keys 'arc back at 0%' '[]'
+    assert_eq 'arc leaves nothing behind' 'null' "$(probe "$IND._source")"
+    reset_alerts
+}
+
+prove_arc() {
+    reset_alerts
+    render_state normal
+    arc_step 78 warning
+    prove 'colour follows severity' \
+        "shell_eval \"$IND._blocks.forEach(b => b._percent.set_style_class_name('cq-quota')); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
+        assert_arc_colour_probe
+    reset_alerts
 }
 
 park_indicator() {
@@ -1055,9 +1117,10 @@ main() {
     own_session
     local backend_flag=--headless
     [ "$DEVKIT_HEADLESS" -eq 1 ] || backend_flag=--windowed
-    "$PREVIEW" --session=e2e "$backend_flag" --detach --scenario=normal >/dev/null
+    "$PREVIEW" --session=e2e "$backend_flag" --detach --notify=off --scenario=normal >/dev/null
     attach_session || die 'preview.sh did not publish a session'
     freeze
+    block_banners true
     runs_group state && group_state
     runs_group panel && group_panel
     runs_group hover && group_hover

@@ -20,7 +20,19 @@ WANT_BACKEND=''
 DETACH=0
 STOP=0
 CAPTURE=0
+CAPTURE_NOTIFY=0
+WANT_NOTIFY=''
 WATCH=0
+
+NOTIFY_MODES=(natural fresh tray off)
+
+accept_notify() {
+    local mode
+    for mode in "${NOTIFY_MODES[@]}"; do
+        [ "$mode" = "$1" ] && { printf '%s' "$1"; return 0; }
+    done
+    die "unknown --notify mode '$1'; known: ${NOTIFY_MODES[*]}"
+}
 
 usage() {
     cat <<USAGE
@@ -41,7 +53,9 @@ Options:
   --close            Leave the popup closed and the pointer away (default)
   --hover            Leave the pointer on the panel button
   --open             Leave the popup open
+  --notify=<mode>    natural (default), fresh, tray or off — see below
   --capture          Shoot preview/<theme>-<scenario>.png of the shape applied
+  --capture=notify   Shoot preview/notify-<theme>-<scenario>.png of banner and tray
   --watch            Restart the shell on a source change, replaying the shape
   --detach           Start the session and return instead of blocking
   --stop             Tear the session down
@@ -49,6 +63,17 @@ Options:
 
 An option you leave out is left alone: preview.sh --light repaints and changes
 nothing else. On a fresh session the defaults above apply.
+
+Notifications:
+  natural  carry the alert record between recalls, banners shown — a scenario
+           change is a transition, so only genuine crossings fire and a repeat
+           of the same scenario is silent
+  fresh    clear the record first, so the scenario posts as a first encounter
+  tray     post into the tray with the banner suppressed, as e2e runs it
+  off      post nothing
+
+The session pins a window anchor at start, which is what lets a recall read as a
+quota moving rather than as a window rolling over.
 
 Scenarios:
   ${SCENARIOS[*]}
@@ -69,7 +94,10 @@ for arg in "$@"; do
         --locale=*) DEVKIT_LOCALE="$(accept_locale "${arg#*=}")" ;;
         --live) WANT_DATA=live; DATA_EXPLICIT=1 ;;
         --close|--hover|--open) WANT_POPUP="${arg#--}" ;;
+        --notify=*) WANT_NOTIFY="$(accept_notify "${arg#*=}")" ;;
         --capture) CAPTURE=1 ;;
+        --capture=notify) CAPTURE_NOTIFY=1 ;;
+        --capture=*) die "unknown --capture target '${arg#*=}'; known: notify" ;;
         --detach) DETACH=1 ;;
         --watch) WATCH=1 ;;
         --stop) STOP=1 ;;
@@ -109,6 +137,23 @@ apply_data() {
     state_set data "$WANT_DATA"
 }
 
+# render_state bypasses every path that syncs alerts, so the sync is asked for here.
+# Carrying the record is what makes a recall a transition rather than a first sighting,
+# and the anchored window is what stops the carried record reading as stale.
+apply_notify() {
+    local mode="${WANT_NOTIFY:-$(state_get notify)}"
+    mode="${mode:-natural}"
+    state_set notify "$mode"
+    { [ -n "$WANT_DATA" ] || [ -n "$WANT_NOTIFY" ]; } || return 0
+    case "$mode" in
+        off) return 0 ;;
+        tray) block_banners true ;;
+        fresh) block_banners false; reset_alerts ;;
+        natural) block_banners false ;;
+    esac
+    sync_alerts
+}
+
 # --open moves the pointer away first because the session's first pointer motion
 # closes a menu it lands inside — the same reason e2e.sh has reopen_menu.
 apply_popup() {
@@ -127,8 +172,11 @@ apply_popup() {
 apply_shape() {
     apply_theme
     apply_data
+    apply_notify
     shoot_tile
-    { [ -z "$WANT_DATA" ] && [ "$CAPTURE" -ne 1 ]; } || : "${WANT_POPUP:=$(state_get popup)}"
+    shoot_notify
+    { [ -z "$WANT_DATA" ] && [ "$CAPTURE" -ne 1 ] && [ "$CAPTURE_NOTIFY" -ne 1 ]; } ||
+        : "${WANT_POPUP:=$(state_get popup)}"
     apply_popup
 }
 
@@ -137,6 +185,15 @@ shoot_tile() {
     require_commands magick
     mkdir -p "$(out_dir)"
     capture "$(tile_name)"
+}
+
+# The banner has to be on screen to be shot, so a tray-mode or notify-off session
+# would produce the tray half alone — worth saying rather than shooting silently.
+shoot_notify() {
+    [ "$CAPTURE_NOTIFY" -eq 1 ] || return 0
+    require_commands magick
+    mkdir -p "$(out_dir)"
+    capture_notify "$(tile_name)"
 }
 
 fresh_defaults() {
@@ -159,6 +216,7 @@ start() {
     state_set backend "$WANT_BACKEND"
     state_set language "$DEVKIT_LANGUAGE"
     state_set locale "$DEVKIT_LOCALE"
+    state_set anchor "$(( $(date +%s) * 1000 ))"
     apply_shape
 }
 

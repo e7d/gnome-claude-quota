@@ -20,11 +20,18 @@ function readImage(path) {
     return {width, height, pixels};
 }
 
+// A notify- tile frames the shell's own banner and message list, whose colours are
+// GNOME's rather than ours. Scoring them would report findings that the standing rule
+// forbids acting on: change what is ours, leave what is GNOME's.
+function scorable(name) {
+    return name.endsWith('.png') && name !== 'overview.png' && !name.startsWith('notify-');
+}
+
 function targets(args) {
     if (args.length)
         return args.map(path => resolve(path));
     return readdirSync(SHOTS)
-        .filter(name => name.endsWith('.png') && name !== 'overview.png')
+        .filter(scorable)
         .toSorted()
         .map(name => join(SHOTS, name));
 }

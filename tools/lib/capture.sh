@@ -73,6 +73,70 @@ capture() {
     echo "$(out_dir)/$name.png"
 }
 
+# Only one banner is on screen at a time — the rest queue behind it — so the banner
+# frames what a user actually sees and the tray list is the only complete surface.
+# A NORMAL-urgency banner also expires on the shell's own timer, which is why an
+# absent banner is reported and skipped rather than shot as an empty rect.
+banner_box() {
+    shell_eval "(() => {
+        const tray = Main.messageTray;
+        if (tray._banner === null || !tray.visible)
+            return '';
+        const [x, y] = tray._bannerBin.get_transformed_position();
+        const [w, h] = tray._bannerBin.get_size();
+        if (!(w >= 1 && h >= 1))
+            return '';
+        const mon = Main.layoutManager.primaryMonitor;
+        const x0 = Math.max(0, Math.round(x) - 12);
+        const y0 = Math.max(Math.round(Main.panel.height), Math.round(y) - 12);
+        return [x0, y0, Math.min(mon.width - x0, Math.round(w) + 24),
+            Math.min(mon.height - y0, Math.round(h) + 24)].join(' ');
+    })()" | unwrap
+}
+
+tray_box() {
+    shell_eval "(() => {
+        const actor = Main.panel.statusArea.dateMenu.menu.actor;
+        const [x, y] = actor.get_transformed_position();
+        const [w, h] = actor.get_size();
+        if (!(w >= 1 && h >= 1))
+            return '';
+        const mon = Main.layoutManager.primaryMonitor;
+        const x0 = Math.max(0, Math.round(x) - 12);
+        return [x0, 0, Math.min(mon.width - x0, Math.round(w) + 24),
+            Math.min(mon.height, Math.round(y + h) + 12)].join(' ');
+    })()" | unwrap
+}
+
+# Deliberately not added to SHOTS: normalize pads every shot to the widest one, and the
+# tray is three times an indicator tile — it would blow up the whole grid.
+# The quota popup is left open by render_state and overlaps the banner's own rect, so it
+# is closed first — a shot of the banner has to frame the banner and nothing else.
+capture_notify() {
+    local name="$1" box rect parts=()
+    close_menu
+    point_at away
+    await_style
+    box="$(banner_box)"
+    if [ -n "$box" ]; then
+        read -r -a rect <<<"$box"
+        shoot "$RUN/banner.png" "${rect[@]}"
+        parts+=("$RUN/banner.png")
+    else
+        printf '  capture notify-%s: no banner live, tray only\n' "$name" >&2
+    fi
+    date_menu open
+    await_style
+    box="$(tray_box)"
+    [ -n "$box" ] || die "could not measure the notification tray for $name"
+    read -r -a rect <<<"$box"
+    shoot "$RUN/tray.png" "${rect[@]}"
+    date_menu close
+    parts+=("$RUN/tray.png")
+    magick "${parts[@]}" -background none -gravity center -smush 8 "$(out_dir)/notify-$name.png"
+    echo "$(out_dir)/notify-$name.png"
+}
+
 normalize() {
     local w h
     w="$(magick identify -format '%w\n' "${SHOTS[@]}" | sort -n | tail -1)"

@@ -65,7 +65,7 @@ QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => {
     return {
         key: name, short, name, percent, severity,
         modelScoped: !['Session (5h)', 'Weekly'].includes(name),
-        resetsAt: new Date(Date.now() + leftMin * 60000),
+        resetsAt: new Date(ANCHOR + leftMin * 60000),
         windowProgress: progress,
         aheadOfPace: percent / 100 - progress > 0.1,
     };
@@ -165,10 +165,21 @@ fixture_locales() {
     printf "%s" "i._locale = 'en-US'; i._percentLocale = 'en-US';"
 }
 
+# A scenario's resetsAt is what keys the alert record, so deriving it from the clock
+# on every render makes each recall look like a rolled window and re-post everything.
+# preview pins an anchor per session, which turns a recall into a transition; e2e sets
+# none and keeps the clock, since it drives the record explicitly instead.
+window_anchor() {
+    local anchor
+    anchor="$(state_get anchor)"
+    printf '%s' "${anchor:-Date.now()}"
+}
+
 # The filler is dropped before the state is built and re-added after the render,
 # because sizing it needs the ladder of the state being rendered, not the last one's.
 render_state() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
+        const ANCHOR = $(window_anchor);
         $QUOTA
         $FILLER?.destroy(); $FILLER = null;
         i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); $(fixture_locales)
@@ -189,6 +200,26 @@ reset_alerts() {
 
 sync_alerts() {
     shell_eval "Main.panel.statusArea['$UUID']._syncAlerts(new Date()); 'ok'" >/dev/null
+}
+
+# The shell's own switch (messageTray.js set bannerBlocked) hides the banner and leaves
+# the notification in its source, so assertions over _alerts and source.notifications
+# read the same either way — measured, because a capture is worthless if a banner can
+# drift across it.
+block_banners() {
+    shell_eval "Main.messageTray.bannerBlocked = $1; 'ok'" >/dev/null
+}
+
+# Moving a percentage without re-rendering is what makes a lifecycle arc a transition:
+# resetsAt stays put, so the plan sees a quota that moved rather than a rolled window.
+set_percent() {
+    shell_eval "const i = Main.panel.statusArea['$UUID'];
+        i._quotas = i._quotas.map(q => ({...q, percent: $1}));
+        i._render(); 'ok'" >/dev/null
+}
+
+date_menu() {
+    shell_eval "Main.panel.statusArea.dateMenu.menu.$1(false); 'ok'" >/dev/null
 }
 
 close_menu() {

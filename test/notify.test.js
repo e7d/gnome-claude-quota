@@ -201,6 +201,33 @@ test('a warning cannot post beside a critical that fired in an earlier pass', ()
     assert.deepEqual(result.withdraw, ['session|warning']);
 });
 
+// The window is held still across all four steps on purpose: every rule this exercises
+// is about a quota that moved, and a changing resetsAt would re-arm each level for the
+// unrelated reason that the window rolled.
+test('the full arc 0 to warning to critical and back leaves nothing behind', () => {
+    const quiet = plan([quota({percent: 0})]);
+    assert.deepEqual(quiet.post, []);
+    assert.deepEqual(quiet.fired, {});
+    const warned = plan([quota({percent: 78})], quiet.fired);
+    assert.deepEqual(warned.post.map(alert => alert.key), ['session|warning']);
+    assert.deepEqual(Object.keys(warned.fired), ['session|warning']);
+    const alarmed = plan([quota({percent: 96})], warned.fired);
+    assert.deepEqual(alarmed.post.map(alert => alert.key), ['session|critical']);
+    assert.deepEqual(alarmed.withdraw, ['session|warning']);
+    assert.deepEqual(Object.keys(alarmed.fired).toSorted(), ['session|critical', 'session|warning']);
+    const recovered = plan([quota({percent: 0})], alarmed.fired);
+    assert.deepEqual(recovered.post, []);
+    assert.deepEqual(recovered.withdraw.toSorted(), ['session|critical', 'session|warning']);
+    assert.deepEqual(recovered.fired, {});
+});
+
+test('the arc re-arms, so a second climb in the same window fires again', () => {
+    const climbed = plan([quota({percent: 96})]);
+    const dropped = plan([quota({percent: 0})], climbed.fired);
+    const again = plan([quota({percent: 78})], dropped.fired);
+    assert.deepEqual(again.post.map(alert => alert.key), ['session|warning']);
+});
+
 test('settings values become the threshold list alertPlan takes', () => {
     assert.deepEqual(thresholdsFrom({
         warningEnabled: true,
