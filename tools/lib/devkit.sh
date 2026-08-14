@@ -163,6 +163,17 @@ own_session() {
     trap release_session EXIT INT TERM
 }
 
+# The kernel holds this against the open descriptor and drops it on any exit, kill
+# included, so there is no stale lock to detect or clear. It sits outside $RUN
+# because reap_session removes that directory, and a second run would then lock a
+# fresh file and walk straight in. Two suites sharing one nested shell interleave
+# their state and their pointer, which reads as a defect anywhere in the run.
+claim_session() {
+    mkdir -p "$RUNTIME_ROOT"
+    exec 9>"$RUNTIME_ROOT/$1.lock"
+    flock -n 9 || die "session '$1' is already running; wait for it, or --stop it first"
+}
+
 require_commands() {
     local missing=() cmd
     for cmd in "$@"; do

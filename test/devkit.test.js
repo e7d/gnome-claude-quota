@@ -178,3 +178,24 @@ test('locale_available compares case and dashes loosely', () => {
     assert.equal(run('locale_available en_US.UTF-8', root).status, 0);
     assert.equal(run('locale_available zz_ZZ.UTF-8', root).status, 1);
 });
+
+test('claim_session refuses a session another run already holds', () => {
+    const root = runtimeRoot();
+    const {status, stdout} = run(
+        'claim_session e2e\necho first\n( claim_session e2e ) && echo "second got in"', root);
+    assert.match(stdout, /first/);
+    assert.doesNotMatch(stdout, /second got in/);
+    assert.notEqual(status, 0);
+});
+
+test('claim_session keeps its lock outside the session directory', () => {
+    const root = runtimeRoot();
+    const {stdout} = run('use_session e2e\nclaim_session e2e\nreap_session\nls "$RUNTIME_ROOT"', root);
+    assert.match(stdout, /e2e\.lock/);
+});
+
+test('a session freed by its holder can be claimed again', () => {
+    const root = runtimeRoot();
+    const {status} = run('( claim_session e2e )\nclaim_session e2e', root);
+    assert.equal(status, 0);
+});

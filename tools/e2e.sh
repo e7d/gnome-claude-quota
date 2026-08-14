@@ -843,6 +843,7 @@ main() {
     select_scenarios
     select_groups
     use_session e2e
+    claim_session e2e
     reap_session
     own_session
     local backend_flag=--headless
