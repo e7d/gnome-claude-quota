@@ -70,6 +70,13 @@ test('a threshold already fired for this window does not post again', () => {
     assert.deepEqual(result.fired, fired);
 });
 
+test('the same window arriving with a jittered timestamp posts nothing', () => {
+    const early = plan([quota({percent: 78, resetsAt: new Date('2026-08-14T11:29:59.513Z')})]);
+    const result = plan([quota({percent: 78, resetsAt: new Date('2026-08-14T11:30:00.260Z')})], early.fired);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(result.withdraw, []);
+});
+
 test('a rolled window withdraws the stale alert and re-arms the level', () => {
     const fired = {'session|warning': {window: '2026-08-14T06:30:00.000Z'}};
     const result = plan([quota({percent: 78})], fired);
