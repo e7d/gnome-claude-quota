@@ -17,22 +17,21 @@ import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {_, resetTranslator, setTranslator} from './lib/i18n.js';
-import {fresherThan} from './lib/shared-usage.js';
 import {captionLine, numberLocale, percentLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from './lib/notify.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
-import {blockReason, isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, shouldFetchOnOpen, RATE_LIMIT} from './lib/policy.js';
+import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
+import {adoptShared, applyResult, UNKNOWN_SERVICE} from './lib/state.js';
 import {barClass, quotaClass} from './lib/style.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
 
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
-const UNKNOWN_SERVICE = {status: 'unknown', until: null};
 const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
 const TICK_OVERHANG = 2;
@@ -550,19 +549,47 @@ class Indicator extends PanelMenu.Button {
         return sharedUsage();
     }
 
+    _snapshot() {
+        return {
+            limits: this._limits,
+            quotas: this._quotas,
+            error: this._error,
+            service: this._service,
+            block: this._block,
+            fetchedAt: this._fetchedAt,
+            seenExpiry: this._seenExpiry,
+            rateLimitStreak: this._rateLimitStreak,
+        };
+    }
+
+    _adopt(state) {
+        this._limits = state.limits;
+        this._quotas = state.quotas;
+        this._error = state.error;
+        this._service = state.service;
+        this._block = state.block;
+        this._fetchedAt = state.fetchedAt;
+        this._seenExpiry = state.seenExpiry;
+        this._rateLimitStreak = state.rateLimitStreak;
+    }
+
+    _perform(effects, now) {
+        if (effects.save)
+            this._saveCache();
+        if (effects.syncAlerts)
+            this._syncAlerts(now);
+        if (effects.schedule > 0)
+            this._scheduleNext(effects.schedule);
+    }
+
     // Claude Code holds the same payload under its own cache, so whichever of the
     // two was fetched later is the one worth showing — and adopting it costs no
     // request, which is why it is tried before the block and the interval.
     _adoptShared(now) {
-        const shared = this._sharedUsage();
-        if (!fresherThan(shared, this._fetchedAt))
+        const outcome = adoptShared({state: this._snapshot(), shared: this._sharedUsage(), now});
+        if (outcome === null)
             return;
-        this._limits = shared.limits;
-        this._quotas = quotas({limits: shared.limits}, now);
-        this._error = null;
-        this._service = null;
-        this._fetchedAt = shared.fetchedAt;
-        this._saveCache();
+        this._adopt(outcome.state);
         this._appendAttempt(attemptRecord({
             now,
             trigger: 'shared',
@@ -576,7 +603,7 @@ class Indicator extends PanelMenu.Button {
             headers: {},
             body: null,
         }));
-        this._syncAlerts(now);
+        this._perform(outcome.effects, now);
     }
 
     // Time is an input to the plan, so a poll that ends early — settled, blocked, or
@@ -710,36 +737,10 @@ class Indicator extends PanelMenu.Button {
     }
 
     _applyResult(result) {
-        if (result.error === null) {
-            this._limits = Array.isArray(result.payload?.limits) ? result.payload.limits : [];
-            this._quotas = quotas(result.payload, new Date());
-            this._error = null;
-            this._service = null;
-            this._block = null;
-            this._rateLimitStreak = 0;
-            this._fetchedAt = new Date();
-            this._seenExpiry = result.expiresAt ?? this._seenExpiry;
-            this._saveCache();
-            this._syncAlerts(new Date());
-            this._scheduleNext(nextPollSeconds(null));
-            return;
-        }
-        const reason = blockReason(result);
-        if (reason !== null) {
-            const block = rateLimitBlock(result.retryAfter, new Date(), this._rateLimitStreak);
-            this._rateLimitStreak += 1;
-            this._block = {until: block.until, reason};
-            this._scheduleNext(nextPollSeconds(block.seconds));
-            this._error = reason === RATE_LIMIT ? null : result.desc;
-            this._service = null;
-            return;
-        }
-        this._block = null;
-        this._scheduleNext(nextPollSeconds(result.retryAfter));
-        this._error = result.desc;
-        // Named before status.claude.com has answered, so the line appears with the
-        // first failed poll and is only ever refined, never introduced late.
-        this._service = result.serverError ? UNKNOWN_SERVICE : null;
+        const now = new Date();
+        const {state, effects} = applyResult({state: this._snapshot(), result, now});
+        this._adopt(state);
+        this._perform(effects, now);
     }
 
     _renderMessage(view) {
