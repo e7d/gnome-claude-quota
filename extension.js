@@ -168,6 +168,7 @@ class Indicator extends PanelMenu.Button {
         this._credentialsSettleId = 0;
         this._seenExpiry = this._credentialExpiry();
         this._limits = [];
+        this._fired = {};
         this._locale = timeLocale({
             LC_ALL: GLib.getenv('LC_ALL'),
             LC_TIME: GLib.getenv('LC_TIME'),
@@ -278,6 +279,7 @@ class Indicator extends PanelMenu.Button {
         this._limits = cached.limits;
         this._quotas = quotas({limits: cached.limits}, new Date());
         this._fetchedAt = cached.fetchedAt;
+        this._fired = cached.fired;
     }
 
     _saveCache() {
@@ -288,7 +290,7 @@ class Indicator extends PanelMenu.Button {
         }
         try {
             file.replace_contents(
-                new TextEncoder().encode(serialize(this._limits, this._fetchedAt)),
+                new TextEncoder().encode(serialize(this._limits, this._fetchedAt, this._fired)),
                 null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
         } catch (error) {
             logError(error);

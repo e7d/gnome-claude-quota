@@ -25,9 +25,21 @@ test('deserialize rejects malformed JSON', () => {
     assert.equal(deserialize('{not valid json'), null);
 });
 
-test('deserialize rejects a different version', () => {
-    assert.equal(deserialize(JSON.stringify({version: 2, fetchedAt: fetchedAt.toISOString(), limits})), null);
+test('deserialize rejects a version it does not know', () => {
+    assert.equal(deserialize(JSON.stringify({version: 3, fetchedAt: fetchedAt.toISOString(), limits})), null);
     assert.equal(deserialize(JSON.stringify({fetchedAt: fetchedAt.toISOString(), limits})), null);
+});
+
+test('a round trip preserves the alert bookkeeping', () => {
+    const fired = {'session|warning': {window: '2026-08-04T14:59:59.000Z'}};
+    assert.deepEqual(deserialize(serialize(limits, fetchedAt, fired)).fired, fired);
+});
+
+test('a version 1 file is read as legacy with no alerts fired', () => {
+    const legacy = JSON.stringify({version: 1, fetchedAt: fetchedAt.toISOString(), limits});
+    const restored = deserialize(legacy);
+    assert.deepEqual(restored.limits, limits);
+    assert.deepEqual(restored.fired, {});
 });
 
 test('deserialize rejects limits that are missing or not an array', () => {
@@ -48,5 +60,5 @@ test('serialize writes only the limits, never the rest of the payload', () => {
     const text = serialize(limits, fetchedAt);
     assert.equal(text.includes('spend'), false);
     assert.equal(text.includes('extra_usage'), false);
-    assert.deepEqual(Object.keys(JSON.parse(text)).toSorted(), ['fetchedAt', 'limits', 'version']);
+    assert.deepEqual(Object.keys(JSON.parse(text)).toSorted(), ['fetchedAt', 'fired', 'limits', 'version']);
 });
