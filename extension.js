@@ -27,6 +27,7 @@ import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
 import {blockReason, isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
+import {barClass, quotaClass} from './lib/style.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
@@ -62,17 +63,6 @@ function panelScheme() {
     return schemeForForeground(Main.panel.get_theme_node().get_foreground_color());
 }
 
-function severityClass(base, severity, scheme) {
-    return severity === 'normal' ? base : `${base} cq-${severity}-${scheme}`;
-}
-
-function quotaClass(base, quota, scheme) {
-    return severityClass(base, quota.severity, scheme);
-}
-
-function barClass(scheme) {
-    return `cq-bar cq-bar-${scheme}`;
-}
 
 const PaceBar = GObject.registerClass(
 class PaceBar extends BarLevel {
