@@ -88,6 +88,19 @@ test('applyResult on a repeated rate limit backs off further than the first', ()
     assert.ok(twice.effects.schedule > once.effects.schedule);
 });
 
+test('applyResult on an unauthorized refusal blocks and keeps the description as the error', () => {
+    const {state: next, effects} = applyResult({
+        state: state(),
+        result: ok({error: 'nope', payload: null, status: 401, desc: 'Reauthenticate'}),
+        now: NOW,
+    });
+    assert.notEqual(next.block, null);
+    assert.equal(next.rateLimitStreak, 1);
+    assert.equal(next.error, 'Reauthenticate');
+    assert.ok(effects.schedule > 0);
+    assert.equal(effects.save, false);
+});
+
 test('applyResult on a plain failure keeps the description and clears any block', () => {
     const {state: next} = applyResult({
         state: state({block: {until: NOW, reason: 'rate-limit'}}),
