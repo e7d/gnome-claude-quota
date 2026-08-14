@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {NOTIFY_DEFAULTS, alertPlan, alertRefresh, thresholdsFrom} from '../lib/notify.js';
+import {NOTIFY_DEFAULTS, alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from '../lib/notify.js';
 
 const now = new Date('2026-08-14T09:00:00Z');
 const resetsAt = new Date('2026-08-14T11:30:00Z');
@@ -226,6 +226,21 @@ test('the arc re-arms, so a second climb in the same window fires again', () => 
     const dropped = plan([quota({percent: 0})], climbed.fired);
     const again = plan([quota({percent: 78})], dropped.fired);
     assert.deepEqual(again.post.map(alert => alert.key), ['session|warning']);
+});
+
+test('the refresh delay lands just past the next minute boundary', () => {
+    assert.equal(refreshDelayMs(new Date('2026-08-14T09:00:00.000Z')), 60_250);
+    assert.equal(refreshDelayMs(new Date('2026-08-14T09:00:30.000Z')), 30_250);
+    assert.equal(refreshDelayMs(new Date('2026-08-14T09:00:59.900Z')), 350);
+});
+
+test('the refresh delay never lands before a boundary, whatever the offset', () => {
+    for (let ms = 0; ms < 60_000; ms += 137) {
+        const at = new Date(Date.UTC(2026, 7, 14, 9, 0, 0) + ms);
+        const landing = new Date(at.getTime() + refreshDelayMs(at));
+        assert.equal(landing.getUTCSeconds(), 0);
+        assert.ok(landing.getTime() > at.getTime());
+    }
 });
 
 function refresh(quotas, fired, at = now) {

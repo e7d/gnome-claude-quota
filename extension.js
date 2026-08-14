@@ -21,7 +21,7 @@ import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {fresherThan} from './lib/shared-usage.js';
 import {captionLine, numberLocale, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
-import {REFRESH_SECONDS, alertPlan, alertRefresh, thresholdsFrom} from './lib/notify.js';
+import {alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from './lib/notify.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
@@ -498,9 +498,18 @@ class Indicator extends PanelMenu.Button {
         }
         if (this._alertTimerId)
             return;
-        this._alertTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, REFRESH_SECONDS, () => {
+        this._armAlertRefresh();
+    }
+
+    // One shot that re-arms from the tick, rather than a repeating timer: each arming is
+    // measured from the clock, so the cadence cannot drift and a suspended laptop resumes on
+    // the boundary instead of wherever it left off. The id is cleared before the sync, which
+    // is what lets _trackAlertRefresh arm the next one.
+    _armAlertRefresh() {
+        this._alertTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, refreshDelayMs(new Date()), () => {
+            this._alertTimerId = null;
             this._syncAlerts(new Date());
-            return GLib.SOURCE_CONTINUE;
+            return GLib.SOURCE_REMOVE;
         });
     }
 
