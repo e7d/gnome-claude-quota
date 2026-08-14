@@ -16,19 +16,19 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
-import {errorText} from './lib/errors.js';
 import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {fresherThan} from './lib/shared-usage.js';
-import {captionLine, numberLocale, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
+import {captionLine, numberLocale, percentLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from './lib/notify.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
-import {blockReason, isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
+import {blockReason, isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, shouldFetchOnOpen, RATE_LIMIT} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
 import {barClass, quotaClass} from './lib/style.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
+import {panelView, popupView} from './lib/view.js';
 
 const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
@@ -742,39 +742,26 @@ class Indicator extends PanelMenu.Button {
         this._service = result.serverError ? UNKNOWN_SERVICE : null;
     }
 
-    _renderMessage(now, hasQuotas, menuHasQuotas) {
-        const throttleUntil = throttledUntil(this._block);
-        const silenced = isBlocked(throttleUntil, now);
-        const issue = silenced ? null : serviceIssue(this._service?.status);
-        const error = silenced || issue || this._error === null ? '' : errorText(this._error);
-        const throttled = rateLimitMessage(throttleUntil, now, this._locale);
-        const loading = issue === null && error === '' && !hasQuotas && !silenced;
-        const message = loading ? _('Loading…') : throttled || error;
-        this._refreshLabel.text = refreshLine(this._fetchedAt, now, this._locale);
-        this._issueItem.visible = issue !== null;
-        this._renderIssue(issue, now);
-        this._messageLabel.text = message;
-        this._message.visible = message !== '';
-        this._messageSeparator.visible = (issue !== null || error !== '' || throttled !== '') && menuHasQuotas;
-        this._body.visible = !loading;
+    _renderMessage(view) {
+        this._refreshLabel.text = view.refreshText;
+        this._issueItem.visible = view.issue !== null;
+        this._renderIssue(view.issue);
+        this._messageLabel.text = view.message;
+        this._message.visible = view.messageVisible;
+        this._messageSeparator.visible = view.separatorVisible;
+        this._body.visible = view.bodyVisible;
     }
 
     // Cleared rather than left behind when there is no issue: a hidden row that keeps
     // the last incident's wording hands it back the moment the next one differs.
-    _renderIssue(issue, now) {
+    _renderIssue(issue) {
         if (issue === null) {
             this._issueItem.label.text = '';
             return;
         }
-        const label = `${issue.emoji} ${issue.text}`;
-        const until = serviceUntilLine(this._service?.until, now, this._locale);
-        if (until === '') {
-            this._issueItem.label.text = label;
-            return;
-        }
-        this._issueItem.label.text = `${label} · ${until}`;
+        this._issueItem.label.text = issue.oneLine;
         if (!this._issueFits())
-            this._issueItem.label.text = `${label}\n${until}`;
+            this._issueItem.label.text = issue.twoLine;
     }
 
     // The popup is as wide as its widest item, so a window that does not fit beside the
@@ -787,9 +774,8 @@ class Indicator extends PanelMenu.Button {
         return issueWidth <= bodyWidth;
     }
 
-    _renderActions(now) {
-        this._refreshButton.reactive = !this._refreshing && !isBlocked(this._block?.until, now)
-            && minIntervalWait(this._lastRequestAt, now) === 0;
+    _renderActions(view) {
+        this._refreshButton.reactive = view.refreshEnabled;
         this._refreshButton.opacity = this._refreshButton.reactive ? 255 : CAPTION_OPACITY;
         if (this._refreshing)
             this._startSpinner();
@@ -845,15 +831,14 @@ class Indicator extends PanelMenu.Button {
                 quota, now, scheme, locale: this._locale, percentLocale: this._percentLocale}));
     }
 
-    _renderHiddenNote(hasQuotas, menuHasQuotas) {
-        const allHidden = hasQuotas && !menuHasQuotas;
-        this._hiddenNote.visible = allHidden;
-        this._hiddenNoteButton.visible = allHidden;
-        this._hiddenNoteItem.visible = allHidden;
-        if (!allHidden)
+    _renderHiddenNote(hiddenNote) {
+        this._hiddenNote.visible = hiddenNote.visible;
+        this._hiddenNoteButton.visible = hiddenNote.visible;
+        this._hiddenNoteItem.visible = hiddenNote.visible;
+        if (!hiddenNote.visible)
             return;
-        this._hiddenNote.text = _('Every quota is hidden.');
-        this._hiddenNoteButton.label = _('Open settings');
+        this._hiddenNote.text = hiddenNote.text;
+        this._hiddenNoteButton.label = hiddenNote.buttonLabel;
     }
 
     _render() {
@@ -861,14 +846,24 @@ class Indicator extends PanelMenu.Button {
         const scheme = this._scheme;
         const quotaViews = this._quotaViews(now);
         const menuViews = this._visibleOn('menu', quotaViews);
-        const hasQuotas = quotaViews.length > 0;
-        const menuHasQuotas = menuViews.length > 0;
-        this._renderActions(now);
-        this._renderPanel(this._visibleOn('bar', quotaViews), hasQuotas);
+        const view = popupView({
+            block: this._block,
+            service: this._service,
+            error: this._error,
+            fetchedAt: this._fetchedAt,
+            refreshing: this._refreshing,
+            lastRequestAt: this._lastRequestAt,
+            quotaCount: quotaViews.length,
+            menuQuotaCount: menuViews.length,
+            locale: this._locale,
+            now,
+        });
+        this._renderActions(view);
+        this._renderPanel(this._visibleOn('bar', quotaViews), quotaViews.length > 0);
         this._renderBlocks(menuViews, now, scheme);
-        this._blockBox.visible = menuHasQuotas;
-        this._renderHiddenNote(hasQuotas, menuHasQuotas);
-        this._renderMessage(now, hasQuotas, menuHasQuotas);
+        this._blockBox.visible = menuViews.length > 0;
+        this._renderHiddenNote(view.hiddenNote);
+        this._renderMessage(view);
     }
 
     _panelSeparator() {
@@ -879,57 +874,36 @@ class Indicator extends PanelMenu.Button {
         });
     }
 
-    _renderPanel(quotaViews, hasQuotas) {
+    // Each value owns the dot and the gap to its left, so hiding one takes its own
+    // spacing with it and every surviving rung ends flush against the button.
+    _panelCellActor(cell) {
+        const label = new St.Label({text: cell.text, y_align: Clutter.ActorAlign.CENTER});
+        if (cell.styleClass !== null)
+            label.style_class = cell.styleClass;
+        const actor = new St.BoxLayout({style_class: 'cq-panel-cell'});
+        const dot = cell.dotted ? this._panelSeparator() : null;
+        if (dot)
+            actor.add_child(dot);
+        actor.add_child(label);
+        this._panelQuotas.add_child(actor);
+        return {actor, label, dot};
+    }
+
+    _renderPanel(quotaViews, hasAnyQuota) {
         const scheme = panelScheme();
         this._icon.style = `color: ${brandColor(scheme)};`;
         this._panelQuotas.destroy_all_children();
-        this._panelCells = this._panelLabels(quotaViews, scheme, hasQuotas).map(({label, dotted}) => {
-            const actor = new St.BoxLayout({style_class: 'cq-panel-cell'});
-            const dot = dotted ? this._panelSeparator() : null;
-            if (dot)
-                actor.add_child(dot);
-            actor.add_child(label);
-            this._panelQuotas.add_child(actor);
-            return {actor, label, dot};
+        const {cells, issueLast} = panelView({
+            quotas: quotaViews,
+            hasAnyQuota,
+            service: this._service,
+            error: this._error,
+            scheme,
+            percentLocale: this._percentLocale,
         });
+        this._issueLast = issueLast;
+        this._panelCells = cells.map(cell => this._panelCellActor(cell));
         this._fitPanel();
-    }
-
-    // Each value owns the dot and the gap to its left, so hiding one takes its own
-    // spacing with it and every surviving rung ends flush against the button. The
-    // ellipsis/dash fallback is for nothing having been fetched yet — a quota list
-    // emptied by the user's own bar prefs falls through to the icon-only floor instead.
-    _panelLabels(quotaViews, scheme, hasQuotas) {
-        const labels = quotaViews.map(quota => ({
-            dotted: true,
-            label: new St.Label({
-                text: `${quota.short} ${percentLine(quota, this._percentLocale)}`,
-                style_class: quotaClass('cq-panel-quota', quota, scheme),
-                y_align: Clutter.ActorAlign.CENTER,
-            }),
-        }));
-        if (!labels.length && !hasQuotas) {
-            labels.push({
-                dotted: false,
-                label: new St.Label({
-                    text: this._error ? '-' : '…',
-                    y_align: Clutter.ActorAlign.CENTER,
-                }),
-            });
-        }
-        const issue = serviceIssue(this._service?.status);
-        this._issueLast = issue !== null;
-        if (issue) {
-            labels.push({
-                dotted: false,
-                label: new St.Label({
-                    text: issue.emoji,
-                    style_class: 'cq-panel-issue',
-                    y_align: Clutter.ActorAlign.CENTER,
-                }),
-            });
-        }
-        return labels;
     }
 
     // An incident emoji is kept ahead of every value on purpose: it reports

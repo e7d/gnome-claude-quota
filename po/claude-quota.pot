@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 22:22+0200\n"
+"POT-Creation-Date: 2026-08-14 23:27+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,20 +18,8 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: extension.js:153 extension.js:433
+#: extension.js:143 extension.js:423
 msgid "Claude Quota"
-msgstr ""
-
-#: extension.js:762
-msgid "Loading…"
-msgstr ""
-
-#: extension.js:865
-msgid "Every quota is hidden."
-msgstr ""
-
-#: extension.js:866
-msgid "Open settings"
 msgstr ""
 
 #: prefs.js:10
@@ -176,4 +164,16 @@ msgstr ""
 
 #: lib/usage.js:124
 msgid "Unexpected response from the usage endpoint"
+msgstr ""
+
+#: lib/view.js:25
+msgid "Every quota is hidden."
+msgstr ""
+
+#: lib/view.js:26
+msgid "Open settings"
+msgstr ""
+
+#: lib/view.js:38
+msgid "Loading…"
 msgstr ""
