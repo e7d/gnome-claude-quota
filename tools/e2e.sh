@@ -222,7 +222,7 @@ assert_all_hidden_says_so() {
     set_quota_pref weekly-in-menu false
     set_quota_pref scoped-in-menu false
     local shown text
-    shown="$(probe "$IND._hiddenNote.visible")"
+    shown="$(probe "$IND._hiddenNote.mapped")"
     text="$(probe "$IND._hiddenNote.text")"
     set_quota_pref session-in-menu true
     set_quota_pref weekly-in-menu true

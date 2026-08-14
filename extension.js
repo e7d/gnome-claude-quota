@@ -730,7 +730,7 @@ class Indicator extends PanelMenu.Button {
         this._service = result.serverError ? UNKNOWN_SERVICE : null;
     }
 
-    _renderMessage(now, hasQuotas) {
+    _renderMessage(now, hasQuotas, menuHasQuotas) {
         const throttleUntil = throttledUntil(this._block);
         const silenced = isBlocked(throttleUntil, now);
         const issue = silenced ? null : serviceIssue(this._service?.status);
@@ -743,7 +743,7 @@ class Indicator extends PanelMenu.Button {
         this._renderIssue(issue, now);
         this._messageLabel.text = message;
         this._message.visible = message !== '';
-        this._messageSeparator.visible = (issue !== null || error !== '' || throttled !== '') && hasQuotas;
+        this._messageSeparator.visible = (issue !== null || error !== '' || throttled !== '') && menuHasQuotas;
         this._body.visible = !loading;
     }
 
@@ -833,8 +833,8 @@ class Indicator extends PanelMenu.Button {
                 quota, now, scheme, locale: this._locale, percentLocale: this._percentLocale}));
     }
 
-    _renderHiddenNote(quotaViews, menuViews) {
-        const allHidden = quotaViews.length > 0 && menuViews.length === 0;
+    _renderHiddenNote(hasQuotas, menuHasQuotas) {
+        const allHidden = hasQuotas && !menuHasQuotas;
         this._hiddenNote.visible = allHidden;
         if (allHidden)
             this._hiddenNote.text = _('Every quota is hidden — see the extension settings');
@@ -845,13 +845,14 @@ class Indicator extends PanelMenu.Button {
         const scheme = this._scheme;
         const quotaViews = this._quotaViews(now);
         const menuViews = this._visibleOn('menu', quotaViews);
+        const hasQuotas = quotaViews.length > 0;
+        const menuHasQuotas = menuViews.length > 0;
         this._renderActions(now);
         this._renderPanel(this._visibleOn('bar', quotaViews));
         this._renderBlocks(menuViews, now, scheme);
-        const hasQuotas = menuViews.length > 0;
-        this._blockBox.visible = hasQuotas;
-        this._renderHiddenNote(quotaViews, menuViews);
-        this._renderMessage(now, hasQuotas);
+        this._blockBox.visible = menuHasQuotas;
+        this._renderHiddenNote(hasQuotas, menuHasQuotas);
+        this._renderMessage(now, hasQuotas, menuHasQuotas);
     }
 
     _panelSeparator() {
