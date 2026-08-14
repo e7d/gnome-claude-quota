@@ -110,7 +110,7 @@ msgstr "Hebdomadaire"
 
 #: lib/settings.js:6
 msgid "Model-specific"
-msgstr ""
+msgstr "Par modèle"
 
 #: lib/usage.js:26
 msgid "Cannot read ~/.claude/.credentials.json"
