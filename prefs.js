@@ -89,5 +89,6 @@ export default class ClaudeQuotaPreferences extends ExtensionPreferences {
         page.add(thresholds);
         SCOPES.forEach(scope => page.add(quotaGroup(settings, scope)));
         window.add(page);
+        window.set_default_size(640, 820);
     }
 }
