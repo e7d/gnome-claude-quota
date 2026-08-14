@@ -13,13 +13,15 @@ import {
     UNAUTHORIZED,
     blockReason,
     isBlocked,
+    markExpired,
+    markSeverity,
     maxAgeFor,
     minIntervalWait,
-    rateLimitBlock,
-    markExpired,
     nextPollSeconds,
     pollDelay,
+    rateLimitBlock,
     serviceIssue,
+    severityFor,
     shouldFetchOnOpen,
     throttledUntil,
 } from '../lib/policy.js';
@@ -247,4 +249,40 @@ test('serviceIssue translates the wording and leaves the emoji alone', () => {
     assert.deepEqual(serviceIssue('major_outage'), {emoji: '🔴', text: 'fr:Major outage'});
     assert.deepEqual(serviceIssue('nonsense'), {emoji: '🚨', text: 'fr:Service error'});
     resetTranslator();
+});
+
+test('severityFor reads the boundaries inclusively', () => {
+    const thresholds = {warning: 75, critical: 90};
+    assert.equal(severityFor(74, thresholds), 'normal');
+    assert.equal(severityFor(75, thresholds), 'warning');
+    assert.equal(severityFor(89, thresholds), 'warning');
+    assert.equal(severityFor(90, thresholds), 'critical');
+    assert.equal(severityFor(100, thresholds), 'critical');
+});
+
+test('severityFor treats a non-finite percentage as normal', () => {
+    assert.equal(severityFor(null, {warning: 75, critical: 90}), 'normal');
+    assert.equal(severityFor(Number.NaN, {warning: 75, critical: 90}), 'normal');
+});
+
+test('severityFor leaves no band uncoloured when the pair is inverted', () => {
+    const inverted = {warning: 95, critical: 80};
+    assert.equal(severityFor(79, inverted), 'normal');
+    assert.equal(severityFor(85, inverted), 'critical');
+    assert.equal(severityFor(96, inverted), 'critical');
+});
+
+test('markSeverity derives a severity per quota and leaves an expired one normal', () => {
+    const marked = markSeverity([
+        {percent: 30, expired: false},
+        {percent: 96, expired: false},
+        {percent: 96, expired: true},
+    ], {warning: 75, critical: 90});
+    assert.deepEqual(marked.map(quota => quota.severity), ['normal', 'critical', 'normal']);
+});
+
+test('markSeverity does not mutate its input', () => {
+    const quotas = [{percent: 96, expired: false}];
+    markSeverity(quotas, {warning: 75, critical: 90});
+    assert.equal(quotas[0].severity, undefined);
 });

@@ -118,7 +118,7 @@ test('the session entry carries every field the UI needs', () => {
     const [session] = quotas(payload(), now);
     assert.equal(session.short, 'S');
     assert.equal(session.percent, 7);
-    assert.equal(session.severity, 'normal');
+    assert.equal(session.scope, 'session');
     assert.equal(session.resetsAt.toISOString(), '2026-08-10T12:49:59.966Z');
     assert.equal(Math.round(session.windowProgress * 100), 20);
 });
@@ -172,15 +172,6 @@ test('a quota without a reset time is never ahead of pace', () => {
     const data = zeroScopedPayload();
     data.limits[2].percent = 99;
     assert.equal(quotas(data, zeroScopedNow).at(-1).aheadOfPace, false);
-});
-
-test('severity passes through when known and degrades to normal otherwise', () => {
-    const data = payload();
-    data.limits[0].severity = 'warning';
-    data.limits[1].severity = 'something_new';
-    const [session, weekly] = quotas(data, now);
-    assert.equal(session.severity, 'warning');
-    assert.equal(weekly.severity, 'normal');
 });
 
 test('a response without limits yields no quotas', () => {
@@ -256,4 +247,10 @@ test('every quota carries a key, and two scoped limits of one kind do not collid
     const keys = quotas({limits}, now).map(quota => quota.key);
     assert.deepEqual(keys, ['session', 'weekly_scoped:Fable', 'weekly_scoped:opus-x']);
     assert.equal(new Set(keys).size, keys.length);
+});
+
+test('a quota carries its settings scope and no severity of its own', () => {
+    const result = quotas(payload(), now);
+    assert.deepEqual(result.map(quota => quota.scope), ['session', 'weekly', 'scoped']);
+    result.forEach(quota => assert.equal(quota.severity, undefined));
 });
