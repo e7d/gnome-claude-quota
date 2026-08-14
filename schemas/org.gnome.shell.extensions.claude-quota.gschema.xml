@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.claude-quota" path="/org/gnome/shell/extensions/claude-quota/">
+    <key name="notify-warning-enabled" type="b">
+      <default>true</default>
+      <summary>Notify at the warning threshold</summary>
+      <description>Show a notification when a quota reaches the warning percentage.</description>
+    </key>
+    <key name="notify-warning-percent" type="i">
+      <range min="1" max="100"/>
+      <default>75</default>
+      <summary>Warning threshold</summary>
+      <description>Percentage of a quota at which the warning notification is shown.</description>
+    </key>
+    <key name="notify-critical-enabled" type="b">
+      <default>true</default>
+      <summary>Notify at the critical threshold</summary>
+      <description>Show a notification when a quota reaches the critical percentage.</description>
+    </key>
+    <key name="notify-critical-percent" type="i">
+      <range min="1" max="100"/>
+      <default>90</default>
+      <summary>Critical threshold</summary>
+      <description>Percentage of a quota at which the critical notification is shown.</description>
+    </key>
+  </schema>
+</schemalist>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {NOTIFY_DEFAULTS, alertPlan} from '../lib/notify.js';
+import {NOTIFY_DEFAULTS, alertPlan, thresholdsFrom} from '../lib/notify.js';
 
 const now = new Date('2026-08-14T09:00:00Z');
 const resetsAt = new Date('2026-08-14T11:30:00Z');
@@ -172,4 +172,16 @@ test('a warning cannot post beside a critical that fired in an earlier pass', ()
     const result = plan([quota({percent: 95})], first.fired, inverted);
     assert.deepEqual(result.post, []);
     assert.deepEqual(result.withdraw, ['session|warning']);
+});
+
+test('settings values become the threshold list alertPlan takes', () => {
+    assert.deepEqual(thresholdsFrom({
+        warningEnabled: true,
+        warningPercent: 70,
+        criticalEnabled: false,
+        criticalPercent: 95,
+    }), [
+        {level: 'warning', percent: 70, enabled: true},
+        {level: 'critical', percent: 95, enabled: false},
+    ]);
 });
