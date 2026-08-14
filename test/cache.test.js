@@ -42,6 +42,21 @@ test('a version 1 file is read as legacy with no alerts fired', () => {
     assert.deepEqual(restored.fired, {});
 });
 
+test('a fired entry that is not an object carrying a window is dropped', () => {
+    const hostile = JSON.stringify({
+        version: 2,
+        fetchedAt: fetchedAt.toISOString(),
+        limits,
+        fired: {
+            'session|warning': null,
+            'session|critical': {window: 42},
+            'weekly_all|warning': 'nope',
+            'weekly_all|critical': {window: '2026-08-04T14:59:59.000Z'},
+        },
+    });
+    assert.deepEqual(Object.keys(deserialize(hostile).fired), ['weekly_all|critical']);
+});
+
 test('deserialize rejects limits that are missing or not an array', () => {
     assert.equal(deserialize(JSON.stringify({version: 1, fetchedAt: fetchedAt.toISOString()})), null);
     assert.equal(deserialize(JSON.stringify({version: 1, fetchedAt: fetchedAt.toISOString(), limits: {}})), null);
