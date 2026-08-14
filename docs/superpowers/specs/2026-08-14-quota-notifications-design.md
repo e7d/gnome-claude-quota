@@ -98,6 +98,15 @@ For each quota, for each enabled level:
 | between `threshold - HYSTERESIS` and `threshold`, entry exists | nothing: no re-post, the notification stays |
 | level disabled | withdraw, drop the entry |
 
+And once, before any of those, over the entries rather than over the quotas: **an entry
+whose quota is not in the list at all is withdrawn and dropped**. `lib/model.js` drops any
+non-`ALWAYS_VISIBLE` limit at `percent === 0`, which is exactly what a model-scoped weekly
+quota becomes when its window resets — so without this pass a critical alert for Opus at
+94% would sit in the tray, and its entry on disk, until the user next touched Opus. Session
+and Weekly are always visible and never reach it. An **empty** quota list is data that has
+not arrived rather than a payload holding no quotas, so it prunes nothing: `_quotas` is `[]`
+until the first load, and pruning there would drop every entry and withdraw nothing real.
+
 `HYSTERESIS` is 2 points. Without it a quota sitting on the boundary re-posts on every poll; with it
 the number has to come back down meaningfully before the level can fire again.
 
@@ -141,8 +150,14 @@ a dead handle. Warning posts at `Urgency.NORMAL`, critical at `Urgency.HIGH`, bo
 icon as `gicon` and `isTransient: false` so they persist in the tray. `activated` opens the quota
 popup, which is the one useful thing to do about the news.
 
-`_syncAlerts(now)` runs from `_applyResult`, `_adoptShared`, the cache load, and every settings
-change — every path on which `_quotas` can change.
+`_syncAlerts(now)` runs from `_applyResult`, `_adoptShared`, the cache load, every settings
+change, and unconditionally from `_refresh` — every path on which the **plan** can change,
+which is a larger set than the paths on which `_quotas` can. `now` is an input too, and
+expiry derives from it, so a poll that ends early — data still fresh, a rate-limit block
+armed, the request floor holding — is still a poll on which a window can have rolled over.
+Without the `_refresh` call the popup row reads `-` while the tray goes on shouting a
+percentage that stopped being true. It costs nothing on an ordinary poll: the plan comes
+back empty and `_syncAlerts` only writes the cache when there is a diff to write.
 
 `disable()` destroys the source, and with it every live notification. `fired` stays on disk, so
 re-enabling is silent.
@@ -150,7 +165,9 @@ re-enabling is silent.
 ## Wording
 
 Title: `format(_('{name} at {percent}'), …)` — *Session (5h) at 90 %*. Body: the existing
-`captionLine()` — *1h 30m left · 14:30*. One new msgid.
+`captionLine()` — *1h 30m left · 14:30* — except where it returns `-`, which is a
+placeholder holding a table column open and nonsense as a whole notification body, so a
+quota with no reset time gets no body at all. One new msgid.
 
 The TODO sketches *"Your session quota 'Claude' is at 90% (1h 30m left before reset)"*. Composing
 that sentence is the mistake `lib/format.js:40` documents: the trailing word lives inside each plural
@@ -163,7 +180,10 @@ phrasing literally.
 
 `lib/cache.js` goes to version 2, carrying `fired` alongside `limits` and `fetchedAt`. A version-1
 file is accepted as legacy with `fired: {}` rather than rejected, so no cached first paint is lost on
-upgrade; version 3 and anything malformed are still rejected.
+upgrade; version 3 and anything malformed are still rejected. Each `fired` entry is validated as well
+as the container, and one that is not an object carrying a string `window` is dropped: the cache load
+runs from `_init` with nothing catching a throw, so a single malformed entry would otherwise stop the
+extension enabling at all.
 
 The startup path is then correct by construction: the cache load calls `alertPlan`, which finds a
 fired entry whose window still matches and posts nothing. A quota already acknowledged does not ping
