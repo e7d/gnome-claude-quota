@@ -469,7 +469,7 @@ export function panelView({quotas, hasAnyQuota, service, error, scheme, percentL
 - [ ] **Step 4: Run the test and watch it pass**
 
 Run: `TZ=UTC LC_ALL=C node --test test/view.test.js`
-Expected: PASS, 14 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Rewrite the render methods to consume the view model**
 
@@ -531,7 +531,7 @@ and `_renderMessage` becomes:
 - [ ] **Step 6: Verify units, lint and the full e2e**
 
 Run: `npm test && npm run lint && npm run e2e`
-Expected: 356 unit tests (342 + 14) pass, lint silent, e2e green in both themes with no `control` line.
+Expected: 355 unit tests (342 + 13) pass, lint silent, e2e green in both themes with no `control` line.
 
 This is the first task whose change can alter rendered pixels, so the e2e runs whole rather than narrowed.
 
@@ -846,7 +846,7 @@ Add a private pair that reads the state fields into a snapshot and writes a snap
 - [ ] **Step 6: Verify units, lint and the full e2e**
 
 Run: `npm test && npm run lint && npm run e2e`
-Expected: 365 unit tests (356 + 9) pass, lint silent, e2e green.
+Expected: 364 unit tests (355 + 9) pass, lint silent, e2e green.
 
 The e2e runs whole here because `$IND._applyResult` is called directly by the harness — the rate-limit and service scenarios exercise exactly the branches this task moved.
 
@@ -968,7 +968,7 @@ Expected: `no msgid or msgstr changed`. Any line here means a path was missed in
 - [ ] **Step 7: Verify units, lint and the full e2e**
 
 Run: `npm test && npm run lint && npm run i18n:check && npm run e2e`
-Expected: 365 unit tests pass, lint silent, i18n check silent, e2e green in both themes.
+Expected: 364 unit tests pass, lint silent, i18n check silent, e2e green in both themes.
 
 - [ ] **Step 8: Commit**
 
@@ -1037,7 +1037,7 @@ Update `tools/e2e.sh`, `tools/lib/capture.sh` and `tools/lib/indicator.sh`. Then
 - [ ] **Step 6: Verify units, lint, shellcheck and the full e2e**
 
 Run: `npm test && npm run lint && shellcheck -x tools/*.sh tools/lib/*.sh && npm run e2e && npm run a11y`
-Expected: 365 unit tests pass, lint and shellcheck silent, e2e green in both themes with no `control` line on stderr, a11y zero findings.
+Expected: 364 unit tests pass, lint and shellcheck silent, e2e green in both themes with no `control` line on stderr, a11y zero findings.
 
 A `control …` line here is the signal that a re-pathed probe now reads something that cannot vary — the assertion went dead in the move. Fix the assertion; never the control.
 
@@ -1105,7 +1105,7 @@ Move `_scheduleNext`, `_fetchCycle`, `_fetchResult`, `_refreshServiceStatus`, `_
 - [ ] **Step 6: Verify the whole thing**
 
 Run: `npm test && npm run lint && shellcheck -x tools/*.sh tools/lib/*.sh && npm run e2e && npm run a11y`
-Expected: 365 unit tests pass, everything else silent or green.
+Expected: 364 unit tests pass, everything else silent or green.
 
 - [ ] **Step 7: Confirm the shell spent nothing**
 
