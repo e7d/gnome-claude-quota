@@ -60,11 +60,13 @@ point_at_away() {
     await_style
 }
 
-QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => {
+QUOTA="const q = (short, name, percent, leftMin, winMin) => {
     const progress = Math.min(1, Math.max(0, 1 - leftMin / winMin));
+    const scoped = !['Session (5h)', 'Weekly'].includes(name);
     return {
-        key: name, short, name, percent, severity,
-        modelScoped: !['Session (5h)', 'Weekly'].includes(name),
+        key: name, short, name, percent,
+        modelScoped: scoped,
+        scope: scoped ? 'scoped' : (name === 'Weekly' ? 'weekly' : 'session'),
         resetsAt: new Date(ANCHOR + leftMin * 60000),
         windowProgress: progress,
         aheadOfPace: percent / 100 - progress > 0.1,
@@ -94,7 +96,7 @@ service_until() {
 }
 
 setup_quotas() {
-    echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)];"
+    echo "i._quotas = [q('S','Session (5h)',21,253,SESSION), q('W','Weekly',94,13,WEEK)];"
 }
 
 # The emulated monitor cannot be resized once the shell is up, so the space is taken
@@ -134,21 +136,21 @@ squeeze_for() {
 setup_for() {
     case "$1" in
         live) echo "i._loadCache();" ;;
-        normal) echo "i._quotas = [q('S','Session (5h)',7,'normal',270,SESSION), q('W','Weekly',12,'normal',9000,WEEK)];" ;;
-        over-pace) echo "i._quotas = [q('S','Session (5h)',68,'normal',240,SESSION), q('W','Weekly',20,'normal',2000,WEEK)];" ;;
-        warning) echo "i._quotas = [q('S','Session (5h)',78,'warning',90,SESSION), q('W','Weekly',80,'warning',2000,WEEK)];" ;;
-        critical) echo "i._quotas = [q('S','Session (5h)',96,'critical',20,SESSION), q('W','Weekly',94,'critical',400,WEEK)];" ;;
-        full) echo "i._quotas = [q('S','Session (5h)',100,'critical',5,SESSION), q('W','Weekly',100,'critical',60,WEEK)];" ;;
-        zero) echo "i._quotas = [q('S','Session (5h)',0,'normal',300,SESSION), q('W','Weekly',0,'normal',WEEK,WEEK)];" ;;
-        expired) echo "i._quotas = [q('S','Session (5h)',40,'normal',-5,SESSION), q('W','Weekly',60,'normal',-5,WEEK)];" ;;
-        model-scoped) echo "i._quotas = [q('S','Session (5h)',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), q('O','Opus',72,'warning',200,SESSION)];" ;;
-        no-reset) echo "i._quotas = [q('S','Session (5h)',30,'normal',200,SESSION), q('W','Weekly',44,'normal',5000,WEEK), {...q('O','Opus',72,'normal',200,SESSION), resetsAt: null, windowProgress: null, aheadOfPace: false}];" ;;
-        long-name) echo "i._quotas = [q('S','Session (5h)',30,'normal',200,SESSION), q('So','Sonnet with a very long display name',61,'normal',200,SESSION)];" ;;
+        normal) echo "i._quotas = [q('S','Session (5h)',7,270,SESSION), q('W','Weekly',12,9000,WEEK)];" ;;
+        over-pace) echo "i._quotas = [q('S','Session (5h)',68,240,SESSION), q('W','Weekly',20,2000,WEEK)];" ;;
+        warning) echo "i._quotas = [q('S','Session (5h)',78,90,SESSION), q('W','Weekly',80,2000,WEEK)];" ;;
+        critical) echo "i._quotas = [q('S','Session (5h)',96,20,SESSION), q('W','Weekly',94,400,WEEK)];" ;;
+        full) echo "i._quotas = [q('S','Session (5h)',100,5,SESSION), q('W','Weekly',100,60,WEEK)];" ;;
+        zero) echo "i._quotas = [q('S','Session (5h)',0,300,SESSION), q('W','Weekly',0,WEEK,WEEK)];" ;;
+        expired) echo "i._quotas = [q('S','Session (5h)',40,-5,SESSION), q('W','Weekly',60,-5,WEEK)];" ;;
+        model-scoped) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('W','Weekly',44,5000,WEEK), q('O','Opus',78,200,SESSION)];" ;;
+        no-reset) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('W','Weekly',44,5000,WEEK), {...q('O','Opus',72,200,SESSION), resetsAt: null, windowProgress: null, aheadOfPace: false}];" ;;
+        long-name) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('So','Sonnet with a very long display name',61,200,SESSION)];" ;;
         locale) echo "$(setup_quotas) i._locale = 'fr-FR';" ;;
-        rate-limited) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._block = {until: new Date(Date.now() + 180000), reason: 'rate-limit'};" ;;
+        rate-limited) echo "i._quotas = [q('S','Session (5h)',21,253,SESSION), q('W','Weekly',94,13,WEEK)]; i._block = {until: new Date(Date.now() + 180000), reason: 'rate-limit'};" ;;
         rate-limited-day) echo "$(setup_quotas) i._fetchedAt = new Date(Date.now() - 26 * 3600000); i._block = {until: new Date(Date.now() + 26 * 3600000), reason: 'rate-limit'};" ;;
-        error) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION), q('W','Weekly',94,'critical',13,WEEK)]; i._error = {msgid: 'Cannot reach api.anthropic.com', values: {}};" ;;
-        token-expired) echo "i._quotas = [q('S','Session (5h)',21,'normal',253,SESSION)]; i._error = {msgid: 'Token expired, run Claude Code once', values: {}};" ;;
+        error) echo "i._quotas = [q('S','Session (5h)',21,253,SESSION), q('W','Weekly',94,13,WEEK)]; i._error = {msgid: 'Cannot reach api.anthropic.com', values: {}};" ;;
+        token-expired) echo "i._quotas = [q('S','Session (5h)',21,253,SESSION)]; i._error = {msgid: 'Token expired, run Claude Code once', values: {}};" ;;
         loading) echo "i._fetchedAt = null;" ;;
         refreshing) echo "$(setup_quotas) i._refreshing = true;" ;;
         fresh) echo "$(setup_quotas) i._fetchedAt = new Date();" ;;

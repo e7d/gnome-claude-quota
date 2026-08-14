@@ -189,6 +189,15 @@ assert_theme_differs() {
     assert_not_empty 'critical severity resolves a colour' "$dark"
 }
 
+assert_threshold_repaints() {
+    local before after
+    before="$(probe "$IND._blocks[0]._percent.get_style_class_name()")"
+    set_quota_pref warning-percent 5
+    after="$(probe "$IND._blocks[0]._percent.get_style_class_name()")"
+    set_quota_pref warning-percent 75
+    assert_ne "$1 a lower warning threshold repaints a normal quota" "$before" "$after"
+}
+
 assert_rows_filled_probe() { assert_rows_filled control; }
 assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
@@ -196,6 +205,7 @@ assert_panel_matches_probe() { assert_panel_matches control; }
 assert_rate_limit_note_probe() { assert_rate_limit_note control; }
 assert_incident_window_probe() { assert_incident_window control; }
 assert_incident_within_popup_probe() { assert_incident_within_popup control; }
+assert_threshold_repaints_probe() { assert_threshold_repaints control; }
 
 prove_state() {
     render_state normal
@@ -228,6 +238,11 @@ prove_state() {
         "shell_eval \"$IND._issueItem.label.text = 'until '.repeat(40); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_incident_within_popup_probe
+    render_state normal
+    prove 'a lower warning threshold repaints' \
+        "shell_eval \"$IND._blocks[0]._percent.style_class = 'cq-percent cq-warning-dark'; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_threshold_repaints_probe
 }
 
 subset_kind() {

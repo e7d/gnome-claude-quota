@@ -25,7 +25,7 @@ import {alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from './lib/not
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
-import {blockReason, isBlocked, markExpired, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
+import {blockReason, isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 
@@ -67,7 +67,7 @@ function severityClass(base, severity, scheme) {
 }
 
 function quotaClass(base, quota, scheme) {
-    return severityClass(base, quota.expired ? 'normal' : quota.severity, scheme);
+    return severityClass(base, quota.severity, scheme);
 }
 
 function barClass(scheme) {
@@ -807,7 +807,11 @@ class Indicator extends PanelMenu.Button {
     _render() {
         const now = new Date();
         const scheme = this._scheme;
-        const quotaViews = markExpired(this._quotas, now);
+        const settings = this._settingsValues();
+        const quotaViews = markSeverity(markExpired(this._quotas, now), {
+            warning: settings.warning.percent,
+            critical: settings.critical.percent,
+        });
         this._renderActions(now);
         this._renderPanel(quotaViews);
         if (this._blocks.length !== quotaViews.length) {

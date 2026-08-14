@@ -326,6 +326,12 @@ set_animations() {
     await_paint
 }
 
+set_quota_pref() {
+    XDG_CONFIG_HOME="$CFG" GSETTINGS_SCHEMA_DIR="$ROOT/schemas" \
+        gsettings set org.gnome.shell.extensions.claude-quota "$1" "$2"
+    await_paint
+}
+
 elapsed_since() {
     awk -v started="$1" -v now="$(date +%s%N)" 'BEGIN { printf "%.1f", (now - started) / 1000000000 }'
 }
