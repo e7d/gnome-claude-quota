@@ -198,6 +198,39 @@ assert_threshold_repaints() {
     assert_ne "$1 a lower warning threshold repaints a normal quota" "$before" "$after"
 }
 
+assert_scope_leaves_the_bar() {
+    local before after
+    before="$(probe "$SHOWN_CELLS.length")"
+    set_quota_pref weekly-in-bar false
+    after="$(probe "$SHOWN_CELLS.length")"
+    set_quota_pref weekly-in-bar true
+    assert_eq "$1 hiding the weekly quota takes a cell out of the bar" \
+        "$((before - 1))" "$after"
+}
+
+assert_scope_leaves_the_menu() {
+    local hidden
+    set_quota_pref weekly-in-menu false
+    hidden="$(probe "$IND._blocks.length")"
+    set_quota_pref weekly-in-menu true
+    assert_eq "$1 hiding the weekly quota takes a block out of the menu" \
+        "$(( $(probe "$IND._quotas.length") - 1 ))" "$hidden"
+}
+
+assert_all_hidden_says_so() {
+    set_quota_pref session-in-menu false
+    set_quota_pref weekly-in-menu false
+    set_quota_pref scoped-in-menu false
+    local shown text
+    shown="$(probe "$IND._hiddenNote.visible")"
+    text="$(probe "$IND._hiddenNote.text")"
+    set_quota_pref session-in-menu true
+    set_quota_pref weekly-in-menu true
+    set_quota_pref scoped-in-menu true
+    assert_eq "$1 a menu with every quota hidden says why it is empty" 'true' "$shown"
+    assert_ne "$1 the hidden note carries a string" '""' "$text"
+}
+
 assert_rows_filled_probe() { assert_rows_filled control; }
 assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
@@ -206,6 +239,9 @@ assert_rate_limit_note_probe() { assert_rate_limit_note control; }
 assert_incident_window_probe() { assert_incident_window control; }
 assert_incident_within_popup_probe() { assert_incident_within_popup control; }
 assert_threshold_repaints_probe() { assert_threshold_repaints control; }
+assert_scope_leaves_the_bar_probe() { assert_scope_leaves_the_bar control; }
+assert_scope_leaves_the_menu_probe() { assert_scope_leaves_the_menu control; }
+assert_all_hidden_says_so_probe() { assert_all_hidden_says_so control; }
 
 prove_state() {
     render_state normal
@@ -243,6 +279,19 @@ prove_state() {
         "shell_eval \"$IND._blocks[0]._percent.style_class = 'cq-percent cq-warning-dark'; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_threshold_repaints_probe
+    render_state normal
+    prove 'hiding a scope empties its cell' \
+        "shell_eval \"$IND._visibleOn = (surface, views) => views; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._visibleOn; $IND._render(); 'ok'\" >/dev/null" \
+        assert_scope_leaves_the_bar_probe
+    prove 'hiding a scope empties its block' \
+        "shell_eval \"$IND._visibleOn = (surface, views) => views; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._visibleOn; $IND._render(); 'ok'\" >/dev/null" \
+        assert_scope_leaves_the_menu_probe
+    prove 'an all-hidden menu explains itself' \
+        "shell_eval \"$IND._hiddenNote.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_all_hidden_says_so_probe
 }
 
 subset_kind() {
@@ -289,6 +338,10 @@ group_state() {
             fi
             assert_state "$theme-$scenario"
         done
+        render_state normal
+        assert_scope_leaves_the_bar "$theme"
+        assert_scope_leaves_the_menu "$theme"
+        assert_all_hidden_says_so "$theme"
     done
     set_animations true
     assert_theme_differs

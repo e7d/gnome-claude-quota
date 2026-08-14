@@ -246,6 +246,8 @@ class Indicator extends PanelMenu.Button {
         this._bodyBox.add_child(this._metaBox);
         this._bodyBox.add_child(this._blockBox);
         this._body.add_child(this._bodyBox);
+        this._hiddenNote = new St.Label({style_class: 'cq-caption', text: ''});
+        this._body.add_child(this._hiddenNote);
         this._issueItem = new PopupMenu.PopupMenuItem('');
         this._issueItem.label.clutter_text.line_wrap = true;
         this._issueItem.label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
@@ -804,29 +806,51 @@ class Indicator extends PanelMenu.Button {
     }
 
 
-    _render() {
-        const now = new Date();
-        const scheme = this._scheme;
+    _quotaViews(now) {
         const settings = this._settingsValues();
-        const quotaViews = markSeverity(markExpired(this._quotas, now), {
+        return markSeverity(markExpired(this._quotas, now), {
             warning: settings.warning.percent,
             critical: settings.critical.percent,
         });
-        this._renderActions(now);
-        this._renderPanel(quotaViews);
-        if (this._blocks.length !== quotaViews.length) {
+    }
+
+    _visibleOn(surface, views) {
+        const visible = this._settingsValues().visible;
+        return views.filter(quota => visible[quota.scope][surface]);
+    }
+
+    _renderBlocks(menuViews, now, scheme) {
+        if (this._blocks.length !== menuViews.length) {
             this._blockBox.destroy_all_children();
-            this._blocks = quotaViews.map(() => {
+            this._blocks = menuViews.map(() => {
                 const block = new QuotaBlock();
                 this._blockBox.add_child(block);
                 return block;
             });
         }
-        quotaViews.forEach((quota, index) =>
+        menuViews.forEach((quota, index) =>
             this._blocks[index].update({
                 quota, now, scheme, locale: this._locale, percentLocale: this._percentLocale}));
-        const hasQuotas = quotaViews.length > 0;
+    }
+
+    _renderHiddenNote(quotaViews, menuViews) {
+        const allHidden = quotaViews.length > 0 && menuViews.length === 0;
+        this._hiddenNote.visible = allHidden;
+        if (allHidden)
+            this._hiddenNote.text = _('Every quota is hidden — see the extension settings');
+    }
+
+    _render() {
+        const now = new Date();
+        const scheme = this._scheme;
+        const quotaViews = this._quotaViews(now);
+        const menuViews = this._visibleOn('menu', quotaViews);
+        this._renderActions(now);
+        this._renderPanel(this._visibleOn('bar', quotaViews));
+        this._renderBlocks(menuViews, now, scheme);
+        const hasQuotas = menuViews.length > 0;
         this._blockBox.visible = hasQuotas;
+        this._renderHiddenNote(quotaViews, menuViews);
         this._renderMessage(now, hasQuotas);
     }
 

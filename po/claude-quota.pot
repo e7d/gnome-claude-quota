@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 16:39+0200\n"
+"POT-Creation-Date: 2026-08-14 17:59+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,12 +18,16 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: extension.js:152 extension.js:409
+#: extension.js:153 extension.js:411
 msgid "Claude Quota"
 msgstr ""
 
-#: extension.js:738
+#: extension.js:740
 msgid "Loading…"
+msgstr ""
+
+#: extension.js:840
+msgid "Every quota is hidden — see the extension settings"
 msgstr ""
 
 #: lib/format.js:29
@@ -68,20 +72,12 @@ msgstr ""
 msgid "Rate limited"
 msgstr ""
 
-#: lib/model.js:9
-msgid "Session (5h)"
-msgstr ""
-
-#: lib/model.js:9
-msgid "Weekly"
-msgstr ""
-
-#: lib/model.js:11
+#: lib/model.js:13
 msgctxt "panel initial"
 msgid "S"
 msgstr ""
 
-#: lib/model.js:12
+#: lib/model.js:14
 msgctxt "panel initial"
 msgid "W"
 msgstr ""
@@ -108,6 +104,18 @@ msgstr ""
 
 #: lib/policy.js:21
 msgid "Service error"
+msgstr ""
+
+#: lib/settings.js:4
+msgid "Session (5h)"
+msgstr ""
+
+#: lib/settings.js:5
+msgid "Weekly"
+msgstr ""
+
+#: lib/settings.js:6
+msgid "Model-specific"
 msgstr ""
 
 #: lib/usage.js:26

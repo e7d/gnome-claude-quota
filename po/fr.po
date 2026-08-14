@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 16:39+0200\n"
+"POT-Creation-Date: 2026-08-14 17:59+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -12,13 +12,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: extension.js:152 extension.js:409
+#: extension.js:153 extension.js:411
 msgid "Claude Quota"
 msgstr "Quota Claude"
 
-#: extension.js:738
+#: extension.js:740
 msgid "Loading…"
 msgstr "Chargement…"
+
+#: extension.js:840
+msgid "Every quota is hidden — see the extension settings"
+msgstr "Tous les quotas sont masqués — voir les réglages de l'extension"
 
 #: lib/format.js:29
 msgid "{d}d {h}h left"
@@ -62,20 +66,12 @@ msgstr "jusqu'à {time}"
 msgid "Rate limited"
 msgstr "Quota de requêtes atteint"
 
-#: lib/model.js:9
-msgid "Session (5h)"
-msgstr "Session (5 h)"
-
-#: lib/model.js:9
-msgid "Weekly"
-msgstr "Hebdomadaire"
-
-#: lib/model.js:11
+#: lib/model.js:13
 msgctxt "panel initial"
 msgid "S"
 msgstr "S"
 
-#: lib/model.js:12
+#: lib/model.js:14
 msgctxt "panel initial"
 msgid "W"
 msgstr "H"
@@ -103,6 +99,18 @@ msgstr "Maintenance en cours"
 #: lib/policy.js:21
 msgid "Service error"
 msgstr "Erreur de service"
+
+#: lib/settings.js:4
+msgid "Session (5h)"
+msgstr "Session (5 h)"
+
+#: lib/settings.js:5
+msgid "Weekly"
+msgstr "Hebdomadaire"
+
+#: lib/settings.js:6
+msgid "Model-specific"
+msgstr ""
 
 #: lib/usage.js:26
 msgid "Cannot read ~/.claude/.credentials.json"
