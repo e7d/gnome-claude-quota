@@ -140,16 +140,21 @@ assert_panel_matches() {
 }
 
 assert_rate_limit_note() {
+    local header limited
+    header="$(js_string "$(catalog_prefix 'Last refresh: {time}')")"
+    limited="$(js_string "$(catalog_msg 'Rate limited')")"
     assert_eq "$1 header always states the last refresh" 'true' \
-        "$(probe "$IND._refreshLabel.text.startsWith('Last refresh')")"
+        "$(probe "$IND._refreshLabel.text.startsWith($header)")"
     assert_eq "$1 the rate-limit row tracks the block" 'true' \
-        "$(probe "(/Rate limited/.test($IND._messageLabel.text) && $IND._message.visible)
+        "$(probe "($IND._messageLabel.text.includes($limited) && $IND._message.visible)
             === ($IND._block?.until > new Date())")"
 }
 
 assert_incident_window() {
+    local until
+    until="$(js_string "$(catalog_prefix 'until {time}')")"
     assert_eq "$1 the incident line names an end exactly when the window has one" 'true' \
-        "$(probe "/until /.test($IND._issueItem.label.text)
+        "$(probe "$IND._issueItem.label.text.includes($until)
             === ($IND._issueItem.visible && $IND._service?.until > new Date())")"
 }
 
@@ -834,7 +839,7 @@ group_lifecycle() {
 
 main() {
     require_install
-    require_commands magick
+    require_commands magick gettext
     select_scenarios
     select_groups
     use_session e2e

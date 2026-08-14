@@ -50,6 +50,24 @@ stale_axis() {
     fi
 }
 
+# An assertion that spells an English msgid can never pass under --language, and a
+# control reports that as a dead assertion. Read the wording from the catalog the
+# shell is reading instead of keeping a second copy of it here.
+catalog_msg() {
+    TEXTDOMAINDIR="$ROOT/locale" LC_ALL="$DEVKIT_LANGUAGE" gettext -d claude-quota "$1"
+}
+
+catalog_prefix() {
+    local text
+    text="$(catalog_msg "$1")"
+    printf '%s' "${text%%\{*}"
+}
+
+js_string() {
+    local escaped="${1//\\/\\\\}"
+    printf '"%s"' "${escaped//\"/\\\"}"
+}
+
 accept_locale() {
     local value
     value="$(normalize_locale "$1")"
