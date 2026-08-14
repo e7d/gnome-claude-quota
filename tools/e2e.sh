@@ -880,6 +880,16 @@ prove_schema_defaults() {
         assert_schema_defaults_agree_probe
 }
 
+# Expiry has to be driven onto a state whose percentages still stand above both
+# thresholds. On a scenario that expires and drops to 40/60 the alerts go quiet on
+# the percent drop alone, so the verdict holds with or without the markExpired the
+# planner is given — proving nothing about the one line the sync exists to apply.
+expire_windows() {
+    shell_eval "const i = $IND;
+        i._quotas = i._quotas.map(q => ({...q, resetsAt: new Date(Date.now() - 300000)}));
+        'ok'" >/dev/null
+}
+
 group_notify() {
     echo 'notify:'
     prove_schema_defaults
@@ -896,14 +906,15 @@ group_notify() {
     assert_alerts 'warning'
     sync_alerts
     assert_alert_keys 'warning re-synced' "['Session (5h)|warning','Weekly|warning']"
+    assert_alerts 'warning re-synced'
     reset_alerts
     render_state critical
     sync_alerts
     assert_alert_keys 'critical' "['Session (5h)|critical','Weekly|critical']"
     assert_alerts 'critical'
-    render_state expired
+    expire_windows
     sync_alerts
-    assert_alert_keys 'expired' '[]'
+    assert_alert_keys 'expired at critical' '[]'
     assert_eq 'expired empties the source with the last alert' 'null' \
         "$(probe "$IND._source")"
     reset_alerts
