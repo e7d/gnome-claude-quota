@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 21:01+0200\n"
+"POT-Creation-Date: 2026-08-14 22:22+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,16 +18,20 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: extension.js:153 extension.js:421
+#: extension.js:153 extension.js:433
 msgid "Claude Quota"
 msgstr ""
 
-#: extension.js:750
+#: extension.js:762
 msgid "Loading…"
 msgstr ""
 
-#: extension.js:851
-msgid "Every quota is hidden — see the extension settings"
+#: extension.js:865
+msgid "Every quota is hidden."
+msgstr ""
+
+#: extension.js:866
+msgid "Open settings"
 msgstr ""
 
 #: prefs.js:10
@@ -114,7 +118,7 @@ msgctxt "panel initial"
 msgid "W"
 msgstr ""
 
-#: lib/notify.js:55
+#: lib/notify.js:63
 msgid "{name} at {percent}"
 msgstr ""
 

@@ -149,10 +149,11 @@ class QuotaBlock extends St.BoxLayout {
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
-    _init({iconPath, prefs}) {
+    _init({iconPath, prefs, openPrefs}) {
         super._init(0.5, _('Claude Quota'));
         this._iconPath = iconPath;
         this._prefs = prefs;
+        this._openPrefs = openPrefs;
         this._source = null;
         this._alerts = new Map();
         this._alertTimerId = null;
@@ -255,7 +256,18 @@ class Indicator extends PanelMenu.Button {
         this._hiddenNote = new St.Label({style_class: 'cq-caption', text: ''});
         this._hiddenNote.clutter_text.line_wrap = true;
         this._hiddenNote.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        this._hiddenNoteButton = new St.Button({
+            style_class: 'button',
+            label: '',
+            can_focus: true,
+            x_align: Clutter.ActorAlign.START,
+        });
+        this._hiddenNoteButton.connect('clicked', () => {
+            this.menu.close();
+            this._openPrefs?.();
+        });
         this._hiddenNoteBox.add_child(this._hiddenNote);
+        this._hiddenNoteBox.add_child(this._hiddenNoteButton);
         this._hiddenNoteItem.add_child(this._hiddenNoteBox);
         this._issueItem = new PopupMenu.PopupMenuItem('');
         this._issueItem.label.clutter_text.line_wrap = true;
@@ -846,9 +858,12 @@ class Indicator extends PanelMenu.Button {
     _renderHiddenNote(hasQuotas, menuHasQuotas) {
         const allHidden = hasQuotas && !menuHasQuotas;
         this._hiddenNote.visible = allHidden;
+        this._hiddenNoteButton.visible = allHidden;
         this._hiddenNoteItem.visible = allHidden;
-        if (allHidden)
-            this._hiddenNote.text = _('Every quota is hidden — see the extension settings');
+        if (!allHidden)
+            return;
+        this._hiddenNote.text = _('Every quota is hidden.');
+        this._hiddenNoteButton.label = _('Open settings');
     }
 
     _render() {
@@ -1071,6 +1086,7 @@ export default class ClaudeQuotaExtension extends Extension {
         this._indicator = new Indicator({
             iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
             prefs: this.getSettings(),
+            openPrefs: () => this.openPreferences(),
         });
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }

@@ -267,6 +267,27 @@ assert_hidden_note_own_line() {
     assert_eq "$1 the all-hidden note sits on its own line, below the meta row" 'true' "$below"
 }
 
+assert_hidden_note_offers_settings() {
+    set_quota_pref session-in-menu false
+    set_quota_pref weekly-in-menu false
+    set_quota_pref scoped-in-menu false
+    local shown label below
+    shown="$(probe "$IND._hiddenNoteButton.mapped")"
+    label="$(probe "$IND._hiddenNoteButton.label")"
+    below="$(probe "(() => {
+        const [, ny] = $IND._hiddenNote.get_transformed_position();
+        const [, nh] = $IND._hiddenNote.get_transformed_size();
+        const [, by] = $IND._hiddenNoteButton.get_transformed_position();
+        return by >= ny + nh;
+    })()")"
+    set_quota_pref session-in-menu true
+    set_quota_pref weekly-in-menu true
+    set_quota_pref scoped-in-menu true
+    assert_eq "$1 the all-hidden note offers a way into the settings" 'true' "$shown"
+    assert_ne "$1 the settings button carries a label" '""' "$label"
+    assert_eq "$1 the settings button sits under the note, not beside it" 'true' "$below"
+}
+
 assert_rows_filled_probe() { assert_rows_filled control; }
 assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
@@ -280,6 +301,7 @@ assert_scope_leaves_the_menu_probe() { assert_scope_leaves_the_menu control; }
 assert_all_hidden_says_so_probe() { assert_all_hidden_says_so control; }
 assert_bar_all_hidden_shows_icon_only_probe() { assert_bar_all_hidden_shows_icon_only control; }
 assert_hidden_note_own_line_probe() { assert_hidden_note_own_line control; }
+assert_hidden_note_offers_settings_probe() { assert_hidden_note_offers_settings control; }
 
 prove_state() {
     render_state normal
@@ -336,8 +358,12 @@ prove_state() {
         assert_all_hidden_says_so_probe
     prove 'the all-hidden note occupies its own line' \
         "shell_eval \"$IND._hiddenNoteBox.remove_child($IND._hiddenNote); $IND._body.add_child($IND._hiddenNote); 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._body.remove_child($IND._hiddenNote); $IND._hiddenNoteBox.add_child($IND._hiddenNote); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._body.remove_child($IND._hiddenNote); $IND._hiddenNoteBox.insert_child_at_index($IND._hiddenNote, 0); 'ok'\" >/dev/null" \
         assert_hidden_note_own_line_probe
+    prove 'the all-hidden note offers a way into the settings' \
+        "shell_eval \"$IND._hiddenNoteButton.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_hidden_note_offers_settings_probe
 }
 
 subset_kind() {
@@ -390,6 +416,7 @@ group_state() {
         assert_all_hidden_says_so "$theme"
         assert_bar_all_hidden_shows_icon_only "$theme"
         assert_hidden_note_own_line "$theme"
+        assert_hidden_note_offers_settings "$theme"
     done
     set_animations true
     assert_theme_differs
@@ -947,7 +974,7 @@ assert_alerts() {
 # A joined string cannot come back through probe — unwrap strips the quotes and
 # leaves JSON's escaping behind — so each default is read as a number of its own.
 schema_default() {
-    probe "$IND._prefs.get_default_value('notify-$1-percent').unpack()"
+    probe "$IND._prefs.get_default_value('$1-percent').unpack()"
 }
 
 # The schema's defaults and lib/notify.js's NOTIFY_DEFAULTS are two declarations of
@@ -1067,10 +1094,10 @@ group_notify() {
     reset_alerts
     render_state warning
     sync_alerts
-    shell_eval "$IND._prefs.set_int('notify-critical-percent', 50); 'ok'" >/dev/null
+    shell_eval "$IND._prefs.set_int('critical-percent', 50); 'ok'" >/dev/null
     await_prefs
     assert_alert_keys 'lowered threshold' "['Session (5h)|critical','Weekly|critical']"
-    shell_eval "$IND._prefs.reset('notify-critical-percent'); 'ok'" >/dev/null
+    shell_eval "$IND._prefs.reset('critical-percent'); 'ok'" >/dev/null
     await_prefs
     prove_polled_alert
     assert_polled_alert

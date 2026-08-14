@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 21:01+0200\n"
+"POT-Creation-Date: 2026-08-14 22:22+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -12,17 +12,21 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: extension.js:153 extension.js:421
+#: extension.js:153 extension.js:433
 msgid "Claude Quota"
 msgstr "Quota Claude"
 
-#: extension.js:750
+#: extension.js:762
 msgid "Loading…"
 msgstr "Chargement…"
 
-#: extension.js:851
-msgid "Every quota is hidden — see the extension settings"
-msgstr "Tous les quotas sont masqués — voir les réglages de l'extension"
+#: extension.js:865
+msgid "Every quota is hidden."
+msgstr "Tous les quotas sont masqués."
+
+#: extension.js:866
+msgid "Open settings"
+msgstr "Ouvrir les réglages"
 
 #: prefs.js:10
 msgid "High usage threshold"
@@ -108,7 +112,7 @@ msgctxt "panel initial"
 msgid "W"
 msgstr "H"
 
-#: lib/notify.js:55
+#: lib/notify.js:63
 msgid "{name} at {percent}"
 msgstr "{name} à {percent}"
 
@@ -167,3 +171,6 @@ msgstr "Échec de la requête (HTTP {status})"
 #: lib/usage.js:124
 msgid "Unexpected response from the usage endpoint"
 msgstr "Réponse inattendue du point d'accès"
+
+#~ msgid "Every quota is hidden — see the extension settings"
+#~ msgstr "Tous les quotas sont masqués — voir les réglages de l'extension"
