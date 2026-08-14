@@ -63,7 +63,7 @@ point_at_away() {
 QUOTA="const q = (short, name, percent, severity, leftMin, winMin) => {
     const progress = Math.min(1, Math.max(0, 1 - leftMin / winMin));
     return {
-        short, name, percent, severity,
+        key: name, short, name, percent, severity,
         modelScoped: !['Session (5h)', 'Weekly'].includes(name),
         resetsAt: new Date(Date.now() + leftMin * 60000),
         windowProgress: progress,

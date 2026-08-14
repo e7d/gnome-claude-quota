@@ -246,3 +246,14 @@ test('quota names and panel initials come from the catalog', () => {
     assert.equal(result[1].modelScoped, false);
     resetTranslator();
 });
+
+test('every quota carries a key, and two scoped limits of one kind do not collide', () => {
+    const limits = [
+        {kind: 'session', group: 'session', percent: 5, severity: 'normal', resets_at: '2026-08-10T12:00:00Z', scope: null},
+        {kind: 'weekly_scoped', group: 'weekly', percent: 12, severity: 'normal', resets_at: '2026-08-15T08:00:00Z', scope: {model: {id: null, display_name: 'Fable'}}},
+        {kind: 'weekly_scoped', group: 'weekly', percent: 30, severity: 'warning', resets_at: '2026-08-15T08:00:00Z', scope: {model: {id: 'opus-x', display_name: 'Opus'}}},
+    ];
+    const keys = quotas({limits}, now).map(quota => quota.key);
+    assert.deepEqual(keys, ['session', 'weekly_scoped:Fable', 'weekly_scoped:opus-x']);
+    assert.equal(new Set(keys).size, keys.length);
+});
