@@ -451,7 +451,11 @@ class Indicator extends PanelMenu.Button {
         plan.withdraw.forEach(key => this._withdrawAlert(key));
         plan.post.forEach(alert => this._postAlert(alert));
         this._fired = plan.fired;
-        this._saveCache();
+        // The plan can only have moved an entry by dropping or writing one, and both
+        // of those leave a key in withdraw or post — so an empty diff has nothing to
+        // persist, which is every ordinary poll.
+        if (plan.post.length || plan.withdraw.length)
+            this._saveCache();
     }
 
     _scheduleNext(seconds) {
@@ -499,9 +503,13 @@ class Indicator extends PanelMenu.Button {
         this._syncAlerts(now);
     }
 
+    // Time is an input to the plan, so a poll that ends early — settled, blocked, or
+    // inside the request floor — is still a poll on which a window can have rolled
+    // over. Withdrawing there is what keeps the tray agreeing with the popup.
     async _refresh(trigger) {
         const now = new Date();
         this._adoptShared(now);
+        this._syncAlerts(now);
         const settled = pollDelay(this._fetchedAt, now, maxAgeFor(trigger));
         if (settled > 0) {
             this._scheduleNext(settled);

@@ -98,6 +98,33 @@ test('quotas are independent, and each keeps its own bookkeeping', () => {
 test('a quota with no reset time still fires, under an empty window', () => {
     const result = plan([quota({percent: 78, resetsAt: null})]);
     assert.deepEqual(result.fired, {'session|warning': {window: ''}});
+    assert.equal(result.post[0].body, '');
+});
+
+test('a percentage that is not a number withdraws its alert and holds nothing', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const result = plan([quota({percent: NaN})], fired);
+    assert.deepEqual(result.withdraw, ['session|warning']);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(result.fired, {});
+});
+
+test('an entry whose quota left the payload is withdrawn and forgotten', () => {
+    const fired = {
+        'session|warning': {window: resetsAt.toISOString()},
+        'weekly_scoped:opus|critical': {window: resetsAt.toISOString()},
+    };
+    const result = plan([quota({percent: 80})], fired);
+    assert.deepEqual(result.withdraw, ['weekly_scoped:opus|critical']);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(Object.keys(result.fired), ['session|warning']);
+});
+
+test('an empty quota list is unknown data, not an empty payload, and prunes nothing', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const result = plan([], fired);
+    assert.deepEqual(result.withdraw, []);
+    assert.deepEqual(result.fired, fired);
 });
 
 test('the returned bookkeeping never aliases the caller\'s entries', () => {
