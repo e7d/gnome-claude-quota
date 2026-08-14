@@ -178,6 +178,19 @@ render_state() {
         'ok'" >/dev/null
 }
 
+# render_state sets the quotas directly, bypassing every path that syncs alerts,
+# and `fired` survives a scenario change on purpose — so a group asserting alerts
+# clears it first and asks for the sync explicitly.
+reset_alerts() {
+    shell_eval "const i = Main.panel.statusArea['$UUID'];
+        [...i._alerts.keys()].forEach(key => i._withdrawAlert(key));
+        i._fired = {}; 'ok'" >/dev/null
+}
+
+sync_alerts() {
+    shell_eval "Main.panel.statusArea['$UUID']._syncAlerts(new Date()); 'ok'" >/dev/null
+}
+
 close_menu() {
     shell_eval "Main.panel.statusArea['$UUID'].menu.close(false); 'ok'" >/dev/null
 }

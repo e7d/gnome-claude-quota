@@ -63,6 +63,16 @@ catalog_prefix() {
     printf '%s' "${text%%\{*}"
 }
 
+# The notification title's msgid opens on a placeholder, so catalog_prefix returns
+# nothing to match on; the connector between the two placeholders is what proves a
+# language run reached the catalog.
+catalog_infix() {
+    local text
+    text="$(catalog_msg "$1")"
+    text="${text#*\}}"
+    printf '%s' "${text%%\{*}"
+}
+
 js_string() {
     local escaped="${1//\\/\\\\}"
     printf '"%s"' "${escaped//\"/\\\"}"

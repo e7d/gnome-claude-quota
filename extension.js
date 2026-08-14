@@ -10,6 +10,7 @@ import {BarLevel} from 'resource:///org/gnome/shell/ui/barLevel.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
@@ -20,6 +21,7 @@ import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {fresherThan} from './lib/shared-usage.js';
 import {captionLine, numberLocale, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
+import {alertPlan, thresholdsFrom} from './lib/notify.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
@@ -33,6 +35,10 @@ const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
 const TICK_OVERHANG = 2;
 const CREDENTIALS_SETTLE_SECONDS = 2;
+const URGENCY = {
+    warning: MessageTray.Urgency.NORMAL,
+    critical: MessageTray.Urgency.HIGH,
+};
 
 // The insensitive pseudo-class the shipped theme paints at 50% alpha is what a
 // non-reactive item gets, and every child label inherits it.
@@ -142,8 +148,13 @@ class QuotaBlock extends St.BoxLayout {
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
-    _init(iconPath) {
+    _init({iconPath, prefs}) {
         super._init(0.5, _('Claude Quota'));
+        this._iconPath = iconPath;
+        this._prefs = prefs;
+        this._source = null;
+        this._alerts = new Map();
+        this._prefsSignals = [];
         this._client = new UsageClient();
         this._status = new StatusClient();
         this._settings = St.Settings.get();
@@ -182,7 +193,7 @@ class Indicator extends PanelMenu.Button {
         const box = new St.BoxLayout({style_class: 'panel-status-indicators-box'});
         this._icon = new St.Icon({
             style_class: 'system-status-icon cq-panel-icon',
-            gicon: Gio.icon_new_for_string(iconPath),
+            gicon: Gio.icon_new_for_string(this._iconPath),
         });
         box.add_child(this._icon);
         this._panelQuotas = new St.BoxLayout({style_class: 'cq-panel'});
@@ -253,6 +264,7 @@ class Indicator extends PanelMenu.Button {
         this.connect('destroy', () => this._onDestroy());
         this._watchPanelSpace();
         this._watchCredentials();
+        this._watchNotifyPrefs();
         this._loadCache();
         this._render();
         this._refresh('startup');
@@ -280,6 +292,7 @@ class Indicator extends PanelMenu.Button {
         this._quotas = quotas({limits: cached.limits}, new Date());
         this._fetchedAt = cached.fetchedAt;
         this._fired = cached.fired;
+        this._syncAlerts(new Date());
     }
 
     _saveCache() {
@@ -369,6 +382,78 @@ class Indicator extends PanelMenu.Button {
         this._refresh('credentials');
     }
 
+    _notifyPrefs() {
+        return {
+            warningEnabled: this._prefs.get_boolean('notify-warning-enabled'),
+            warningPercent: this._prefs.get_int('notify-warning-percent'),
+            criticalEnabled: this._prefs.get_boolean('notify-critical-enabled'),
+            criticalPercent: this._prefs.get_int('notify-critical-percent'),
+        };
+    }
+
+    _watchNotifyPrefs() {
+        ['notify-warning-enabled', 'notify-warning-percent',
+            'notify-critical-enabled', 'notify-critical-percent']
+            .forEach(key => this._prefsSignals.push(
+                this._prefs.connect(`changed::${key}`, () => this._syncAlerts(new Date()))));
+    }
+
+    // A Source destroys itself when its last notification is removed, so the
+    // reference has to be re-made rather than kept — the shell's own
+    // getSystemSource() handles it the same way.
+    _notifySource() {
+        if (this._source !== null)
+            return this._source;
+        this._source = new MessageTray.Source({
+            title: _('Claude Quota'),
+            icon: Gio.icon_new_for_string(this._iconPath),
+        });
+        this._source.connect('destroy', () => {
+            this._source = null;
+        });
+        Main.messageTray.add(this._source);
+        return this._source;
+    }
+
+    _postAlert(alert) {
+        const source = this._notifySource();
+        const notification = new MessageTray.Notification({
+            source,
+            title: alert.title,
+            body: alert.body,
+            gicon: Gio.icon_new_for_string(this._iconPath),
+            urgency: URGENCY[alert.level],
+            isTransient: false,
+        });
+        notification.connect('activated', () => this.menu.open(true));
+        notification.connect('destroy', () => this._alerts.delete(alert.key));
+        this._alerts.set(alert.key, notification);
+        source.addNotification(notification);
+    }
+
+    _withdrawAlert(key) {
+        const notification = this._alerts.get(key);
+        if (notification === undefined)
+            return;
+        this._alerts.delete(key);
+        notification.destroy(MessageTray.NotificationDestroyedReason.EXPIRED);
+    }
+
+    _syncAlerts(now) {
+        const plan = alertPlan({
+            quotas: markExpired(this._quotas, now),
+            fired: this._fired,
+            thresholds: thresholdsFrom(this._notifyPrefs()),
+            now,
+            locale: this._locale,
+            percentLocale: this._percentLocale,
+        });
+        plan.withdraw.forEach(key => this._withdrawAlert(key));
+        plan.post.forEach(alert => this._postAlert(alert));
+        this._fired = plan.fired;
+        this._saveCache();
+    }
+
     _scheduleNext(seconds) {
         if (this._timerId) {
             GLib.Source.remove(this._timerId);
@@ -411,6 +496,7 @@ class Indicator extends PanelMenu.Button {
             headers: {},
             body: null,
         }));
+        this._syncAlerts(now);
     }
 
     async _refresh(trigger) {
@@ -550,6 +636,7 @@ class Indicator extends PanelMenu.Button {
             this._fetchedAt = new Date();
             this._seenExpiry = result.expiresAt ?? this._seenExpiry;
             this._saveCache();
+            this._syncAlerts(new Date());
             this._scheduleNext(nextPollSeconds(null));
             return;
         }
@@ -846,6 +933,11 @@ class Indicator extends PanelMenu.Button {
         this._panelSignals = [];
         this._stopSpinner();
         this._settings.disconnect(this._schemeId);
+        this._prefsSignals.forEach(id => this._prefs.disconnect(id));
+        this._prefsSignals = [];
+        this._alerts.clear();
+        this._source?.destroy(MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
+        this._source = null;
         this._cancellable?.cancel();
         this._client.destroy();
         this._status.destroy();
@@ -859,7 +951,10 @@ export default class ClaudeQuotaExtension extends Extension {
             ngettext: this.ngettext.bind(this),
             pgettext: this.pgettext.bind(this),
         });
-        this._indicator = new Indicator(`${this.path}/icons/claude-quota-symbolic.svg`);
+        this._indicator = new Indicator({
+            iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
+            prefs: this.getSettings(),
+        });
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }
 

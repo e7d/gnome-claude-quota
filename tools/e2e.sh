@@ -14,7 +14,7 @@ DEVKIT_HEADLESS=1
 . "$(dirname "${BASH_SOURCE[0]}")/lib/assert.sh"
 
 # GROUPS is a bash built-in holding the user's gids, and assignments to it are ignored.
-ALL_GROUPS=(state panel hover refresh lifecycle)
+ALL_GROUPS=(state panel hover refresh notify lifecycle)
 RUN_GROUPS=("${ALL_GROUPS[@]}")
 THEMES=(dark light)
 A11Y_SHOTS=(normal warning critical model-scoped error service-major over-pace rate-limited rate-limited-day no-data)
@@ -778,6 +778,143 @@ group_refresh() {
     restore_attempt_log
 }
 
+LIVE_ALERTS="[...$IND._alerts.keys()].sort()"
+
+# The comparison is made in the session because a string cannot come back through
+# probe intact, and the expected list is spelled as a JS array literal because a
+# backslash anywhere in the argument defeats gdbus's fallback to a plain string —
+# an escaped JSON string would fail the Eval outright rather than the assertion.
+assert_alert_keys() {
+    assert_eq "$1 live alerts" 'true' \
+        "$(probe "JSON.stringify($LIVE_ALERTS) === JSON.stringify($2)")"
+}
+
+assert_source_holds_every_alert() {
+    assert_eq "$1 every live alert is in the tray" 'true' \
+        "$(probe "[...$IND._alerts.values()].every(n =>
+            ($IND._source?.notifications ?? []).includes(n)) &&
+            $IND._alerts.size === ($IND._source?.notifications ?? []).length")"
+}
+
+assert_alert_urgency() {
+    assert_eq "$1 urgency escalates with the level" 'true' \
+        "$(probe "[...$IND._alerts.entries()].every(([key, n]) =>
+            n.urgency === (key.endsWith('|critical') ? 2 : 1))")"
+}
+
+assert_alert_titles_name_the_quota() {
+    local infix
+    infix="$(js_string "$(catalog_infix '{name} at {percent}')")"
+    assert_eq "$1 each title joins a quota name to its percentage" 'true' \
+        "$(probe "[...$IND._alerts.entries()].every(([key, n]) => {
+            const quota = $IND._quotas.find(q => key.startsWith(q.key + '|'));
+            return n.title.includes($infix) && n.title.includes(quota.name) &&
+                n.title.includes(String(quota.percent));
+        })")"
+}
+
+assert_one_alert_per_quota() {
+    assert_eq "$1 a quota shows one banner at a time" 'true' \
+        "$(probe "new Set(($LIVE_ALERTS).map(k => k.split('|')[0])).size === ($LIVE_ALERTS).length")"
+}
+
+assert_alerts() {
+    assert_source_holds_every_alert "$1"
+    assert_alert_urgency "$1"
+    assert_alert_titles_name_the_quota "$1"
+    assert_one_alert_per_quota "$1"
+}
+
+# A joined string cannot come back through probe — unwrap strips the quotes and
+# leaves JSON's escaping behind — so each default is read as a number of its own.
+schema_default() {
+    probe "$IND._prefs.get_default_value('notify-$1-percent').unpack()"
+}
+
+# The schema's defaults and lib/notify.js's NOTIFY_DEFAULTS are two declarations of
+# one decision, and the indicator is the only thing that reads both.
+assert_schema_defaults_agree() {
+    local declared
+    declared="$(node --input-type=module -e \
+        "import {NOTIFY_DEFAULTS} from '$ROOT/lib/notify.js';
+         console.log([NOTIFY_DEFAULTS.warning, NOTIFY_DEFAULTS.critical].join('/'));")"
+    assert_eq "$1 the schema thresholds are the ones lib/notify.js assumes" \
+        "$declared" "$(schema_default warning)/$(schema_default critical)"
+}
+
+assert_source_holds_every_alert_probe() { assert_source_holds_every_alert control; }
+assert_alert_urgency_probe() { assert_alert_urgency control; }
+assert_alert_titles_probe() { assert_alert_titles_name_the_quota control; }
+assert_one_alert_per_quota_probe() { assert_one_alert_per_quota control; }
+assert_schema_defaults_agree_probe() { assert_schema_defaults_agree control; }
+
+prove_alerts() {
+    reset_alerts
+    render_state critical
+    sync_alerts
+    prove 'every live alert is in the tray' \
+        "shell_eval \"$IND._alerts.set('ghost|warning', $IND._alerts.values().next().value); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts.delete('ghost|warning'); 'ok'\" >/dev/null" \
+        assert_source_holds_every_alert_probe
+    prove 'urgency escalates with the level' \
+        "shell_eval \"[...$IND._alerts.values()].forEach(n => { n.urgency = 1; }); 'ok'\" >/dev/null" \
+        "shell_eval \"[...$IND._alerts.entries()].forEach(([k, n]) => { n.urgency = k.endsWith('|critical') ? 2 : 1; }); 'ok'\" >/dev/null" \
+        assert_alert_urgency_probe
+    prove 'each title joins a quota name to its percentage' \
+        "shell_eval \"[...$IND._alerts.values()].forEach(n => { n.title = 'nothing here'; }); 'ok'\" >/dev/null" \
+        "shell_eval \"const i = $IND; [...i._alerts.keys()].forEach(k => i._withdrawAlert(k));
+            i._fired = {}; i._syncAlerts(new Date()); 'ok'\" >/dev/null" \
+        assert_alert_titles_probe
+    prove 'a quota shows one banner at a time' \
+        "shell_eval \"$IND._alerts.set('Session (5h)|warning', $IND._alerts.values().next().value); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts.delete('Session (5h)|warning'); 'ok'\" >/dev/null" \
+        assert_one_alert_per_quota_probe
+}
+
+# Setting a key cannot move its default, so the break replaces the reader itself
+# with a value the schema never declares.
+prove_schema_defaults() {
+    prove 'the schema thresholds are the ones lib/notify.js assumes' \
+        "shell_eval \"$IND._prefs.get_default_value = () => new imports.gi.GLib.Variant('i', 1); 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._prefs.get_default_value; 'ok'\" >/dev/null" \
+        assert_schema_defaults_agree_probe
+}
+
+group_notify() {
+    echo 'notify:'
+    prove_schema_defaults
+    assert_schema_defaults_agree 'shipped'
+    prove_alerts
+    reset_alerts
+    render_state normal
+    sync_alerts
+    assert_alert_keys 'quiet' '[]'
+    assert_alerts 'quiet'
+    render_state warning
+    sync_alerts
+    assert_alert_keys 'warning' "['Session (5h)|warning','Weekly|warning']"
+    assert_alerts 'warning'
+    sync_alerts
+    assert_alert_keys 'warning re-synced' "['Session (5h)|warning','Weekly|warning']"
+    reset_alerts
+    render_state critical
+    sync_alerts
+    assert_alert_keys 'critical' "['Session (5h)|critical','Weekly|critical']"
+    assert_alerts 'critical'
+    render_state expired
+    sync_alerts
+    assert_alert_keys 'expired' '[]'
+    assert_eq 'expired empties the source with the last alert' 'null' \
+        "$(probe "$IND._source")"
+    reset_alerts
+    render_state warning
+    sync_alerts
+    shell_eval "$IND._prefs.set_int('notify-critical-percent', 50); 'ok'" >/dev/null
+    assert_alert_keys 'lowered threshold' "['Session (5h)|critical','Weekly|critical']"
+    shell_eval "$IND._prefs.reset('notify-critical-percent'); 'ok'" >/dev/null
+    reset_alerts
+}
+
 park_indicator() {
     shell_eval "globalThis._parked = $IND; 'ok'" >/dev/null
 }
@@ -855,6 +992,7 @@ main() {
     runs_group panel && group_panel
     runs_group hover && group_hover
     runs_group refresh && group_refresh
+    runs_group notify && group_notify
     runs_group lifecycle && group_lifecycle
     assert_summary
 }
