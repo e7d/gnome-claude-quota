@@ -1,14 +1,10 @@
-import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import Meta from 'gi://Meta';
-import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -19,31 +15,19 @@ import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from './lib/notify.js';
-import {availableWidth, fittingCount} from './lib/panel.js';
-import {brandColor, schemeForForeground} from './lib/theme.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult, UNKNOWN_SERVICE} from './lib/state.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
-import {CAPTION_OPACITY, displayItem, QuotaBlock} from './ui/quota-block.js';
+import {PanelStrip, panelScheme} from './ui/panel-fit.js';
+import {PopupBody} from './ui/popup-body.js';
 
-const SEPARATOR_OPACITY = 120;
-const STATUS_URL = 'https://status.claude.com/';
-const SPIN_DURATION_MS = 900;
 const CREDENTIALS_SETTLE_SECONDS = 2;
 const URGENCY = {
     warning: MessageTray.Urgency.NORMAL,
     critical: MessageTray.Urgency.HIGH,
 };
-
-// The top bar keeps its own background whatever the desktop scheme is, and an
-// extension can repaint it, so the label colour the theme resolved is the only
-// honest answer to what the icon and the quota numbers sit on.
-function panelScheme() {
-    return schemeForForeground(Main.panel.get_theme_node().get_foreground_color());
-}
-
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
@@ -62,11 +46,6 @@ class Indicator extends PanelMenu.Button {
         this._cancellable = null;
         this._destroyed = false;
         this._quotas = [];
-        this._blocks = [];
-        this._panelCells = [];
-        this._panelSignals = [];
-        this._issueLast = false;
-        this._fitLaterId = 0;
         this._error = null;
         this._service = null;
         this._refreshing = false;
@@ -100,83 +79,15 @@ class Indicator extends PanelMenu.Button {
         this._panelQuotas = new St.BoxLayout({style_class: 'cq-panel'});
         box.add_child(this._panelQuotas);
         this.add_child(box);
-        this._metaBox = new St.BoxLayout({style_class: 'cq-meta', x_expand: true});
-        this._refreshLabel = new St.Label({
-            y_align: Clutter.ActorAlign.CENTER,
-            opacity: CAPTION_OPACITY,
-            x_expand: true,
+        this._popup = new PopupBody({
+            onRefresh: () => this._refresh('manual'),
+            onOpenPrefs: () => {
+                this.menu.close();
+                this._openPrefs?.();
+            },
         });
-        this._refreshLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-        this._refreshButton = new St.Button({
-            style_class: 'cq-refresh',
-            child: new St.Icon({
-                style_class: 'popup-menu-icon',
-                icon_name: 'view-refresh-symbolic',
-            }),
-            y_align: Clutter.ActorAlign.CENTER,
-            can_focus: true,
-        });
-        this._refreshButton.connect('clicked', () => this._refresh('manual'));
-        this._metaBox.add_child(this._refreshLabel);
-        this._metaBox.add_child(this._refreshButton);
-        this._message = displayItem();
-        this._messageBox = new St.BoxLayout({
-            style_class: 'cq-message',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_expand: true,
-        });
-        this._messageLabel = new St.Label();
-        this._messageLabel.clutter_text.line_wrap = true;
-        this._messageLabel.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-        this._messageLabel.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        this._messageBox.add_child(this._messageLabel);
-        this._message.add_child(this._messageBox);
-        this._body = displayItem();
-        this._blockBox = new St.BoxLayout({
-            style_class: 'cq-blocks',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_expand: true,
-        });
-        this._bodyBox = new St.BoxLayout({
-            style_class: 'cq-body',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_expand: true,
-        });
-        this._bodyBox.add_child(this._metaBox);
-        this._bodyBox.add_child(this._blockBox);
-        this._body.add_child(this._bodyBox);
-        this._hiddenNoteItem = displayItem();
-        this._hiddenNoteBox = new St.BoxLayout({
-            style_class: 'cq-message',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_expand: true,
-        });
-        this._hiddenNote = new St.Label({style_class: 'cq-caption', text: ''});
-        this._hiddenNote.clutter_text.line_wrap = true;
-        this._hiddenNote.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-        this._hiddenNoteButton = new St.Button({
-            style_class: 'button',
-            label: '',
-            can_focus: true,
-            x_align: Clutter.ActorAlign.START,
-        });
-        this._hiddenNoteButton.connect('clicked', () => {
-            this.menu.close();
-            this._openPrefs?.();
-        });
-        this._hiddenNoteBox.add_child(this._hiddenNote);
-        this._hiddenNoteBox.add_child(this._hiddenNoteButton);
-        this._hiddenNoteItem.add_child(this._hiddenNoteBox);
-        this._issueItem = new PopupMenu.PopupMenuItem('');
-        this._issueItem.label.clutter_text.line_wrap = true;
-        this._issueItem.label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-        this._issueItem.connect('activate', () => Gio.AppInfo.launch_default_for_uri(STATUS_URL, null));
-        this._messageSeparator = new PopupMenu.PopupSeparatorMenuItem();
-        this.menu.addMenuItem(this._body);
-        this.menu.addMenuItem(this._hiddenNoteItem);
-        this.menu.addMenuItem(this._messageSeparator);
-        this.menu.addMenuItem(this._message);
-        this.menu.addMenuItem(this._issueItem);
+        this._popup.items.forEach(item => this.menu.addMenuItem(item));
+        this._panel = new PanelStrip({container: this.container, box: this._panelQuotas, icon: this._icon});
         this._schemeId = this._settings.connect('notify::color-scheme', () => this._render());
         this.menu.connect('open-state-changed', (menu, open) => {
             if (!open)
@@ -186,7 +97,6 @@ class Indicator extends PanelMenu.Button {
                 this._refresh('popup-stale');
         });
         this.connect('destroy', () => this._onDestroy());
-        this._watchPanelSpace();
         this._watchCredentials();
         this._watchPrefs();
         this._loadCache();
@@ -652,68 +562,6 @@ class Indicator extends PanelMenu.Button {
         this._perform(effects, now);
     }
 
-    _renderMessage(view) {
-        this._refreshLabel.text = view.refreshText;
-        this._issueItem.visible = view.issue !== null;
-        this._renderIssue(view.issue);
-        this._messageLabel.text = view.message;
-        this._message.visible = view.messageVisible;
-        this._messageSeparator.visible = view.separatorVisible;
-        this._body.visible = view.bodyVisible;
-    }
-
-    // Cleared rather than left behind when there is no issue: a hidden row that keeps
-    // the last incident's wording hands it back the moment the next one differs.
-    _renderIssue(issue) {
-        if (issue === null) {
-            this._issueItem.label.text = '';
-            return;
-        }
-        this._issueItem.label.text = issue.oneLine;
-        if (!this._issueFits())
-            this._issueItem.label.text = issue.twoLine;
-    }
-
-    // The popup is as wide as its widest item, so a window that does not fit beside the
-    // wording would stretch every quota row — hence the body's width, not a pixel budget.
-    _issueFits() {
-        if (this._issueItem.get_stage() === null)
-            return true;
-        const [, issueWidth] = this._issueItem.get_preferred_width(-1);
-        const [, bodyWidth] = this._body.get_preferred_width(-1);
-        return issueWidth <= bodyWidth;
-    }
-
-    _renderActions(view) {
-        this._refreshButton.reactive = view.refreshEnabled;
-        this._refreshButton.opacity = this._refreshButton.reactive ? 255 : CAPTION_OPACITY;
-        if (this._refreshing)
-            this._startSpinner();
-        else
-            this._stopSpinner();
-    }
-
-    _startSpinner() {
-        const icon = this._refreshButton.child;
-        if (icon.get_transition('spin'))
-            return;
-        icon.set_pivot_point(0.5, 0.5);
-        const spin = new Clutter.PropertyTransition({property_name: 'rotation-angle-z'});
-        spin.set_from(0);
-        spin.set_to(360);
-        spin.set_duration(SPIN_DURATION_MS);
-        spin.set_repeat_count(-1);
-        spin.set_progress_mode(Clutter.AnimationMode.LINEAR);
-        icon.add_transition('spin', spin);
-    }
-
-    _stopSpinner() {
-        const icon = this._refreshButton.child;
-        icon.remove_transition('spin');
-        icon.rotation_angle_z = 0;
-    }
-
-
     _quotaViews(now) {
         const settings = this._settingsValues();
         return markSeverity(markExpired(this._quotas, now), {
@@ -727,28 +575,22 @@ class Indicator extends PanelMenu.Button {
         return views.filter(quota => visible[quota.scope][surface]);
     }
 
-    _renderBlocks(menuViews, now, scheme) {
-        if (this._blocks.length !== menuViews.length) {
-            this._blockBox.destroy_all_children();
-            this._blocks = menuViews.map(() => {
-                const block = new QuotaBlock();
-                this._blockBox.add_child(block);
-                return block;
-            });
-        }
-        menuViews.forEach((quota, index) =>
-            this._blocks[index].update({
-                quota, now, scheme, locale: this._locale, percentLocale: this._percentLocale}));
-    }
-
-    _renderHiddenNote(hiddenNote) {
-        this._hiddenNote.visible = hiddenNote.visible;
-        this._hiddenNoteButton.visible = hiddenNote.visible;
-        this._hiddenNoteItem.visible = hiddenNote.visible;
-        if (!hiddenNote.visible)
-            return;
-        this._hiddenNote.text = hiddenNote.text;
-        this._hiddenNoteButton.label = hiddenNote.buttonLabel;
+    _popupViewModel(quotaViews, menuViews, now) {
+        return {
+            ...popupView({
+                block: this._block,
+                service: this._service,
+                error: this._error,
+                fetchedAt: this._fetchedAt,
+                refreshing: this._refreshing,
+                lastRequestAt: this._lastRequestAt,
+                quotaCount: quotaViews.length,
+                menuQuotaCount: menuViews.length,
+                locale: this._locale,
+                now,
+            }),
+            refreshing: this._refreshing,
+        };
     }
 
     _render() {
@@ -756,163 +598,18 @@ class Indicator extends PanelMenu.Button {
         const scheme = this._scheme;
         const quotaViews = this._quotaViews(now);
         const menuViews = this._visibleOn('menu', quotaViews);
-        const view = popupView({
-            block: this._block,
+        const view = this._popupViewModel(quotaViews, menuViews, now);
+        this._popup.update({view, quotas: menuViews, now, scheme, locale: this._locale, percentLocale: this._percentLocale});
+        const barScheme = panelScheme();
+        const panel = panelView({
+            quotas: this._visibleOn('bar', quotaViews),
+            hasAnyQuota: quotaViews.length > 0,
             service: this._service,
             error: this._error,
-            fetchedAt: this._fetchedAt,
-            refreshing: this._refreshing,
-            lastRequestAt: this._lastRequestAt,
-            quotaCount: quotaViews.length,
-            menuQuotaCount: menuViews.length,
-            locale: this._locale,
-            now,
-        });
-        this._renderActions(view);
-        this._renderPanel(this._visibleOn('bar', quotaViews), quotaViews.length > 0);
-        this._renderBlocks(menuViews, now, scheme);
-        this._blockBox.visible = menuViews.length > 0;
-        this._renderHiddenNote(view.hiddenNote);
-        this._renderMessage(view);
-    }
-
-    _panelSeparator() {
-        return new St.Label({
-            text: '·',
-            y_align: Clutter.ActorAlign.CENTER,
-            opacity: SEPARATOR_OPACITY,
-        });
-    }
-
-    // Each value owns the dot and the gap to its left, so hiding one takes its own
-    // spacing with it and every surviving rung ends flush against the button.
-    _panelCellActor(cell) {
-        const label = new St.Label({text: cell.text, y_align: Clutter.ActorAlign.CENTER});
-        if (cell.styleClass !== null)
-            label.style_class = cell.styleClass;
-        const actor = new St.BoxLayout({style_class: 'cq-panel-cell'});
-        const dot = cell.dotted ? this._panelSeparator() : null;
-        if (dot)
-            actor.add_child(dot);
-        actor.add_child(label);
-        this._panelQuotas.add_child(actor);
-        return {actor, label, dot};
-    }
-
-    _renderPanel(quotaViews, hasAnyQuota) {
-        const scheme = panelScheme();
-        this._icon.style = `color: ${brandColor(scheme)};`;
-        this._panelQuotas.destroy_all_children();
-        const {cells, issueLast} = panelView({
-            quotas: quotaViews,
-            hasAnyQuota,
-            service: this._service,
-            error: this._error,
-            scheme,
+            scheme: barScheme,
             percentLocale: this._percentLocale,
         });
-        this._issueLast = issueLast;
-        this._panelCells = cells.map(cell => this._panelCellActor(cell));
-        this._fitPanel();
-    }
-
-    // An incident emoji is kept ahead of every value on purpose: it reports
-    // something the user cannot be relied on to have the popup open for.
-    get _panelKeepOrder() {
-        if (!this._issueLast)
-            return this._panelCells;
-        const issue = this._panelCells[this._panelCells.length - 1];
-        return [issue, ...this._panelCells.slice(0, -1)];
-    }
-
-    _showPanelCells(count) {
-        const keep = new Set(this._panelKeepOrder.slice(0, count));
-        let earlierShown = false;
-        this._panelCells.forEach(cell => {
-            const visible = keep.has(cell);
-            cell.actor.visible = visible;
-            if (cell.dot)
-                cell.dot.visible = visible && earlierShown;
-            earlierShown = earlierShown || visible;
-        });
-        // An empty box is still a child, and the shell's own box spacing would leave
-        // its 4px beside the icon at the bottom of the ladder.
-        this._panelQuotas.visible = earlierShown;
-    }
-
-    _panelNaturalWidth(count) {
-        this._showPanelCells(count);
-        const [, natural] = this.container.get_preferred_width(-1);
-        return natural;
-    }
-
-    _centerOffset() {
-        const monitor = Main.layoutManager.findMonitorForActor(Main.panel);
-        if (!monitor)
-            return 0;
-        const workArea = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
-        return 2 * (workArea.x - monitor.x) + workArea.width - monitor.width;
-    }
-
-    // Subtracting our own width is what makes the budget independent of the fit
-    // that produced it: reading the right box whole would let a shrink widen the
-    // budget that caused it, and the panel would oscillate.
-    _panelBudget() {
-        const center = Main.panel._centerBox;
-        const right = Main.panel._rightBox;
-        if (!center || !right)
-            return null;
-        const [, centerWidth] = center.get_preferred_width(-1);
-        const [, rightWidth] = right.get_preferred_width(-1);
-        const [, ownWidth] = this.container.get_preferred_width(-1);
-        return availableWidth({
-            panelWidth: Main.panel.width,
-            centerWidth,
-            centerOffset: this._centerOffset(),
-            othersWidth: Math.max(0, rightWidth - ownWidth),
-        });
-    }
-
-    // The first render runs before addToStatusArea, and measuring a widget that has
-    // no stage yet asks St for a theme node it will not resolve. Being added to the
-    // panel is itself a fit trigger, so nothing is lost by waiting for it.
-    _fitPanel() {
-        if (this.container.get_stage() === null)
-            return;
-        const cells = this._panelCells.length;
-        if (!cells) {
-            this._showPanelCells(0);
-            return;
-        }
-        const available = this._panelBudget();
-        if (available === null) {
-            this._showPanelCells(cells);
-            return;
-        }
-        this._showPanelCells(fittingCount(
-            cells, available, count => this._panelNaturalWidth(count)));
-    }
-
-    _queueFit() {
-        if (this._fitLaterId)
-            return;
-        this._fitLaterId = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
-            this._fitLaterId = 0;
-            this._fitPanel();
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    _watchPanelSpace() {
-        const watched = [
-            [Main.panel, 'notify::width'],
-            [Main.panel._centerBox, 'notify::width'],
-            [Main.panel._rightBox, 'child-added'],
-            [Main.panel._rightBox, 'child-removed'],
-        ];
-        this._panelSignals = watched
-            .filter(([actor]) => actor)
-            .map(([actor, signal]) => [actor, actor.connect(signal, () => this._queueFit())]);
+        this._panel.update({cells: panel.cells, issueLast: panel.issueLast, scheme: barScheme});
     }
 
     _onDestroy() {
@@ -920,10 +617,6 @@ class Indicator extends PanelMenu.Button {
         if (this._timerId) {
             GLib.Source.remove(this._timerId);
             this._timerId = null;
-        }
-        if (this._fitLaterId) {
-            global.compositor.get_laters().remove(this._fitLaterId);
-            this._fitLaterId = 0;
         }
         if (this._credentialsSettleId) {
             GLib.Source.remove(this._credentialsSettleId);
@@ -934,9 +627,8 @@ class Indicator extends PanelMenu.Button {
             this._credentialsMonitor.cancel();
             this._credentialsMonitor = null;
         }
-        this._panelSignals.forEach(([actor, id]) => actor.disconnect(id));
-        this._panelSignals = [];
-        this._stopSpinner();
+        this._popup.destroy();
+        this._panel.destroy();
         this._settings.disconnect(this._schemeId);
         this._prefsSignals.forEach(id => this._prefs.disconnect(id));
         this._prefsSignals = [];

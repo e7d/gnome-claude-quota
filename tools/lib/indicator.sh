@@ -105,15 +105,15 @@ setup_quotas() {
 # font and the rendered text.
 squeeze_panel() {
     cat <<JS
-        const room = i._panelBudget();
-        const rung = i._panelNaturalWidth(Math.min($1, i._panelCells.length));
-        i._fitPanel();
+        const room = i._panel._budget();
+        const rung = i._panel._naturalWidth(Math.min($1, i._panel._cells.length));
+        i._panel.fit();
         const width = Math.max(0, Math.floor(room - rung));
         if (width > 0) {
             $FILLER = new imports.gi.Clutter.Actor({width, height: 1});
             Main.panel._rightBox.add_child($FILLER);
         }
-        i._fitPanel();
+        i._panel.fit();
 JS
 }
 

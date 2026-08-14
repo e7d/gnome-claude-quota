@@ -114,12 +114,12 @@ shoots() {
 }
 
 IND="Main.panel.statusArea['$UUID']"
-BLOCK_ROWS="$IND._blocks.flatMap(b => [b._name.text, b._percent.text, b._caption.text])"
-PANEL_LABELS="$IND._panelCells.map(c => c.label.text)"
-PANEL_QUOTAS="$IND._panelCells
+BLOCK_ROWS="$IND._popup._blocks.flatMap(b => [b._name.text, b._percent.text, b._caption.text])"
+PANEL_LABELS="$IND._panel._cells.map(c => c.label.text)"
+PANEL_QUOTAS="$IND._panel._cells
     .filter(c => /cq-panel-quota/.test(c.label.get_style_class_name() ?? ''))
     .map(c => c.label.text)"
-CRITICAL_COLOR="$IND._blocks[1]._percent.get_theme_node().get_foreground_color().to_string()"
+CRITICAL_COLOR="$IND._popup._blocks[1]._percent.get_theme_node().get_foreground_color().to_string()"
 
 assert_rows_filled() {
     assert_eq "$1 rows filled" 'true' "$(probe "$BLOCK_ROWS.every(t => t !== '')")"
@@ -131,12 +131,12 @@ assert_no_placeholders() {
 }
 
 assert_block_count() {
-    assert_eq "$1 block count" "$(probe "$IND._quotas.length")" "$(probe "$IND._blocks.length")"
+    assert_eq "$1 block count" "$(probe "$IND._quotas.length")" "$(probe "$IND._popup._blocks.length")"
 }
 
 assert_panel_matches() {
     assert_eq "$1 panel agrees with blocks" 'true' \
-        "$(probe "$IND._blocks.every((b, n) => ($PANEL_QUOTAS)[n].endsWith(b._percent.text))")"
+        "$(probe "$IND._popup._blocks.every((b, n) => ($PANEL_QUOTAS)[n].endsWith(b._percent.text))")"
 }
 
 assert_rate_limit_note() {
@@ -144,9 +144,9 @@ assert_rate_limit_note() {
     header="$(js_string "$(catalog_prefix 'Last refresh: {time}')")"
     limited="$(js_string "$(catalog_msg 'Rate limited')")"
     assert_eq "$1 header always states the last refresh" 'true' \
-        "$(probe "$IND._refreshLabel.text.startsWith($header)")"
+        "$(probe "$IND._popup._refreshLabel.text.startsWith($header)")"
     assert_eq "$1 the rate-limit row tracks the block" 'true' \
-        "$(probe "($IND._messageLabel.text.includes($limited) && $IND._message.visible)
+        "$(probe "($IND._popup._messageLabel.text.includes($limited) && $IND._popup._message.visible)
             === ($IND._block?.until > new Date())")"
 }
 
@@ -154,16 +154,16 @@ assert_incident_window() {
     local until
     until="$(js_string "$(catalog_prefix 'until {time}')")"
     assert_eq "$1 the incident line names an end exactly when the window has one" 'true' \
-        "$(probe "$IND._issueItem.label.text.includes($until)
-            === ($IND._issueItem.visible && $IND._service?.until > new Date())")"
+        "$(probe "$IND._popup._issueItem.label.text.includes($until)
+            === ($IND._popup._issueItem.visible && $IND._service?.until > new Date())")"
 }
 
 # The popup is as wide as its widest item, so the incident line staying inside the
 # quota body is what keeps a named window from stretching every row that carries one.
 assert_incident_within_popup() {
     assert_eq "$1 the incident line never widens the popup" 'true' \
-        "$(probe "!$IND._issueItem.visible ||
-            $IND._issueItem.get_preferred_width(-1)[1] <= $IND._body.get_preferred_width(-1)[1]")"
+        "$(probe "!$IND._popup._issueItem.visible ||
+            $IND._popup._issueItem.get_preferred_width(-1)[1] <= $IND._popup._body.get_preferred_width(-1)[1]")"
 }
 
 assert_state() {
@@ -191,9 +191,9 @@ assert_theme_differs() {
 
 assert_threshold_repaints() {
     local before after
-    before="$(probe "$IND._blocks[0]._percent.get_style_class_name()")"
+    before="$(probe "$IND._popup._blocks[0]._percent.get_style_class_name()")"
     set_quota_pref warning-percent 5
-    after="$(probe "$IND._blocks[0]._percent.get_style_class_name()")"
+    after="$(probe "$IND._popup._blocks[0]._percent.get_style_class_name()")"
     set_quota_pref warning-percent 75
     assert_ne "$1 a lower warning threshold repaints a normal quota" "$before" "$after"
 }
@@ -211,7 +211,7 @@ assert_scope_leaves_the_bar() {
 assert_scope_leaves_the_menu() {
     local hidden
     set_quota_pref weekly-in-menu false
-    hidden="$(probe "$IND._blocks.length")"
+    hidden="$(probe "$IND._popup._blocks.length")"
     set_quota_pref weekly-in-menu true
     assert_eq "$1 hiding the weekly quota takes a block out of the menu" \
         "$(( $(probe "$IND._quotas.length") - 1 ))" "$hidden"
@@ -222,8 +222,8 @@ assert_all_hidden_says_so() {
     set_quota_pref weekly-in-menu false
     set_quota_pref scoped-in-menu false
     local shown text
-    shown="$(probe "$IND._hiddenNote.mapped")"
-    text="$(probe "$IND._hiddenNote.text")"
+    shown="$(probe "$IND._popup._hiddenNote.mapped")"
+    text="$(probe "$IND._popup._hiddenNote.text")"
     set_quota_pref session-in-menu true
     set_quota_pref weekly-in-menu true
     set_quota_pref scoped-in-menu true
@@ -240,7 +240,7 @@ assert_bar_all_hidden_shows_icon_only() {
     set_quota_pref weekly-in-bar false
     set_quota_pref scoped-in-bar false
     local mapped
-    mapped="$(probe "$IND._panelQuotas.mapped")"
+    mapped="$(probe "$IND._panel._box.mapped")"
     set_quota_pref session-in-bar true
     set_quota_pref weekly-in-bar true
     set_quota_pref scoped-in-bar true
@@ -256,9 +256,9 @@ assert_hidden_note_own_line() {
     set_quota_pref scoped-in-menu false
     local below
     below="$(probe "(() => {
-        const [, my] = $IND._metaBox.get_transformed_position();
-        const [, mh] = $IND._metaBox.get_transformed_size();
-        const [, ny] = $IND._hiddenNote.get_transformed_position();
+        const [, my] = $IND._popup._metaBox.get_transformed_position();
+        const [, mh] = $IND._popup._metaBox.get_transformed_size();
+        const [, ny] = $IND._popup._hiddenNote.get_transformed_position();
         return ny >= my + mh;
     })()")"
     set_quota_pref session-in-menu true
@@ -272,12 +272,12 @@ assert_hidden_note_offers_settings() {
     set_quota_pref weekly-in-menu false
     set_quota_pref scoped-in-menu false
     local shown label below
-    shown="$(probe "$IND._hiddenNoteButton.mapped")"
-    label="$(probe "$IND._hiddenNoteButton.label")"
+    shown="$(probe "$IND._popup._hiddenNoteButton.mapped")"
+    label="$(probe "$IND._popup._hiddenNoteButton.label")"
     below="$(probe "(() => {
-        const [, ny] = $IND._hiddenNote.get_transformed_position();
-        const [, nh] = $IND._hiddenNote.get_transformed_size();
-        const [, by] = $IND._hiddenNoteButton.get_transformed_position();
+        const [, ny] = $IND._popup._hiddenNote.get_transformed_position();
+        const [, nh] = $IND._popup._hiddenNote.get_transformed_size();
+        const [, by] = $IND._popup._hiddenNoteButton.get_transformed_position();
         return by >= ny + nh;
     })()")"
     set_quota_pref session-in-menu true
@@ -306,37 +306,37 @@ assert_hidden_note_offers_settings_probe() { assert_hidden_note_offers_settings 
 prove_state() {
     render_state normal
     prove 'rows filled' \
-        "shell_eval \"$IND._blocks[0]._caption.text = ''; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._blocks[0]._caption.text = ''; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_rows_filled_probe
     prove 'no placeholder leaked' \
-        "shell_eval \"$IND._blocks[0]._name.text = 'undefined'; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._blocks[0]._name.text = 'undefined'; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_no_placeholders_probe
     prove 'block count' \
-        "shell_eval \"$IND._blocks.pop().destroy(); 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._blocks = []; $IND._render(); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._blocks.pop().destroy(); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._blocks = []; $IND._render(); 'ok'\" >/dev/null" \
         assert_block_count_probe
     prove 'panel agrees with blocks' \
         "shell_eval \"${PANEL_CELLS}[0].label.set_text('S 0%'); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_panel_matches_probe
     prove 'header states the retry time while blocked, the last refresh otherwise' \
-        "shell_eval \"$IND._refreshLabel.text = 'retry at 9:00'; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._refreshLabel.text = 'retry at 9:00'; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_rate_limit_note_probe
     render_state service-maintenance-day
     prove 'incident line names the end of the window' \
-        "shell_eval \"$IND._issueItem.label.text = '🚧 Under maintenance'; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._issueItem.label.text = '🚧 Under maintenance'; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_incident_window_probe
     prove 'incident line stays inside the popup' \
-        "shell_eval \"$IND._issueItem.label.text = 'until '.repeat(40); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._issueItem.label.text = 'until '.repeat(40); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_incident_within_popup_probe
     render_state normal
     prove 'a lower warning threshold repaints' \
-        "shell_eval \"$IND._blocks[0]._percent.style_class = 'cq-percent cq-warning-dark'; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._blocks[0]._percent.style_class = 'cq-percent cq-warning-dark'; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_threshold_repaints_probe
     render_state normal
@@ -345,7 +345,7 @@ prove_state() {
         "shell_eval \"delete $IND._visibleOn; $IND._render(); 'ok'\" >/dev/null" \
         assert_scope_leaves_the_bar_probe
     prove 'hiding every quota from the bar leaves only the icon' \
-        "shell_eval \"$IND._panelQuotas.visible = true; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._panel._box.visible = true; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_bar_all_hidden_shows_icon_only_probe
     prove 'hiding a scope empties its block' \
@@ -353,15 +353,15 @@ prove_state() {
         "shell_eval \"delete $IND._visibleOn; $IND._render(); 'ok'\" >/dev/null" \
         assert_scope_leaves_the_menu_probe
     prove 'an all-hidden menu explains itself' \
-        "shell_eval \"$IND._hiddenNote.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._hiddenNote.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_all_hidden_says_so_probe
     prove 'the all-hidden note occupies its own line' \
-        "shell_eval \"$IND._hiddenNoteBox.remove_child($IND._hiddenNote); $IND._body.add_child($IND._hiddenNote); 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._body.remove_child($IND._hiddenNote); $IND._hiddenNoteBox.insert_child_at_index($IND._hiddenNote, 0); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._hiddenNoteBox.remove_child($IND._popup._hiddenNote); $IND._popup._body.add_child($IND._popup._hiddenNote); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._body.remove_child($IND._popup._hiddenNote); $IND._popup._hiddenNoteBox.insert_child_at_index($IND._popup._hiddenNote, 0); 'ok'\" >/dev/null" \
         assert_hidden_note_own_line_probe
     prove 'the all-hidden note offers a way into the settings' \
-        "shell_eval \"$IND._hiddenNoteButton.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._hiddenNoteButton.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_hidden_note_offers_settings_probe
 }
@@ -423,7 +423,7 @@ group_state() {
     [ "${#SHOTS[@]}" -eq 0 ] || { normalize; overview; }
 }
 
-PANEL_CELLS="$IND._panelCells"
+PANEL_CELLS="$IND._panel._cells"
 SHOWN_CELLS="$PANEL_CELLS.filter(c => c.actor.visible)"
 PANEL_NATURAL="$IND.container.get_preferred_width(-1)[1]"
 
@@ -434,14 +434,14 @@ assert_panel_cells() {
 assert_panel_drops_from_the_right() {
     assert_eq "$1 panel drops from the right" 'true' \
         "$(probe "(() => {
-            const kept = $IND._panelKeepOrder.map(c => c.actor.visible);
+            const kept = $IND._panel._keepOrder.map(c => c.actor.visible);
             return kept.every((visible, n) => n === 0 || !visible || kept[n - 1]);
         })()")"
 }
 
 assert_panel_within_budget() {
     assert_eq "$1 panel fits the space the shell gives it" 'true' \
-        "$(probe "$SHOWN_CELLS.length === 0 || $PANEL_NATURAL <= $IND._panelBudget()")"
+        "$(probe "$SHOWN_CELLS.length === 0 || $PANEL_NATURAL <= $IND._panel._budget()")"
 }
 
 assert_panel_separators() {
@@ -457,7 +457,7 @@ assert_panel_separators() {
 }
 
 assert_panel_keeps_icon() {
-    assert_eq "$1 the icon is the floor" 'true' "$(probe "$IND._icon.visible")"
+    assert_eq "$1 the icon is the floor" 'true' "$(probe "$IND._panel._icon.visible")"
 }
 
 assert_panel_shape() {
@@ -473,14 +473,14 @@ assert_panel_within_budget_probe() { assert_panel_within_budget control; }
 assert_panel_separators_probe() { assert_panel_separators control; }
 
 refit_panel() {
-    shell_eval "$IND._fitPanel(); 'ok'" >/dev/null
+    shell_eval "$IND._panel.fit(); 'ok'" >/dev/null
 }
 
 # A fit still queued for the next redraw would land on top of a deliberate break and
 # repair it, which reads as an assertion that cannot fail.
 settle_panel() {
     for _ in $(seq 70); do
-        [ "$(probe "$IND._fitLaterId")" = '0' ] && { await_paint; return 0; }
+        [ "$(probe "$IND._panel._fitLaterId")" = '0' ] && { await_paint; return 0; }
         sleep 0.15
     done
     die 'the panel never stopped refitting'
@@ -495,7 +495,7 @@ prove_panel() {
         refit_panel \
         assert_panel_cells_probe
     prove 'panel drops from the right' \
-        "shell_eval \"$IND._panelKeepOrder[1].actor.visible = false; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._panel._keepOrder[1].actor.visible = false; 'ok'\" >/dev/null" \
         refit_panel \
         assert_panel_drops_from_the_right_probe
     prove 'only a value with something before it carries a dot' \
@@ -507,7 +507,7 @@ prove_panel() {
 prove_panel_squeezed() {
     settle_panel
     prove 'panel fits the space the shell gives it' \
-        "shell_eval \"$IND._showPanelCells($PANEL_CELLS.length); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._panel._showCells($PANEL_CELLS.length); 'ok'\" >/dev/null" \
         refit_panel \
         assert_panel_within_budget_probe
 }
@@ -573,18 +573,18 @@ assert_panel_matches_platform() {
 assert_display_rows_inert() {
     local row
     for row in _body _message; do
-        point_at_actor "$IND.$row"
-        assert_eq "$row does not track hover" 'false' "$(probe "$IND.$row.track_hover")"
+        point_at_actor "$IND._popup.$row"
+        assert_eq "$row does not track hover" 'false' "$(probe "$IND._popup.$row.track_hover")"
         assert_eq "$row takes no hover class" 'true' \
-            "$(probe "!/hover|active/.test($IND.$row.get_style_pseudo_class() ?? '')")"
+            "$(probe "!/hover|active/.test($IND._popup.$row.get_style_pseudo_class() ?? '')")"
     done
 }
 
 assert_status_row_highlights() {
-    point_at_actor "$IND._issueItem"
-    assert_eq 'status row tracks hover' 'true' "$(probe "$IND._issueItem.track_hover")"
+    point_at_actor "$IND._popup._issueItem"
+    assert_eq 'status row tracks hover' 'true' "$(probe "$IND._popup._issueItem.track_hover")"
     assert_eq 'status row highlights' 'true' \
-        "$(probe "/hover/.test($IND._issueItem.get_style_pseudo_class() ?? '')")"
+        "$(probe "/hover/.test($IND._popup._issueItem.get_style_pseudo_class() ?? '')")"
     point_at away
 }
 
@@ -594,15 +594,15 @@ prove_hover() {
         "shell_eval \"$IND.track_hover = true; 'ok'\" >/dev/null" \
         assert_panel_matches_platform
     prove 'display rows inert' \
-        "shell_eval \"$IND._body.track_hover = true; 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._body.track_hover = false; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._body.track_hover = true; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._body.track_hover = false; 'ok'\" >/dev/null" \
         assert_display_rows_inert
 }
 
 prove_status_row() {
     prove 'status row highlights' \
-        "shell_eval \"$IND._issueItem.track_hover = false; 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._issueItem.track_hover = true; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._issueItem.track_hover = false; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._issueItem.track_hover = true; 'ok'\" >/dev/null" \
         assert_status_row_highlights
 }
 
@@ -642,7 +642,7 @@ refreeze_refresh() {
 # St.Button::clicked carries the button number, and emitting it without one is
 # refused outright — the click then runs nothing and no assertion below can tell.
 click_refresh() {
-    shell_eval "$IND._refreshButton.emit('clicked', 1); 'ok'" >/dev/null
+    shell_eval "$IND._popup._refreshButton.emit('clicked', 1); 'ok'" >/dev/null
 }
 
 assert_menu_survives_refresh() {
@@ -651,21 +651,21 @@ assert_menu_survives_refresh() {
 
 assert_spinner_runs() {
     assert_eq 'refresh icon spins' 'true' \
-        "$(probe "$IND._refreshButton.child.get_transition('spin') !== null")"
+        "$(probe "$IND._popup._refreshButton.child.get_transition('spin') !== null")"
     assert_eq 'refresh button is insensitive while refreshing' 'false' \
-        "$(probe "$IND._refreshButton.reactive")"
+        "$(probe "$IND._popup._refreshButton.reactive")"
 }
 
 assert_spinner_cleared() {
     assert_eq 'spin transition removed' 'true' \
-        "$(probe "$IND._refreshButton.child.get_transition('spin') === null")"
+        "$(probe "$IND._popup._refreshButton.child.get_transition('spin') === null")"
     assert_eq 'icon rotation reset' '0' \
-        "$(probe "$IND._refreshButton.child.rotation_angle_z")"
+        "$(probe "$IND._popup._refreshButton.child.rotation_angle_z")"
 }
 
 prove_refresh() {
     prove 'spinner runs' \
-        "shell_eval \"$IND._refreshButton.child.remove_transition('spin'); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._refreshButton.child.remove_transition('spin'); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_spinner_runs
     prove 'menu survives a refresh' \
@@ -863,7 +863,7 @@ assert_floor_holds() {
     after="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
     assert_eq 'a request inside the minimum interval is never sent' "$before" "$after"
     assert_eq 'the refresh button is insensitive while the interval holds' 'false' \
-        "$(probe "$IND._refreshButton.reactive")"
+        "$(probe "$IND._popup._refreshButton.reactive")"
 }
 
 prove_request_floor() {
@@ -1199,8 +1199,8 @@ dismiss_alert() {
     shell_eval "$IND._alerts.get('$1').destroy(); 'ok'" >/dev/null
 }
 
-SEVERITY_CLASSES="$IND._blocks.map(b => b._percent.get_style_class_name())"
-SEVERITY_COLOURS="$IND._blocks.map(b => b._percent.get_theme_node().get_foreground_color().to_string())"
+SEVERITY_CLASSES="$IND._popup._blocks.map(b => b._percent.get_style_class_name())"
+SEVERITY_COLOURS="$IND._popup._blocks.map(b => b._percent.get_theme_node().get_foreground_color().to_string())"
 
 # The panel colour follows the payload's own severity while a notification follows the
 # user's thresholds, so the two are independent inputs and agree only when the payload
@@ -1250,7 +1250,7 @@ prove_arc() {
     render_state normal
     arc_step 78 warning
     prove 'colour follows severity' \
-        "shell_eval \"$IND._blocks.forEach(b => b._percent.set_style_class_name('cq-quota')); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._blocks.forEach(b => b._percent.set_style_class_name('cq-quota')); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_arc_colour_probe
     reset_alerts
