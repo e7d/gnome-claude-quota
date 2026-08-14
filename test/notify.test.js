@@ -106,3 +106,61 @@ test('the returned bookkeeping never aliases the caller\'s entries', () => {
     assert.deepEqual(result.fired, fired);
     assert.notEqual(result.fired['session|warning'], fired['session|warning']);
 });
+
+test('a percentage inside the hysteresis margin neither re-posts nor withdraws', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const result = plan([quota({percent: 74})], fired);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(result.withdraw, []);
+    assert.deepEqual(result.fired, fired);
+});
+
+test('a percentage below the hysteresis margin withdraws and re-arms', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const result = plan([quota({percent: 73})], fired);
+    assert.deepEqual(result.withdraw, ['session|warning']);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(result.fired, {});
+});
+
+test('a re-armed level fires again in the same window', () => {
+    const dropped = plan([quota({percent: 73})], {'session|warning': {window: resetsAt.toISOString()}});
+    const result = plan([quota({percent: 80})], dropped.fired);
+    assert.deepEqual(result.post.map(alert => alert.key), ['session|warning']);
+});
+
+test('a disabled level withdraws its alert and forgets it', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const result = plan([quota({percent: 80})], fired, {warning: {enabled: false}});
+    assert.deepEqual(result.withdraw, ['session|warning']);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(result.fired, {});
+});
+
+test('a disabled level never fires', () => {
+    const result = plan([quota({percent: 99})], {}, {critical: {enabled: false}});
+    assert.deepEqual(result.post.map(alert => alert.level), ['warning']);
+});
+
+test('critical supersedes the warning banner but keeps its record', () => {
+    const result = plan([quota({percent: 95})]);
+    assert.deepEqual(result.post.map(alert => alert.key), ['session|critical']);
+    assert.deepEqual(result.withdraw, ['session|warning']);
+    assert.deepEqual(Object.keys(result.fired).toSorted(), ['session|critical', 'session|warning']);
+});
+
+test('a superseded warning does not fire again once critical is up', () => {
+    const first = plan([quota({percent: 95})]);
+    const result = plan([quota({percent: 96})], first.fired);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(result.withdraw, []);
+});
+
+test('withdraw never repeats a key', () => {
+    const fired = {
+        'session|warning': {window: '2026-08-14T06:30:00.000Z'},
+        'session|critical': {window: '2026-08-14T06:30:00.000Z'},
+    };
+    const result = plan([quota({percent: 95})], fired);
+    assert.deepEqual(result.withdraw.filter(key => key === 'session|warning').length, 1);
+});
