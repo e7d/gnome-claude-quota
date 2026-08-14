@@ -95,7 +95,7 @@ The same throwaway shell as the preview, driven for verdicts instead of pixels �
 | `panel` | the ladder the panel degrades along: every value shown when there is room, values giving way from the right and never from the middle, the button never wider than the space the shell hands it, no separator beside a hidden value, the incident emoji outliving every value, and the whole set returning unprompted when the space does |
 | `hover` | the indicator's hover shape read live against `quickSettings`, the display rows staying inert, and the status row highlighting |
 | `refresh` | a click leaves the popup open, spins the icon while the fetch is in flight, leaves no transition behind afterwards, and appends one attempt record carrying the trigger that caused it, the outcome, the rate-limit header and no credential |
-| `notify` | a quota crossing a threshold posts one notification per level, escalates its urgency, withdraws it when the window ends, re-reads its thresholds from GSettings, and posts from a poll that answered rather than only from a hand-driven sync |
+| `notify` | a quota crossing a threshold posts one notification per level, escalates its urgency, withdraws it when the window ends, re-reads its thresholds from GSettings, posts from a poll that answered rather than only from a hand-driven sync, and walks the whole arc 0 → warning → critical → 0 checking the panel colour and the tray agree at every step |
 | `lifecycle` | disable releases the timer, cancels the in-flight fetch, closes the notification source and empties the panel entry; enable registers exactly one indicator |
 
 `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. The `state` group is also what writes `preview/`, so a run excluding it leaves whatever was already there for `npm run a11y` to score.
@@ -105,6 +105,21 @@ The same throwaway shell as the preview, driven for verdicts instead of pixels �
 An assertion may not spell an English string. `catalog_msg` resolves a msgid through `gettext` against `locale/` for the run's own language, so an expectation follows the catalog instead of duplicating it — and under the default `C` it returns the msgid unchanged. Three assertions were caught this way on the first French run, each reported honestly as a dead assertion rather than a broken extension.
 
 `catalog_prefix` takes the words before the first placeholder, which is nothing at all for a msgid that opens on one — `{name} at {percent}` is the notification title. `catalog_infix` takes the connector between two placeholders instead (` at `), so a msgid of that shape still has something a language run can match on. Reach for it whenever an expectation needs the *wording* of a msgid that starts with a substitution.
+
+The arc is the one assertion that spans states rather than checking one. It moves the percentage
+*without re-rendering*, so `resetsAt` holds still and every step is a quota that moved rather than
+a window that rolled — a re-render would re-arm each level for a reason unrelated to what the arc
+is testing. It also moves `severity` alongside the percentage, and that pairing is the honest
+shape of the assertion: the panel colour follows the payload's own severity while a notification
+follows the user's thresholds, so the two are independent inputs that agree only when the payload
+agrees with the configured percentages. Asserting them together proves each half renders from its
+own input; it does not — and cannot — prove they never disagree.
+
+Banners are blocked for the whole e2e run via the shell's own `bannerBlocked` setter, which hides
+the banner and leaves the notification in its source. That is what keeps a banner from drifting
+across a capture rect that starts at `y=0`, and it costs the group nothing: every assertion reads
+`_alerts` and `source.notifications`, neither of which the setter touches. Every `preview` call
+the suite makes also passes `--notify=off`, so the shoot cannot post in the first place.
 
 `assert_schema_defaults_agree` is not about the shell at all: the thresholds are declared twice, once as the schema's defaults and once as `NOTIFY_DEFAULTS` in `lib/notify.js`, and the indicator is the only thing that reads both. It reads the schema's own default through `_prefs.get_default_value` in the session and the constant through `node`, and fails when they part company — a cross-declaration guard, in the group whose behaviour depends on the two agreeing. Its control replaces the reader rather than writing a key, since setting a key cannot move its default.
 

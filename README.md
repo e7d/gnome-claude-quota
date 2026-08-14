@@ -246,6 +246,32 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io/
 takes effect at once: lowering a threshold below a quota's current percentage notifies
 immediately, and disabling a level withdraws whatever it had posted.
 
+### Watching a notification happen
+
+A preview session posts real notifications, so `--scenario=warning` puts a banner on screen
+rather than only colouring the panel:
+
+```bash
+npm run preview -- --scenario=warning
+npm run preview -- --scenario=critical      # recall it: the warning gives way to a critical
+npm run preview -- --capture=notify         # shoot preview/notify-<theme>-<scenario>.png
+```
+
+Recalls are transitions, not fresh sightings. The session pins a window anchor at start, so a
+scenario's reset time holds still across recalls and the record behaves the way it does in
+production: the same scenario twice is silent, and only a genuine crossing fires. `--notify=`
+picks the mode — `natural` (default), `fresh` to clear the record and see a scenario as a first
+encounter, `tray` to post with the banner suppressed, `off` to post nothing.
+
+The capture stacks the banner over the message-tray list, because only one banner is on screen
+at a time while the rest queue behind it — the tray is the only surface showing all of them. A
+`notify-` tile is deliberately skipped by `npm run a11y`: those pixels are the shell's own
+chrome, and the rule here is to change what is ours and leave what is GNOME's.
+
+`npm run e2e` blocks banners for its whole run through the shell's own `bannerBlocked`, so a
+banner can never drift across one of the 62 tiles; the notify group drives the record itself and
+asserts against the tray, which is why its verdicts do not depend on what a shoot left up.
+
 Shooting every scenario is now the default, so a bare `npm run e2e` costs minutes — 31 scenarios in both themes is 62 tiles plus `overview.png`. The fast path while iterating is a narrowed run (`--group=`, `--scenario=`, `--dark-only`) or `--assert` when only behaviour, not pixels, is in question.
 
 Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
