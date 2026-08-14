@@ -164,3 +164,12 @@ test('withdraw never repeats a key', () => {
     const result = plan([quota({percent: 95})], fired);
     assert.deepEqual(result.withdraw.filter(key => key === 'session|warning').length, 1);
 });
+
+test('a warning cannot post beside a critical that fired in an earlier pass', () => {
+    const inverted = {warning: {percent: 90}, critical: {percent: 50}};
+    const first = plan([quota({percent: 60})], {}, inverted);
+    assert.deepEqual(first.post.map(alert => alert.key), ['session|critical']);
+    const result = plan([quota({percent: 95})], first.fired, inverted);
+    assert.deepEqual(result.post, []);
+    assert.deepEqual(result.withdraw, ['session|warning']);
+});
