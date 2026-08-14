@@ -87,7 +87,7 @@ Geometry questions are better answered from the actors than from pixels. Measuri
 ./tools/e2e.sh --group=state --dark-only --scenario=loading
 ```
 
-The same throwaway shell as the preview, driven for verdicts instead of pixels — and shooting the grid as it goes. Five groups run in the order below, and `--group=<name>` runs one of them; the scenario flag is shared with `preview.sh`, but the theme flag is not: e2e keeps `--dark-only`/`--light-only` rather than `preview.sh`'s recall-friendly `--dark`/`--light`, since a run asserts a whole matrix rather than shaping one live session.
+The same throwaway shell as the preview, driven for verdicts instead of pixels — and shooting the grid as it goes. Six groups run in the order below, and `--group=<name>` runs one of them; the scenario flag is shared with `preview.sh`, but the theme flag is not: e2e keeps `--dark-only`/`--light-only` rather than `preview.sh`'s recall-friendly `--dark`/`--light`, since a run asserts a whole matrix rather than shaping one live session.
 
 | Group | What it holds to account |
 | --- | --- |
@@ -95,6 +95,7 @@ The same throwaway shell as the preview, driven for verdicts instead of pixels �
 | `panel` | the ladder the panel degrades along: every value shown when there is room, values giving way from the right and never from the middle, the button never wider than the space the shell hands it, no separator beside a hidden value, the incident emoji outliving every value, and the whole set returning unprompted when the space does |
 | `hover` | the indicator's hover shape read live against `quickSettings`, the display rows staying inert, and the status row highlighting |
 | `refresh` | a click leaves the popup open, spins the icon while the fetch is in flight, leaves no transition behind afterwards, and appends one attempt record carrying the trigger that caused it, the outcome, the rate-limit header and no credential |
+| `notify` | a quota crossing a threshold posts one notification per level, escalates its urgency, withdraws it when the window ends, and re-reads its thresholds from GSettings |
 | `lifecycle` | disable releases the timer, cancels the in-flight fetch and empties the panel entry; enable registers exactly one indicator |
 
 `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. The `state` group is also what writes `preview/`, so a run excluding it leaves whatever was already there for `npm run a11y` to score.

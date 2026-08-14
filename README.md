@@ -230,7 +230,21 @@ npm run e2e -- --assert                        # behaviour only, shoots nothing
 | `--assert` | Shoot nothing, leaving `preview/` alone |
 | `-h`, `--help` | Print the flags, the groups and the scenario names, and exit |
 
-Groups: `state`, `panel`, `hover`, `refresh`, `lifecycle`. `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. `state` is what shoots the grid, so a run excluding it leaves `preview/` exactly as it was.
+Groups: `state`, `panel`, `hover`, `refresh`, `notify`, `lifecycle`. `lifecycle` destroys the indicator, so it runs last and every earlier group needs a live one. `state` is what shoots the grid, so a run excluding it leaves `preview/` exactly as it was.
+
+### Notification thresholds
+
+There is no preferences window yet. The four keys are readable and writable now:
+
+```bash
+gsettings --schemadir ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io/schemas \
+    set org.gnome.shell.extensions.claude-quota notify-warning-percent 70
+```
+
+`notify-warning-enabled`, `notify-warning-percent`, `notify-critical-enabled` and
+`notify-critical-percent` — booleans default to `true`, the percentages to 75 and 90. A change
+takes effect at once: lowering a threshold below a quota's current percentage notifies
+immediately, and disabling a level withdraws whatever it had posted.
 
 Shooting every scenario is now the default, so a bare `npm run e2e` costs minutes — 31 scenarios in both themes is 62 tiles plus `overview.png`. The fast path while iterating is a narrowed run (`--group=`, `--scenario=`, `--dark-only`) or `--assert` when only behaviour, not pixels, is in question.
 
