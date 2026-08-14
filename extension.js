@@ -246,14 +246,24 @@ class Indicator extends PanelMenu.Button {
         this._bodyBox.add_child(this._metaBox);
         this._bodyBox.add_child(this._blockBox);
         this._body.add_child(this._bodyBox);
+        this._hiddenNoteItem = displayItem();
+        this._hiddenNoteBox = new St.BoxLayout({
+            style_class: 'cq-message',
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true,
+        });
         this._hiddenNote = new St.Label({style_class: 'cq-caption', text: ''});
-        this._body.add_child(this._hiddenNote);
+        this._hiddenNote.clutter_text.line_wrap = true;
+        this._hiddenNote.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        this._hiddenNoteBox.add_child(this._hiddenNote);
+        this._hiddenNoteItem.add_child(this._hiddenNoteBox);
         this._issueItem = new PopupMenu.PopupMenuItem('');
         this._issueItem.label.clutter_text.line_wrap = true;
         this._issueItem.label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         this._issueItem.connect('activate', () => Gio.AppInfo.launch_default_for_uri(STATUS_URL, null));
         this._messageSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this.menu.addMenuItem(this._body);
+        this.menu.addMenuItem(this._hiddenNoteItem);
         this.menu.addMenuItem(this._messageSeparator);
         this.menu.addMenuItem(this._message);
         this.menu.addMenuItem(this._issueItem);
@@ -836,6 +846,7 @@ class Indicator extends PanelMenu.Button {
     _renderHiddenNote(hasQuotas, menuHasQuotas) {
         const allHidden = hasQuotas && !menuHasQuotas;
         this._hiddenNote.visible = allHidden;
+        this._hiddenNoteItem.visible = allHidden;
         if (allHidden)
             this._hiddenNote.text = _('Every quota is hidden — see the extension settings');
     }
@@ -848,7 +859,7 @@ class Indicator extends PanelMenu.Button {
         const hasQuotas = quotaViews.length > 0;
         const menuHasQuotas = menuViews.length > 0;
         this._renderActions(now);
-        this._renderPanel(this._visibleOn('bar', quotaViews));
+        this._renderPanel(this._visibleOn('bar', quotaViews), hasQuotas);
         this._renderBlocks(menuViews, now, scheme);
         this._blockBox.visible = menuHasQuotas;
         this._renderHiddenNote(hasQuotas, menuHasQuotas);
@@ -863,11 +874,11 @@ class Indicator extends PanelMenu.Button {
         });
     }
 
-    _renderPanel(quotaViews) {
+    _renderPanel(quotaViews, hasQuotas) {
         const scheme = panelScheme();
         this._icon.style = `color: ${brandColor(scheme)};`;
         this._panelQuotas.destroy_all_children();
-        this._panelCells = this._panelLabels(quotaViews, scheme).map(({label, dotted}) => {
+        this._panelCells = this._panelLabels(quotaViews, scheme, hasQuotas).map(({label, dotted}) => {
             const actor = new St.BoxLayout({style_class: 'cq-panel-cell'});
             const dot = dotted ? this._panelSeparator() : null;
             if (dot)
@@ -880,8 +891,10 @@ class Indicator extends PanelMenu.Button {
     }
 
     // Each value owns the dot and the gap to its left, so hiding one takes its own
-    // spacing with it and every surviving rung ends flush against the button.
-    _panelLabels(quotaViews, scheme) {
+    // spacing with it and every surviving rung ends flush against the button. The
+    // ellipsis/dash fallback is for nothing having been fetched yet — a quota list
+    // emptied by the user's own bar prefs falls through to the icon-only floor instead.
+    _panelLabels(quotaViews, scheme, hasQuotas) {
         const labels = quotaViews.map(quota => ({
             dotted: true,
             label: new St.Label({
@@ -890,7 +903,7 @@ class Indicator extends PanelMenu.Button {
                 y_align: Clutter.ActorAlign.CENTER,
             }),
         }));
-        if (!labels.length) {
+        if (!labels.length && !hasQuotas) {
             labels.push({
                 dotted: false,
                 label: new St.Label({
@@ -975,9 +988,13 @@ class Indicator extends PanelMenu.Button {
     // no stage yet asks St for a theme node it will not resolve. Being added to the
     // panel is itself a fit trigger, so nothing is lost by waiting for it.
     _fitPanel() {
-        const cells = this._panelCells.length;
-        if (!cells || this.container.get_stage() === null)
+        if (this.container.get_stage() === null)
             return;
+        const cells = this._panelCells.length;
+        if (!cells) {
+            this._showPanelCells(0);
+            return;
+        }
         const available = this._panelBudget();
         if (available === null) {
             this._showPanelCells(cells);

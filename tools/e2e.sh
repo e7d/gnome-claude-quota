@@ -231,6 +231,42 @@ assert_all_hidden_says_so() {
     assert_ne "$1 the hidden note carries a string" '""' "$text"
 }
 
+# Fetched data with every quota hidden from the bar empties the same list the
+# no-data fallback reads as empty, so the panel's own ellipsis/dash floor is the
+# wrong thing to distinguish them: .mapped is the ancestor-aware read, since a
+# leftover child can sit at visible=true behind a box the fit hid.
+assert_bar_all_hidden_shows_icon_only() {
+    set_quota_pref session-in-bar false
+    set_quota_pref weekly-in-bar false
+    set_quota_pref scoped-in-bar false
+    local mapped
+    mapped="$(probe "$IND._panelQuotas.mapped")"
+    set_quota_pref session-in-bar true
+    set_quota_pref weekly-in-bar true
+    set_quota_pref scoped-in-bar true
+    assert_eq "$1 hiding every quota from the bar leaves only the icon" 'false' "$mapped"
+}
+
+# The note reading as attached to whatever sits beside it is a packing-order bug,
+# so the proof is geometry: a row of its own sits below the meta line, while a
+# label merely sharing _body's own row sits beside it at roughly the same height.
+assert_hidden_note_own_line() {
+    set_quota_pref session-in-menu false
+    set_quota_pref weekly-in-menu false
+    set_quota_pref scoped-in-menu false
+    local below
+    below="$(probe "(() => {
+        const [, my] = $IND._metaBox.get_transformed_position();
+        const [, mh] = $IND._metaBox.get_transformed_size();
+        const [, ny] = $IND._hiddenNote.get_transformed_position();
+        return ny >= my + mh;
+    })()")"
+    set_quota_pref session-in-menu true
+    set_quota_pref weekly-in-menu true
+    set_quota_pref scoped-in-menu true
+    assert_eq "$1 the all-hidden note sits on its own line, below the meta row" 'true' "$below"
+}
+
 assert_rows_filled_probe() { assert_rows_filled control; }
 assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
@@ -242,6 +278,8 @@ assert_threshold_repaints_probe() { assert_threshold_repaints control; }
 assert_scope_leaves_the_bar_probe() { assert_scope_leaves_the_bar control; }
 assert_scope_leaves_the_menu_probe() { assert_scope_leaves_the_menu control; }
 assert_all_hidden_says_so_probe() { assert_all_hidden_says_so control; }
+assert_bar_all_hidden_shows_icon_only_probe() { assert_bar_all_hidden_shows_icon_only control; }
+assert_hidden_note_own_line_probe() { assert_hidden_note_own_line control; }
 
 prove_state() {
     render_state normal
@@ -284,6 +322,10 @@ prove_state() {
         "shell_eval \"$IND._visibleOn = (surface, views) => views; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._visibleOn; $IND._render(); 'ok'\" >/dev/null" \
         assert_scope_leaves_the_bar_probe
+    prove 'hiding every quota from the bar leaves only the icon' \
+        "shell_eval \"$IND._panelQuotas.visible = true; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_bar_all_hidden_shows_icon_only_probe
     prove 'hiding a scope empties its block' \
         "shell_eval \"$IND._visibleOn = (surface, views) => views; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._visibleOn; $IND._render(); 'ok'\" >/dev/null" \
@@ -292,6 +334,10 @@ prove_state() {
         "shell_eval \"$IND._hiddenNote.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_all_hidden_says_so_probe
+    prove 'the all-hidden note occupies its own line' \
+        "shell_eval \"$IND._hiddenNoteBox.remove_child($IND._hiddenNote); $IND._body.add_child($IND._hiddenNote); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._body.remove_child($IND._hiddenNote); $IND._hiddenNoteBox.add_child($IND._hiddenNote); 'ok'\" >/dev/null" \
+        assert_hidden_note_own_line_probe
 }
 
 subset_kind() {
@@ -342,6 +388,8 @@ group_state() {
         assert_scope_leaves_the_bar "$theme"
         assert_scope_leaves_the_menu "$theme"
         assert_all_hidden_says_so "$theme"
+        assert_bar_all_hidden_shows_icon_only "$theme"
+        assert_hidden_note_own_line "$theme"
     done
     set_animations true
     assert_theme_differs
