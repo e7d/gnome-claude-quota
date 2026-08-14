@@ -13,7 +13,7 @@
   },
   "overrides": [
     {
-      "files": ["extension.js", "prefs.js", "lib/*.js", "ui/*.js"],
+      "files": ["extension.js", "lib/*.js", "ui/*.js"],
       "globals": {
         "global": "readonly",
         "log": "readonly",
