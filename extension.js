@@ -26,6 +26,7 @@ import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
 import {blockReason, isBlocked, markExpired, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, rateLimitBlock, serviceIssue, shouldFetchOnOpen, throttledUntil, RATE_LIMIT} from './lib/policy.js';
+import {KEYS, readSettings} from './lib/settings.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 
 const CAPTION_OPACITY = 180;
@@ -265,7 +266,7 @@ class Indicator extends PanelMenu.Button {
         this.connect('destroy', () => this._onDestroy());
         this._watchPanelSpace();
         this._watchCredentials();
-        this._watchNotifyPrefs();
+        this._watchPrefs();
         this._loadCache();
         this._render();
         this._refresh('startup');
@@ -383,20 +384,19 @@ class Indicator extends PanelMenu.Button {
         this._refresh('credentials');
     }
 
-    _notifyPrefs() {
-        return {
-            warningEnabled: this._prefs.get_boolean('notify-warning-enabled'),
-            warningPercent: this._prefs.get_int('notify-warning-percent'),
-            criticalEnabled: this._prefs.get_boolean('notify-critical-enabled'),
-            criticalPercent: this._prefs.get_int('notify-critical-percent'),
-        };
+    _settingsValues() {
+        return readSettings({
+            int: key => this._prefs.get_int(key),
+            boolean: key => this._prefs.get_boolean(key),
+        });
     }
 
-    _watchNotifyPrefs() {
-        ['notify-warning-enabled', 'notify-warning-percent',
-            'notify-critical-enabled', 'notify-critical-percent']
-            .forEach(key => this._prefsSignals.push(
-                this._prefs.connect(`changed::${key}`, () => this._syncAlerts(new Date()))));
+    _watchPrefs() {
+        KEYS.forEach(key => this._prefsSignals.push(
+            this._prefs.connect(`changed::${key}`, () => {
+                this._syncAlerts(new Date());
+                this._render();
+            })));
     }
 
     // A Source destroys itself when its last notification is removed, so the
@@ -444,7 +444,7 @@ class Indicator extends PanelMenu.Button {
         const plan = alertPlan({
             quotas: markExpired(this._quotas, now),
             fired: this._fired,
-            thresholds: thresholdsFrom(this._notifyPrefs()),
+            thresholds: thresholdsFrom(this._settingsValues()),
             now,
             locale: this._locale,
             percentLocale: this._percentLocale,

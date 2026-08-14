@@ -282,10 +282,8 @@ test('a refresh ignores a record whose quota is gone', () => {
 
 test('settings values become the threshold list alertPlan takes', () => {
     assert.deepEqual(thresholdsFrom({
-        warningEnabled: true,
-        warningPercent: 70,
-        criticalEnabled: false,
-        criticalPercent: 95,
+        warning: {percent: 70, notify: true},
+        critical: {percent: 95, notify: false},
     }), [
         {level: 'warning', percent: 70, enabled: true},
         {level: 'critical', percent: 95, enabled: false},
