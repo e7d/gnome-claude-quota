@@ -246,6 +246,17 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io/
 takes effect at once: lowering a threshold below a quota's current percentage notifies
 immediately, and disabling a level withdraws whatever it had posted.
 
+A notification's body counts down, so while one is on screen it is rewritten every minute and
+the tray keeps agreeing with the popup rather than with the moment it fired. The rewrite is
+silent — the same notification, updated in place, with the timestamp it was raised at left
+alone. Crossing into another tier is a different thing and posts anew, and a notification you
+dismissed stays dismissed: the record outlives the banner, which is what stops the next poll
+putting it straight back.
+
+That minute tick also re-runs the policy, which needs no network — so a window ending while the
+extension is rate-limited clears its banner within the minute instead of waiting for a fetch it
+is not allowed to make.
+
 ### Watching a notification happen
 
 A preview session posts real notifications, so `--scenario=warning` puts a banner on screen

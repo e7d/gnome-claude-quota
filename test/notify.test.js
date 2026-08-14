@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {NOTIFY_DEFAULTS, alertPlan, thresholdsFrom} from '../lib/notify.js';
+import {NOTIFY_DEFAULTS, alertPlan, alertRefresh, thresholdsFrom} from '../lib/notify.js';
 
 const now = new Date('2026-08-14T09:00:00Z');
 const resetsAt = new Date('2026-08-14T11:30:00Z');
@@ -226,6 +226,43 @@ test('the arc re-arms, so a second climb in the same window fires again', () => 
     const dropped = plan([quota({percent: 0})], climbed.fired);
     const again = plan([quota({percent: 78})], dropped.fired);
     assert.deepEqual(again.post.map(alert => alert.key), ['session|warning']);
+});
+
+function refresh(quotas, fired, at = now) {
+    return alertRefresh({quotas, fired, now: at, locale: 'en-US', percentLocale: 'en-US'});
+}
+
+test('a refresh re-words what is on record and proposes nothing new', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const later = new Date('2026-08-14T10:00:00Z');
+    const [alert] = refresh([quota({percent: 80})], fired, later);
+    assert.deepEqual(Object.keys(alert).toSorted(), ['body', 'key', 'title']);
+    assert.equal(alert.key, 'session|warning');
+    assert.match(alert.title, /80\s*%/);
+    assert.equal(alert.body, '1h 30m left · 11:30 AM');
+});
+
+test('a refresh follows the clock, which is the whole point of it', () => {
+    const fired = {'session|warning': {window: resetsAt.toISOString()}};
+    const [early] = refresh([quota({percent: 80})], fired);
+    const [late] = refresh([quota({percent: 80})], fired, new Date('2026-08-14T11:00:00Z'));
+    assert.equal(early.body, '2h 30m left · 11:30 AM');
+    assert.equal(late.body, '30m left · 11:30 AM');
+});
+
+test('a refresh covers a level only while it is on record', () => {
+    assert.deepEqual(refresh([quota({percent: 96})], {}), []);
+    const both = {
+        'session|warning': {window: resetsAt.toISOString()},
+        'session|critical': {window: resetsAt.toISOString()},
+    };
+    assert.deepEqual(refresh([quota({percent: 96})], both).map(alert => alert.key),
+        ['session|warning', 'session|critical']);
+});
+
+test('a refresh ignores a record whose quota is gone', () => {
+    const fired = {'weekly_scoped:Opus|critical': {window: resetsAt.toISOString()}};
+    assert.deepEqual(refresh([quota({percent: 80})], fired), []);
 });
 
 test('settings values become the threshold list alertPlan takes', () => {

@@ -960,6 +960,100 @@ group_notify() {
     assert_polled_alert
     prove_arc
     assert_lifecycle_arc
+    prove_tiers
+    assert_tier_behaviour
+}
+
+# One tier's worth of movement, then a crossing, then a dismissal — the three ways a live
+# notification can be reached after it was posted.
+assert_tier_behaviour() {
+    reset_alerts
+    render_state warning
+    sync_alerts
+    hold_alert 'Session (5h)|warning'
+    set_percent 80
+    sync_alerts
+    assert_refresh_in_place 'tier' 'Session (5h)|warning' '80'
+    set_percent 96
+    sync_alerts
+    assert_tier_crossing_reposts 'tier'
+    reset_alerts
+    render_state warning
+    sync_alerts
+    dismiss_alert 'Session (5h)|warning'
+    sync_alerts
+    assert_dismissal_sticks 'tier'
+    reset_alerts
+}
+
+prove_tiers() {
+    reset_alerts
+    render_state warning
+    sync_alerts
+    hold_alert 'Session (5h)|warning'
+    set_percent 80
+    sync_alerts
+    prove 'same tier rewrites rather than reposting' \
+        "shell_eval \"$HELD.title = 'stale 78%'; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._refreshAlerts(new Date()); 'ok'\" >/dev/null" \
+        assert_refresh_in_place_probe
+    set_percent 96
+    sync_alerts
+    prove 'crossing a tier posts anew' \
+        "shell_eval \"$IND._alerts.set('Session (5h)|warning', $HELD); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts.delete('Session (5h)|warning'); 'ok'\" >/dev/null" \
+        assert_tier_crossing_probe
+    reset_alerts
+    render_state warning
+    sync_alerts
+    dismiss_alert 'Session (5h)|warning'
+    prove 'a dismissal is not undone by a sync' \
+        "shell_eval \"delete $IND._fired['Session (5h)|warning']; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._fired['Session (5h)|warning'] =
+            {window: $IND._quotas[0].resetsAt.toISOString()}; 'ok'\" >/dev/null" \
+        assert_dismissal_probe
+    reset_alerts
+}
+
+HELD='global.cqHeldAlert'
+
+hold_alert() {
+    shell_eval "$HELD = $IND._alerts.get('$1'); 'ok'" >/dev/null
+}
+
+# Moving the percentage inside one tier is how a refresh is observed without waiting a
+# minute: the title carries the percentage, the window is untouched, so the plan posts
+# nothing and only the rewrite can change what the tray reads.
+assert_refresh_in_place() {
+    assert_eq "$1 same tier rewrites the notification it already posted" 'true' \
+        "$(probe "$HELD === $IND._alerts.get('$2') && /$3/.test($HELD.title)")"
+}
+
+assert_tier_crossing_reposts() {
+    assert_eq "$1 crossing a tier posts a new notification" 'true' \
+        "$(probe "!$IND._alerts.has('Session (5h)|warning') &&
+            $IND._alerts.has('Session (5h)|critical') &&
+            $IND._alerts.get('Session (5h)|critical') !== $HELD")"
+}
+
+# A dismissal destroys the notification, so _alerts loses the key while the record keeps
+# it — which is the only thing standing between a dismissed banner and the next poll
+# putting it straight back.
+assert_dismissal_sticks() {
+    assert_eq "$1 a dismissed alert stays dismissed" 'true' \
+        "$(probe "!$IND._alerts.has('Session (5h)|warning') &&
+            Object.hasOwn($IND._fired, 'Session (5h)|warning')")"
+}
+
+assert_refresh_in_place_probe() { assert_refresh_in_place control 'Session (5h)|warning' '80'; }
+assert_tier_crossing_probe() { assert_tier_crossing_reposts control; }
+assert_dismissal_probe() { assert_dismissal_sticks control; }
+
+# destroy()'s own default reason is DISMISSED, which is exactly a user closing the banner.
+# Naming the constant would need imports.ui.messageTray, and the legacy imports object does
+# not exist under GNOME 50's ESM shell — the Eval fails and the dismissal silently no-ops.
+dismiss_alert() {
+    shell_eval "$IND._alerts.get('$1').destroy(); 'ok'" >/dev/null
 }
 
 SEVERITY_CLASSES="$IND._blocks.map(b => b._percent.get_style_class_name())"

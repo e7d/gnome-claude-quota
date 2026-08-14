@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 14:35+0200\n"
+"POT-Creation-Date: 2026-08-14 16:27+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -12,11 +12,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: extension.js:152 extension.js:408
+#: extension.js:152 extension.js:409
 msgid "Claude Quota"
 msgstr "Quota Claude"
 
-#: extension.js:676
+#: extension.js:729
 msgid "Loading…"
 msgstr "Chargement…"
 
@@ -80,7 +80,7 @@ msgctxt "panel initial"
 msgid "W"
 msgstr "H"
 
-#: lib/notify.js:41
+#: lib/notify.js:44
 msgid "{name} at {percent}"
 msgstr "{name} à {percent}"
 

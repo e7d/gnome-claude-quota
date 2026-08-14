@@ -106,6 +106,23 @@ An assertion may not spell an English string. `catalog_msg` resolves a msgid thr
 
 `catalog_prefix` takes the words before the first placeholder, which is nothing at all for a msgid that opens on one — `{name} at {percent}` is the notification title. `catalog_infix` takes the connector between two placeholders instead (` at `), so a msgid of that shape still has something a language run can match on. Reach for it whenever an expectation needs the *wording* of a msgid that starts with a substitution.
 
+Three assertions cover what happens to a notification *after* it is posted, and they are worth
+knowing about because the mechanism is not obvious. Movement inside one tier rewrites the
+notification in place — the assertion holds the object across the sync and requires the same
+identity back, which is what distinguishes a rewrite from a repost. Crossing a tier requires the
+opposite: the warning gone and a critical whose object is not the one held. A dismissal requires
+`_alerts` to have lost the key while `_fired` keeps it, since that record is the only thing
+standing between a dismissed banner and the next poll restoring it.
+
+The rewrite has one trap in it. Writing any property on a `Notification` schedules an idle that
+re-stamps `datetime` to now, so a notification refreshed every minute would read "Just now"
+forever. Assigning `datetime` cancels that idle — but only a *different* boxed value emits the
+notify that does the cancelling, so the code writes a fresh `GLib.DateTime` over the same instant.
+Measured both ways: assigning the identical object does nothing and the timestamp drifts.
+
+Also measured, and the reason the tick is safe: a property write does not re-show the banner of an
+acknowledged notification, so a minute refresh cannot turn into a minute of banners.
+
 The arc is the one assertion that spans states rather than checking one. It moves the percentage
 *without re-rendering*, so `resetsAt` holds still and every step is a quota that moved rather than
 a window that rolled — a re-render would re-arm each level for a reason unrelated to what the arc

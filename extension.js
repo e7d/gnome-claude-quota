@@ -21,7 +21,7 @@ import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {fresherThan} from './lib/shared-usage.js';
 import {captionLine, numberLocale, percentLine, rateLimitMessage, refreshLine, serviceUntilLine, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
-import {alertPlan, thresholdsFrom} from './lib/notify.js';
+import {REFRESH_SECONDS, alertPlan, alertRefresh, thresholdsFrom} from './lib/notify.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
 import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
@@ -154,6 +154,7 @@ class Indicator extends PanelMenu.Button {
         this._prefs = prefs;
         this._source = null;
         this._alerts = new Map();
+        this._alertTimerId = null;
         this._prefsSignals = [];
         this._client = new UsageClient();
         this._status = new StatusClient();
@@ -456,6 +457,58 @@ class Indicator extends PanelMenu.Button {
         // persist, which is every ordinary poll.
         if (plan.post.length || plan.withdraw.length)
             this._saveCache();
+        this._refreshAlerts(now);
+        this._trackAlertRefresh();
+    }
+
+    // Writing any property schedules an idle that re-stamps datetime to now, so a
+    // notification refreshed every minute would read "Just now" forever. Assigning
+    // datetime cancels that idle — but only a *different* boxed value emits the notify
+    // that does the cancelling, hence a fresh DateTime over the same instant.
+    _rewrite(notification, {title, body}) {
+        if (notification.title === title && notification.body === body)
+            return;
+        const raisedAt = notification.datetime.to_unix();
+        notification.title = title;
+        notification.body = body;
+        notification.datetime = GLib.DateTime.new_from_unix_local(raisedAt);
+    }
+
+    _refreshAlerts(now) {
+        alertRefresh({
+            quotas: markExpired(this._quotas, now),
+            fired: this._fired,
+            now,
+            locale: this._locale,
+            percentLocale: this._percentLocale,
+        }).forEach(alert => {
+            const notification = this._alerts.get(alert.key);
+            if (notification !== undefined)
+                this._rewrite(notification, alert);
+        });
+    }
+
+    // The tick re-plans as well as re-words, so a window ending while the extension is
+    // rate-limited withdraws within the minute instead of waiting for a fetch it is not
+    // allowed to make. It exists only while something is on screen to correct.
+    _trackAlertRefresh() {
+        if (this._alerts.size === 0) {
+            this._stopAlertRefresh();
+            return;
+        }
+        if (this._alertTimerId)
+            return;
+        this._alertTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, REFRESH_SECONDS, () => {
+            this._syncAlerts(new Date());
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _stopAlertRefresh() {
+        if (!this._alertTimerId)
+            return;
+        GLib.Source.remove(this._alertTimerId);
+        this._alertTimerId = null;
     }
 
     _scheduleNext(seconds) {
@@ -943,6 +996,7 @@ class Indicator extends PanelMenu.Button {
         this._settings.disconnect(this._schemeId);
         this._prefsSignals.forEach(id => this._prefs.disconnect(id));
         this._prefsSignals = [];
+        this._stopAlertRefresh();
         this._alerts.clear();
         this._source?.destroy(MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
         this._source = null;
