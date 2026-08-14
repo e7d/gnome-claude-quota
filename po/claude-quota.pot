@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-14 17:59+0200\n"
+"POT-Creation-Date: 2026-08-14 18:29+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -28,6 +28,38 @@ msgstr ""
 
 #: extension.js:840
 msgid "Every quota is hidden — see the extension settings"
+msgstr ""
+
+#: prefs.js:10
+msgid "High usage threshold"
+msgstr ""
+
+#: prefs.js:11
+msgid "Critical usage threshold"
+msgstr ""
+
+#: prefs.js:15
+msgid "Notify at high usage"
+msgstr ""
+
+#: prefs.js:16
+msgid "Notify at critical usage"
+msgstr ""
+
+#: prefs.js:22
+msgid "Restore the default"
+msgstr ""
+
+#: prefs.js:78
+msgid "Thresholds"
+msgstr ""
+
+#: prefs.js:87
+msgid "Show in top bar"
+msgstr ""
+
+#: prefs.js:88
+msgid "Show in menu"
 msgstr ""
 
 #: lib/format.js:29

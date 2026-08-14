@@ -23,6 +23,7 @@ CAPTURE=0
 CAPTURE_NOTIFY=0
 WANT_NOTIFY=''
 WATCH=0
+PREFS=0
 
 NOTIFY_MODES=(natural fresh tray off)
 
@@ -56,6 +57,7 @@ Options:
   --notify=<mode>    natural (default), fresh, tray or off — see below
   --capture          Shoot preview/<theme>-<scenario>.png of the shape applied
   --capture=notify   Shoot preview/notify-<theme>-<scenario>.png of banner and tray
+  --prefs            Open the preferences window in the session
   --watch            Restart the shell on a source change, replaying the shape
   --detach           Start the session and return instead of blocking
   --stop             Tear the session down
@@ -98,6 +100,7 @@ for arg in "$@"; do
         --capture) CAPTURE=1 ;;
         --capture=notify) CAPTURE_NOTIFY=1 ;;
         --capture=*) die "unknown --capture target '${arg#*=}'; known: notify" ;;
+        --prefs) PREFS=1 ;;
         --detach) DETACH=1 ;;
         --watch) WATCH=1 ;;
         --stop) STOP=1 ;;
@@ -178,6 +181,14 @@ apply_shape() {
     { [ -z "$WANT_DATA" ] && [ "$CAPTURE" -ne 1 ] && [ "$CAPTURE_NOTIFY" -ne 1 ]; } ||
         : "${WANT_POPUP:=$(state_get popup)}"
     apply_popup
+    open_prefs
+}
+
+open_prefs() {
+    [ "$PREFS" -eq 1 ] || return 0
+    prefs_window
+    [ "$CAPTURE" -eq 1 ] && capture_prefs "$WANT_THEME"
+    return 0
 }
 
 shoot_tile() {

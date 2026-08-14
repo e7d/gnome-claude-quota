@@ -270,8 +270,8 @@ start_shell() {
         dconf reset /org/gnome/desktop/interface/color-scheme
         dconf reset /org/gnome/desktop/interface/accent-color
         eval "$4"
-        exec gnome-shell "${@:5}" --unsafe-mode
-    ' _ "$BUS_FILE" "$PID_FILE" "$UUID" "$DEVKIT_SETUP" "${backend[@]}" >"$LOG" 2>&1 &
+        exec gnome-shell --wayland-display="$5" "${@:6}" --unsafe-mode
+    ' _ "$BUS_FILE" "$PID_FILE" "$UUID" "$DEVKIT_SETUP" "$DEVKIT_NAME" "${backend[@]}" >"$LOG" 2>&1 &
     for _ in $(seq 300); do
         [ -s "$BUS_FILE" ] && break
         sleep 0.2
@@ -355,6 +355,24 @@ wait_for_indicator() {
         sleep 0.25
     done
     die "indicator $UUID never appeared"
+}
+
+# A separate GTK process, so it needs the same sandboxed HOME and dconf as the shell
+# itself or it would read and write the user's real settings instead of the session's.
+# The actor appears before Mutter places and sizes it, so the wait is on the frame
+# rect settling rather than on the actor merely existing — measured window rows of
+# (0,0,0,0) for the first frames.
+prefs_window() {
+    env -u LC_ALL HOME="$SANDBOX_HOME" XDG_CONFIG_HOME="$CFG" \
+        WAYLAND_DISPLAY="$DEVKIT_NAME" GDK_BACKEND=wayland \
+        LC_MESSAGES="$DEVKIT_LANGUAGE" LC_TIME="$DEVKIT_LOCALE" LC_NUMERIC="$DEVKIT_LOCALE" \
+        gnome-extensions prefs "$UUID" >>"$LOG" 2>&1 &
+    for _ in $(seq 100); do
+        is_true "$(shell_eval "global.get_window_actors().some(a => a.meta_window.get_frame_rect().width > 0).toString()")" &&
+            return 0
+        sleep 0.2
+    done
+    die 'the preferences window never appeared'
 }
 
 # The shell opens the overview again a second or so into startup, well after the

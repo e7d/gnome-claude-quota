@@ -137,6 +137,24 @@ capture_notify() {
     echo "$(out_dir)/notify-$name.png"
 }
 
+prefs_box() {
+    shell_eval "const a = global.get_window_actors()
+        .find(a => a.meta_window.get_gtk_application_id() !== null) ?? global.get_window_actors()[0];
+        const r = a.meta_window.get_frame_rect();
+        [r.x, r.y, r.width, r.height].join(' ')" | unwrap
+}
+
+capture_prefs() {
+    local box rect
+    box="$(prefs_box)"
+    [ -n "$box" ] || die 'could not measure the preferences window'
+    read -r -a rect <<<"$box"
+    await_style
+    shoot "$(out_dir)/prefs-$1.png" "${rect[@]}"
+    SHOTS+=("$(out_dir)/prefs-$1.png")
+    echo "$(out_dir)/prefs-$1.png"
+}
+
 normalize() {
     local w h
     w="$(magick identify -format '%w\n' "${SHOTS[@]}" | sort -n | tail -1)"

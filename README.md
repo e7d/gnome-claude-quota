@@ -70,6 +70,18 @@ A failure the service is not responsible for — an expired token, an unreachabl
 
 The status page is only fetched **after** a `5xx`, so the ordinary 5-minute poll stays a single request and a status.claude.com outage cannot slow it down.
 
+## Settings
+
+```bash
+gnome-extensions prefs claude-quota@e7d.io
+```
+
+Three groups:
+
+- **Thresholds** — the percentage at which a quota is shown as high usage and as critical, and whether crossing either posts a notification. `75%` and `90%` are this extension's own defaults, not Anthropic's, and the same two numbers decide both a quota's colour and whether it notifies — one setting, two effects. A reset button beside each restores the shipped default.
+- **Show in top bar** — which of the three quotas (session, weekly, model-specific) appear in the panel.
+- **Show in menu** — which of the three appear in the popup.
+
 ## Requirements
 
 - **GNOME Shell 50**
@@ -185,6 +197,7 @@ tools/preview.sh --dark --scenario=loading
 | `--hover` | Leave the pointer on the panel button |
 | `--open` | Leave the popup open |
 | `--capture` | Shoot `preview/<theme>-<scenario>.png` of the shape applied |
+| `--prefs` | Open the preferences window in the session |
 | `--watch` | Restart the shell whenever a source file changes, replaying the shape |
 | `--detach` | Start the session and return instead of blocking |
 | `--stop` | Tear the session down |
@@ -234,17 +247,18 @@ Groups: `state`, `panel`, `hover`, `refresh`, `notify`, `lifecycle`. `lifecycle`
 
 ### Notification thresholds
 
-There is no preferences window yet. The four keys are readable and writable now:
+The [Settings](#settings) window is the normal way to change these. The same keys are also
+readable and writable directly, which is what the preview and e2e harnesses do:
 
 ```bash
 gsettings --schemadir ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io/schemas \
-    set org.gnome.shell.extensions.claude-quota notify-warning-percent 70
+    set org.gnome.shell.extensions.claude-quota warning-percent 70
 ```
 
-`notify-warning-enabled`, `notify-warning-percent`, `notify-critical-enabled` and
-`notify-critical-percent` — booleans default to `true`, the percentages to 75 and 90. A change
-takes effect at once: lowering a threshold below a quota's current percentage notifies
-immediately, and disabling a level withdraws whatever it had posted.
+`warning-notify`, `warning-percent`, `critical-notify` and `critical-percent` — booleans
+default to `true`, the percentages to 75 and 90. A change takes effect at once: lowering a
+threshold below a quota's current percentage notifies immediately, and disabling a level
+withdraws whatever it had posted.
 
 A notification's body counts down, so while one is on screen it is rewritten every minute and
 the tray keeps agreeing with the popup rather than with the moment it fired. The rewrite is

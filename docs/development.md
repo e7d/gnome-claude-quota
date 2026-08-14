@@ -61,6 +61,19 @@ tools/preview.sh --headless --detach --scenario=loading --capture
 
 headless because a window is for a human, detached because the call should return, not block.
 
+`--prefs` opens the preferences window inside the running session:
+
+```bash
+tools/preview.sh --headless --detach --prefs --capture --dark
+```
+
+The window is a separate GTK process — `gnome-extensions prefs` — reached over the session's
+own Wayland socket rather than the host's, which is why `start_shell` gives the nested shell a
+deterministic `--wayland-display` name to hand it. It earns a screenshot rather than an
+assertion: driving Adw widgets from outside the process the way `Eval` drives the shell's own
+actors would need AT-SPI, which nothing else in this harness uses. What the settings actually do
+is asserted in the shell, over the same GSettings keys the window writes.
+
 **The overview cannot open in a nested session, deliberately.** The shell opens it again a second or so into startup, long after the indicator appears, and a hide issued while that show animates is swallowed — as is one from a `showing` or `shown` handler, and clearing `sessionMode.hasOverview` does not stop it either. So `hide_overview` takes `Main.overview.show` away for the life of the shell, which is what keeps it from drifting up over the panel mid-run and poisoning tiles. It applies to windowed sessions too, so Super and the Activities corner do nothing there. To get it back in a session you are driving by hand, restore the parked original over Eval: `Main.overview.show = globalThis._cqOverviewShow`.
 
 **Resize the devkit window and the emulated monitor follows it.** Dragging it from its native 1280x800 to 1862x1045 moved `Main.layoutManager.primaryMonitor` and the panel with it, live, no restart — which is how you widen a windowed session enough for a third quota to render without ellipses. There is no way to ask for a size in advance, though, and no way to set one from outside the session. Neither binary offers a geometry flag: `gnome-shell --help-all` pairs `--devkit` (no geometry) with `--virtual-monitor WxH` as independent options, and `mutter-devkit --help-all` has no options at all beyond GApplication boilerplate. `MUTTER_DEBUG_DUMMY_MODE_SPECS` does not exist in this system's libmutter at all — it belongs to the dummy/headless KMS backend, not the native backend `--devkit` uses, and setting it changes nothing. The only gschema, `org.gnome.mutter.devkit`, has a single key, `launchers`, unrelated to size. The nested session does export `org.gnome.Mutter.Devkit` on its bus, but introspection shows it carries no methods or signals — only a read-only `Env` property — and exposes no `org.gtk.Actions` interface, so the window's own Monitors menu cannot be driven from outside either. Pairing the two flags does not help: `gnome-shell --devkit --virtual-monitor 1440x900` yields *two* monitors, `1440x900` as the primary and the native `1280x800` as the one the viewer actually shows, so the extension's panel lands on a display the window never renders — which is why the harness offers no size flag for `--windowed`: the only thing that sizes that window is the pointer. The headless backend has no such gap: it takes its size from `--virtual-monitor`, set to `1440x900` in `DEVKIT_MONITOR` (`tools/lib/devkit.sh`), so a fresh windowed session starts narrower than a headless capture of the same state until you drag it.
