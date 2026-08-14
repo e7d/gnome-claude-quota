@@ -16,7 +16,7 @@ extract() {
         --copyright-holder='e7d' \
         --msgid-bugs-address='michael@e7d.io' \
         --output="$1" \
-        extension.js prefs.js lib/*.js)
+        extension.js prefs.js lib/*.js ui/*.js)
 }
 
 merge() {

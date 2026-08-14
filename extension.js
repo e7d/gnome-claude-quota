@@ -6,7 +6,6 @@ import Meta from 'gi://Meta';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {BarLevel} from 'resource:///org/gnome/shell/ui/barLevel.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -17,43 +16,26 @@ import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
 import {deserialize, serialize} from './lib/cache.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {_, resetTranslator, setTranslator} from './lib/i18n.js';
-import {captionLine, numberLocale, percentLine, timeLocale} from './lib/format.js';
+import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from './lib/notify.js';
 import {availableWidth, fittingCount} from './lib/panel.js';
-import {tickRects} from './lib/bar.js';
 import {brandColor, schemeForForeground} from './lib/theme.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult, UNKNOWN_SERVICE} from './lib/state.js';
-import {barClass, quotaClass} from './lib/style.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
+import {CAPTION_OPACITY, displayItem, QuotaBlock} from './ui/quota-block.js';
 
-const CAPTION_OPACITY = 180;
 const SEPARATOR_OPACITY = 120;
 const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
-const TICK_OVERHANG = 2;
 const CREDENTIALS_SETTLE_SECONDS = 2;
 const URGENCY = {
     warning: MessageTray.Urgency.NORMAL,
     critical: MessageTray.Urgency.HIGH,
 };
-
-// The insensitive pseudo-class the shipped theme paints at 50% alpha is what a
-// non-reactive item gets, and every child label inherits it.
-function displayItem() {
-    const item = new PopupMenu.PopupBaseMenuItem({
-        reactive: true,
-        activate: false,
-        hover: false,
-        can_focus: false,
-    });
-    item.remove_style_class_name('popup-inactive-menu-item');
-    item.track_hover = false;
-    return item;
-}
 
 // The top bar keeps its own background whatever the desktop scheme is, and an
 // extension can repaint it, so the label colour the theme resolved is the only
@@ -62,79 +44,6 @@ function panelScheme() {
     return schemeForForeground(Main.panel.get_theme_node().get_foreground_color());
 }
 
-
-const PaceBar = GObject.registerClass(
-class PaceBar extends BarLevel {
-    setPace(ratio) {
-        if (this._pace === ratio)
-            return;
-        this._pace = ratio;
-        this.queue_repaint();
-    }
-
-    vfunc_repaint() {
-        super.vfunc_repaint();
-        if (this._pace === null || this._pace === undefined)
-            return;
-        const themeNode = this.get_theme_node();
-        const [width, height] = this.get_surface_size();
-        const [hasShadow, shadowColor] = themeNode.lookup_color('-cq-tick-shadow-color', false);
-        const {shadow, tick} = tickRects({
-            width,
-            height,
-            barHeight: themeNode.get_length('-barlevel-height'),
-            tickWidth: themeNode.get_length('-cq-tick-width'),
-            shadowWidth: hasShadow ? themeNode.get_length('-cq-tick-shadow-width') : 0,
-            overhang: TICK_OVERHANG,
-            ratio: this.get_text_direction() === Clutter.TextDirection.RTL
-                ? 1 - this._pace
-                : this._pace,
-        });
-        const cr = this.get_context();
-        if (shadow) {
-            cr.rectangle(shadow.x, shadow.y, shadow.width, shadow.height);
-            cr.setSourceColor(shadowColor);
-            cr.fill();
-        }
-        cr.rectangle(tick.x, tick.y, tick.width, tick.height);
-        cr.setSourceColor(themeNode.get_foreground_color());
-        cr.fill();
-        cr.$dispose();
-    }
-});
-
-const QuotaBlock = GObject.registerClass(
-class QuotaBlock extends St.BoxLayout {
-    _init() {
-        super._init({
-            style_class: 'cq-block',
-            orientation: Clutter.Orientation.VERTICAL,
-            x_expand: true,
-        });
-        this._name = new St.Label({style_class: 'cq-name'});
-        this._name.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-        this._percent = new St.Label({style_class: 'cq-percent'});
-        const header = new St.BoxLayout({x_expand: true});
-        header.add_child(this._name);
-        header.add_child(new St.Widget({x_expand: true}));
-        header.add_child(this._percent);
-        this._bar = new PaceBar({x_expand: true});
-        this._caption = new St.Label({style_class: 'cq-caption', opacity: CAPTION_OPACITY});
-        this.add_child(header);
-        this.add_child(this._bar);
-        this.add_child(this._caption);
-    }
-
-    update({quota, now, scheme, locale, percentLocale}) {
-        this._name.text = quota.name;
-        this._percent.text = percentLine(quota, percentLocale);
-        this._percent.style_class = quotaClass('cq-percent', quota, scheme);
-        this._bar.value = quota.expired ? 0 : quota.percent / 100;
-        this._bar.setPace(quota.expired ? null : quota.windowProgress);
-        this._bar.style_class = barClass(scheme);
-        this._caption.text = captionLine(quota, now, locale);
-    }
-});
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
