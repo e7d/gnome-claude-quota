@@ -296,6 +296,12 @@ await_paint() {
     sleep 0.05
 }
 
+# A GSettings write returns before the backend has dispatched changed:: on the main
+# loop, so a handler-driven state is not observable on the next round trip by right.
+await_prefs() {
+    sleep 0.2
+}
+
 STYLE_SETTLE=''
 
 # Hover and open both repaint the panel button through a CSS transition, so a shot

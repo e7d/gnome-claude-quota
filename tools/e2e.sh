@@ -853,8 +853,12 @@ prove_alerts() {
     render_state critical
     sync_alerts
     prove 'every live alert is in the tray' \
-        "shell_eval \"$IND._alerts.set('ghost|warning', $IND._alerts.values().next().value); 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._alerts.delete('ghost|warning'); 'ok'\" >/dev/null" \
+        "shell_eval \"const i = $IND;
+            globalThis._ghost = new (i._alerts.values().next().value.constructor)(
+                {source: i._source, title: 'ghost'});
+            i._alerts.set('ghost|warning', globalThis._ghost); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts.delete('ghost|warning');
+            globalThis._ghost.destroy(1); delete globalThis._ghost; 'ok'\" >/dev/null" \
         assert_source_holds_every_alert_probe
     prove 'urgency escalates with the level' \
         "shell_eval \"[...$IND._alerts.values()].forEach(n => { n.urgency = 1; }); 'ok'\" >/dev/null" \
@@ -890,6 +894,31 @@ expire_windows() {
         'ok'" >/dev/null
 }
 
+# Every other scenario here calls _syncAlerts by hand, which leaves the feature's
+# primary trigger — a poll that answered — driven by nothing at all: deleting the
+# sync from _applyResult used to keep the whole suite green. This one hands
+# _applyResult a fabricated payload and lets the extension find its own way there.
+apply_polled_result() {
+    reset_alerts
+    shell_eval "$IND._applyResult({error: null, expiresAt: null, payload: {limits: [
+        {kind: 'session', group: 'session', percent: $1, severity: 'critical',
+         resets_at: new Date(Date.now() + 900000).toISOString(), scope: null}]}});
+        'ok'" >/dev/null
+}
+
+assert_polled_alert() {
+    assert_eq 'a poll that answered posts its own alert' 'true' \
+        "$(probe "[...$IND._alerts.keys()].includes('session|critical')")"
+}
+
+prove_polled_alert() {
+    apply_polled_result 97
+    prove 'a poll that answered posts its own alert' \
+        'apply_polled_result 10' \
+        'apply_polled_result 97' \
+        assert_polled_alert
+}
+
 group_notify() {
     echo 'notify:'
     prove_schema_defaults
@@ -899,7 +928,6 @@ group_notify() {
     render_state normal
     sync_alerts
     assert_alert_keys 'quiet' '[]'
-    assert_alerts 'quiet'
     render_state warning
     sync_alerts
     assert_alert_keys 'warning' "['Session (5h)|warning','Weekly|warning']"
@@ -921,13 +949,26 @@ group_notify() {
     render_state warning
     sync_alerts
     shell_eval "$IND._prefs.set_int('notify-critical-percent', 50); 'ok'" >/dev/null
+    await_prefs
     assert_alert_keys 'lowered threshold' "['Session (5h)|critical','Weekly|critical']"
     shell_eval "$IND._prefs.reset('notify-critical-percent'); 'ok'" >/dev/null
-    reset_alerts
+    await_prefs
+    prove_polled_alert
+    assert_polled_alert
 }
 
 park_indicator() {
-    shell_eval "globalThis._parked = $IND; 'ok'" >/dev/null
+    shell_eval "globalThis._parked = $IND;
+        globalThis._parkedSource = $IND._source; 'ok'" >/dev/null
+}
+
+# A Source with no notification left has already destroyed itself, so _onDestroy's
+# own teardown of it is only reachable while one is still live — and a group run on
+# its own inherits nothing from the notify group's tail.
+arm_alert() {
+    reset_alerts
+    render_state critical
+    sync_alerts
 }
 
 wait_for_teardown() {
@@ -972,13 +1013,31 @@ prove_teardown() {
         assert_teardown_complete
 }
 
+# The parked source is the one armed before the disable, so a null one means the
+# notification never went up and the tray check below would hold over nothing.
+assert_source_closed_on_disable() {
+    assert_eq 'disable closes the source it opened' 'true' \
+        "$(probe "globalThis._parkedSource !== null &&
+            !Main.messageTray.getSources().includes(globalThis._parkedSource)")"
+}
+
+prove_source_closed() {
+    prove 'disable closes the source it opened' \
+        "shell_eval \"Main.messageTray._sources.add(globalThis._parkedSource); 'ok'\" >/dev/null" \
+        "shell_eval \"Main.messageTray._sources.delete(globalThis._parkedSource); 'ok'\" >/dev/null" \
+        assert_source_closed_on_disable
+}
+
 group_lifecycle() {
     echo 'lifecycle:'
+    arm_alert
     park_indicator
     shell_eval "Main.extensionManager.disableExtension('$UUID'); 'ok'" >/dev/null
     wait_for_teardown
     prove_teardown
     assert_teardown_complete
+    prove_source_closed
+    assert_source_closed_on_disable
     shell_eval "Main.extensionManager.enableExtension('$UUID'); 'ok'" >/dev/null
     wait_for_indicator
     wait_for_polling
