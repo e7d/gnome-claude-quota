@@ -4,7 +4,60 @@ UUID='claude-quota@e7d.io'
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLED="$HOME/.local/share/gnome-shell/extensions/$UUID"
 RUNTIME_ROOT="${CLAUDE_QUOTA_RUNTIME:-${XDG_RUNTIME_DIR:-/tmp}/claude-quota}"
+DEVKIT_LANGUAGE="${DEVKIT_LANGUAGE:-C}"
 DEVKIT_LOCALE="${DEVKIT_LOCALE:-C}"
+
+normalize_locale() {
+    case "$1" in
+        C|POSIX|*.*) printf '%s' "$1" ;;
+        *) printf '%s.UTF-8' "$1" ;;
+    esac
+}
+
+locale_tag() {
+    printf '%s' "${1%%.*}"
+}
+
+locale_subdir() {
+    [ "$DEVKIT_LANGUAGE" = 'C' ] && [ "$DEVKIT_LOCALE" = 'C' ] && return 0
+    printf '%s-%s' "$(locale_tag "$DEVKIT_LANGUAGE")" "$(locale_tag "$DEVKIT_LOCALE")"
+}
+
+# locale -a spells it fr_FR.utf8, so an exact match would reject the very form the
+# flag documents — and an ungenerated locale falls back to C without a word.
+locale_available() {
+    local want
+    want="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '-')"
+    locale -a 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d '-' | grep -qx "$want"
+}
+
+# Everything fixed at start_shell belongs here. A flag that only takes effect on a
+# fresh shell and is silently dropped on an attached one renders the wrong thing and
+# reports success.
+stale_axis() {
+    local want
+    want="${WANT_BACKEND:-}"
+    if [ -n "$want" ] && [ "$want" != "$(state_get backend)" ]; then
+        printf '%s' "$want"
+        return 0
+    fi
+    if [ "$DEVKIT_LANGUAGE" != "$(state_get language)" ]; then
+        printf 'language %s' "$DEVKIT_LANGUAGE"
+        return 0
+    fi
+    if [ "$DEVKIT_LOCALE" != "$(state_get locale)" ]; then
+        printf 'locale %s' "$DEVKIT_LOCALE"
+    fi
+}
+
+accept_locale() {
+    local value
+    value="$(normalize_locale "$1")"
+    if ! locale_available "$value"; then
+        die "locale '$value' is not generated on this host; locale -a lists what is"
+    fi
+    printf '%s' "$value"
+}
 
 use_session() {
     RUN="$RUNTIME_ROOT/$1"
@@ -124,7 +177,8 @@ devkit_flag() {
     case "$1" in
         --headless) DEVKIT_HEADLESS=1 ;;
         --windowed) DEVKIT_HEADLESS=0 ;;
-        --locale=*) DEVKIT_LOCALE="${1#*=}" ;;
+        --language=*) DEVKIT_LANGUAGE="$(accept_locale "${1#*=}")" ;;
+        --locale=*) DEVKIT_LOCALE="$(accept_locale "${1#*=}")" ;;
         *) return 1 ;;
     esac
 }
@@ -164,8 +218,9 @@ start_shell() {
     local backend
     mapfile -t backend < <(backend_args)
     # shellcheck disable=SC2016
-    HOME="$SANDBOX_HOME" XDG_CONFIG_HOME="$CFG" \
-    LANG="$DEVKIT_LOCALE" LC_ALL="$DEVKIT_LOCALE" dbus-run-session -- bash -c '
+    env -u LC_ALL HOME="$SANDBOX_HOME" XDG_CONFIG_HOME="$CFG" LANG=C \
+    LC_MESSAGES="$DEVKIT_LANGUAGE" LC_TIME="$DEVKIT_LOCALE" LC_NUMERIC="$DEVKIT_LOCALE" \
+    dbus-run-session -- bash -c '
         echo "$DBUS_SESSION_BUS_ADDRESS" > "$1"
         echo $$ > "$2"
         dconf write /org/gnome/shell/enabled-extensions "['"'"'$3'"'"']"

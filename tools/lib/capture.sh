@@ -1,12 +1,21 @@
 # shellcheck shell=bash
 
-OUT="$ROOT/preview"
 SHOTS=()
 
+out_dir() {
+    local sub
+    sub="$(locale_subdir)"
+    if [ -n "$sub" ]; then
+        printf '%s/preview/%s' "$ROOT" "$sub"
+    else
+        printf '%s/preview' "$ROOT"
+    fi
+}
+
 prepare_out() {
-    mkdir -p "$OUT"
+    mkdir -p "$(out_dir)"
     [ "$1" = 'full' ] || return 0
-    rm -f "$OUT"/*.png
+    rm -f "$(out_dir)"/*.png
 }
 
 popup_box() {
@@ -58,10 +67,10 @@ capture() {
     point_at away
     shoot "$RUN/closed.png" "${rect[0]}" 0 "${rect[2]}" "$panel"
     magick "$RUN/closed.png" "$RUN/hovered.png" "$RUN/open.png" \
-        -background none -smush 8 "$OUT/$name.png"
-    SHOTS+=("$OUT/$name.png")
+        -background none -smush 8 "$(out_dir)/$name.png"
+    SHOTS+=("$(out_dir)/$name.png")
     printf '  capture %s %ss\n' "$name" "$(elapsed_since "$started")" >&2
-    echo "$OUT/$name.png"
+    echo "$(out_dir)/$name.png"
 }
 
 normalize() {
@@ -92,6 +101,6 @@ overview() {
         tiles+=("$RUN/tile-$name.png")
     done
     montage -background '#101014' -tile 7x -geometry '+12+12' \
-        "${tiles[@]}" "$OUT/overview.png"
-    echo "  $OUT/overview.png"
+        "${tiles[@]}" "$(out_dir)/overview.png"
+    echo "  $(out_dir)/overview.png"
 }

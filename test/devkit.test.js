@@ -135,3 +135,46 @@ test('tile_name calls an unforced theme default', () => {
     const {stdout} = run(script, root);
     assert.equal(stdout.trim(), 'default-live');
 });
+
+test('normalize_locale appends the default codeset only when none was given', () => {
+    const root = runtimeRoot();
+    const {stdout} = run([
+        'echo "$(normalize_locale fr_FR)"',
+        'echo "$(normalize_locale fr_FR.UTF-8)"',
+        'echo "$(normalize_locale fr_FR.ISO-8859-1)"',
+        'echo "$(normalize_locale C)"',
+        'echo "$(normalize_locale POSIX)"',
+    ].join('\n'), root);
+    assert.deepEqual(stdout.trim().split('\n'),
+        ['fr_FR.UTF-8', 'fr_FR.UTF-8', 'fr_FR.ISO-8859-1', 'C', 'POSIX']);
+});
+
+test('locale_tag drops the codeset', () => {
+    const root = runtimeRoot();
+    const {stdout} = run([
+        'echo "$(locale_tag fr_FR.UTF-8)"',
+        'echo "$(locale_tag C)"',
+        'echo "$(locale_tag pt_BR.UTF-8)"',
+    ].join('\n'), root);
+    assert.deepEqual(stdout.trim().split('\n'), ['fr_FR', 'C', 'pt_BR']);
+});
+
+test('locale_subdir names both axes, and is empty when neither is set', () => {
+    const root = runtimeRoot();
+    const {stdout} = run([
+        'echo "[$(DEVKIT_LANGUAGE=C DEVKIT_LOCALE=C locale_subdir)]"',
+        'echo "$(DEVKIT_LANGUAGE=fr_FR.UTF-8 DEVKIT_LOCALE=C locale_subdir)"',
+        'echo "$(DEVKIT_LANGUAGE=C DEVKIT_LOCALE=fr_FR.UTF-8 locale_subdir)"',
+        'echo "$(DEVKIT_LANGUAGE=fr_FR.UTF-8 DEVKIT_LOCALE=fr_FR.UTF-8 locale_subdir)"',
+    ].join('\n'), root);
+    assert.deepEqual(stdout.trim().split('\n'), ['[]', 'fr_FR-C', 'C-fr_FR', 'fr_FR-fr_FR']);
+});
+
+// locale -a prints fr_FR.utf8, so an exact match would reject the very spelling
+// the flag documents.
+test('locale_available compares case and dashes loosely', () => {
+    const root = runtimeRoot();
+    assert.equal(run('locale_available C', root).status, 0);
+    assert.equal(run('locale_available en_US.UTF-8', root).status, 0);
+    assert.equal(run('locale_available zz_ZZ.UTF-8', root).status, 1);
+});

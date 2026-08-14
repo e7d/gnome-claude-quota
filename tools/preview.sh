@@ -35,7 +35,8 @@ Options:
   --headless         Run with no window, driven over D-Bus
   --dark, --light    Force a colour scheme
   --scenario=<name>  Render a fabricated state
-  --locale=<tag>     Locale for the nested session (default C, e.g. fr_FR.UTF-8)
+  --language=<tag>   Language for the nested session's words (default C, e.g. fr_FR)
+  --locale=<tag>     Locale for its clock and numbers (default C, e.g. fr_FR)
   --live             Render your own last-cached values (default; issues no request)
   --close            Leave the popup closed and the pointer away (default)
   --hover            Leave the pointer on the panel button
@@ -64,7 +65,8 @@ for arg in "$@"; do
         --headless) WANT_BACKEND=headless ;;
         --dark|--light) WANT_THEME="${arg#--}" ;;
         --scenario=*) WANT_DATA="${arg#*=}"; PICKED=("${arg#*=}") ;;
-        --locale=*) DEVKIT_LOCALE="${arg#*=}" ;;
+        --language=*) DEVKIT_LANGUAGE="$(accept_locale "${arg#*=}")" ;;
+        --locale=*) DEVKIT_LOCALE="$(accept_locale "${arg#*=}")" ;;
         --live) WANT_DATA=live; DATA_EXPLICIT=1 ;;
         --close|--hover|--open) WANT_POPUP="${arg#--}" ;;
         --capture) CAPTURE=1 ;;
@@ -133,7 +135,7 @@ apply_shape() {
 shoot_tile() {
     [ "$CAPTURE" -eq 1 ] || return 0
     require_commands magick
-    mkdir -p "$OUT"
+    mkdir -p "$(out_dir)"
     capture "$(tile_name)"
 }
 
@@ -155,6 +157,8 @@ start() {
     wait_for_indicator
     hide_overview
     state_set backend "$WANT_BACKEND"
+    state_set language "$DEVKIT_LANGUAGE"
+    state_set locale "$DEVKIT_LOCALE"
     apply_shape
 }
 
@@ -198,6 +202,7 @@ watch_sources() {
 }
 
 main() {
+    local stale
     use_session "$SESSION"
     select_scenarios
     if [ "$STOP" -eq 1 ]; then
@@ -206,8 +211,9 @@ main() {
     fi
     if attach_session; then
         wait_for_indicator
-        if [ -n "$WANT_BACKEND" ] && [ "$WANT_BACKEND" != "$(state_get backend)" ]; then
-            echo "preview: $WANT_BACKEND needs a new shell, restarting session '$SESSION'"
+        stale="$(stale_axis)"
+        if [ -n "$stale" ]; then
+            echo "preview: $stale needs a new shell, restarting session '$SESSION'"
             replay_backend
         else
             [ "$WATCH" -eq 0 ] ||

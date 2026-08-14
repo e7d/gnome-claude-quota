@@ -38,7 +38,8 @@ Options:
   --group=<name>       Run one group; repeat the flag for several
   --a11y               Shoot only the subset npm run a11y scores
   --assert             Shoot nothing, leaving preview/ alone
-  --locale=<tag>       Locale for the nested session (default C, e.g. fr_FR.UTF-8)
+  --language=<tag>     Language for the nested session's words (default C, e.g. fr_FR)
+  --locale=<tag>       Locale for its clock and numbers (default C, e.g. fr_FR)
   -h, --help           Show this message
 
 Every scenario is shot by default, which costs minutes; narrow with --group,
@@ -70,6 +71,10 @@ for arg in "$@"; do
         *) die "unknown option $arg" ;;
     esac
 done
+
+# preview.sh runs as a subprocess, so an axis left unexported reaches the nested
+# shell as its default and the run reports success in the wrong language.
+export DEVKIT_LANGUAGE DEVKIT_LOCALE
 
 select_groups() {
     local want known found

@@ -130,11 +130,20 @@ npm run i18n:check     # exit non-zero if either is stale
 To see a language rendered rather than trust that it is:
 
 ```bash
-npm run preview -- --live --locale=fr_FR.UTF-8 --capture
-npm run e2e -- --group=state --dark-only --locale=fr_FR.UTF-8
+npm run preview -- --live --language=fr_FR --locale=fr_FR --capture
+npm run e2e -- --group=state --dark-only --language=fr_FR --locale=fr_FR
 ```
 
-The locale must be generated on the host — `locale -a` lists what is. Without `--locale`, a nested shell runs under `C` so that a tile's clock and percent cannot drift with whoever is running it.
+They are two axes, not one. `--language` selects the catalog (`LC_MESSAGES`); `--locale` selects the clock and the number format (`LC_TIME`, `LC_NUMERIC`). Varying one alone is how you tell a translation problem from a formatting one:
+
+```bash
+npm run preview -- --live --language=fr_FR --capture   # French words, 12-hour clock, 73%
+npm run preview -- --live --locale=fr_FR --capture     # English words, 24-hour clock, 73 %
+```
+
+`.UTF-8` is the default suffix, so `fr_FR` and `fr_FR.UTF-8` are the same thing and `fr_FR.ISO-8859-1` still says what it means. Either axis must name a locale generated on the host — `locale -a` lists them — and an unknown one is refused rather than quietly falling back to `C`.
+
+Screenshots land in `preview/` when both axes are default and in `preview/<language>-<locale>/` otherwise — `preview/fr_FR-C/`, `preview/C-fr_FR/`. A locale round therefore sits beside the English one instead of overwriting it, and `npm run a11y` keeps scoring `preview/` alone unless you point it somewhere else.
 
 Adding a language is a catalog and nothing else:
 
