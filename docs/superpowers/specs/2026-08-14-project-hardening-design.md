@@ -43,7 +43,7 @@ extension.js         construction, wiring, render orchestration, teardown
 
 | module | lifted from | contract |
 | --- | --- | --- |
-| `lib/style.js` | `severityClass`, `quotaClass`, `barClass`, `panelScheme` | style-class string builders |
+| `lib/style.js` | `severityClass`, `quotaClass`, `barClass` | style-class string builders |
 | `lib/state.js` | `_applyResult`, the decision half of `_adoptShared`, `_markSent` | `(state, result, now) → {state, effects}` |
 | `lib/view.js` | decision halves of `_renderMessage`, `_renderActions`, `_renderIssue`, `_panelLabels`, `_renderHiddenNote` | `(state, settings, now) → view model` |
 
@@ -63,7 +63,7 @@ and imports no `gi://`. `ui/popup-body.js` and `ui/panel-fit.js` consume it.
 | `ui/pace-bar.js` | `PaceBar` |
 | `ui/quota-block.js` | `QuotaBlock`, `displayItem` |
 | `ui/popup-body.js` | the popup's menu items; `update(viewModel)` |
-| `ui/panel-fit.js` | panel cells, budget measurement, fit, laters, panel signals |
+| `ui/panel-fit.js` | panel cells, budget measurement, fit, laters, panel signals, `panelScheme` |
 | `ui/store.js` | cache and attempts file IO |
 | `ui/alerts.js` | notification source, post/withdraw/rewrite, the minute timer |
 | `ui/poller.js` | fetch cycle, cancellable, poll timer, credential watching |
@@ -96,6 +96,33 @@ _render() ── state + settings + now ──► lib/view.js ──► view mod
                                         ▼                              ▼
                                  ui/popup-body.js               ui/panel-fit.js
 ```
+
+## The harness reads the Indicator's internals
+
+`tools/e2e.sh`, `tools/lib/capture.sh` and `tools/lib/indicator.sh` reach into the
+Indicator over `Eval` and read **42 distinct private members** — `_quotas`, `_block`,
+`_issueItem`, `_panelCells`, `_fitPanel`, `_applyResult` and the rest. The only net
+under this refactor is therefore coupled to the object being refactored, and a slice
+that moves a member breaks its own safety net in the same commit.
+
+Two rules follow, and they are the spine of the whole refactor:
+
+**State stays on the Indicator.** `_quotas`, `_limits`, `_error`, `_service`, `_block`,
+`_refreshing`, `_fetchedAt`, `_fired`, `_lastRequestAt`, `_rateLimitStreak` and
+`_seenExpiry` keep their names and stay direct properties. `lib/state.js` is a pure
+function over a plain snapshot the Indicator assembles and applies — it does not own
+the state, it computes the next one. This keeps `AGENTS.md`'s "state fields are the
+truth" rule literally true, and costs the harness nothing.
+
+**Actors and behaviour may move, and the harness moves with them in the same commit.**
+Roughly twenty probes re-path across slices 4 and 5. Each such commit is verified by a
+full `npm run e2e` before the next slice starts, and a probe is only ever re-pathed —
+never deleted or weakened to make a move easier. A probe that becomes hard to express
+is evidence the split is wrong, not evidence the probe is.
+
+The alternative — keeping forty delegating getters on the Indicator so the harness
+never changes — was rejected. It would freeze the current shape behind a compatibility
+façade and leave the file harder to read than before.
 
 ## Coverage gate
 
