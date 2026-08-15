@@ -20,6 +20,8 @@ Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`]
 
 Rendering is one-way: state fields on the indicator (`_quotas`, `_error`, `_service`, `_block`, `_refreshing`, `_fetchedAt`) are the truth, and `_render()` derives every actor from them. Never mutate an actor outside a render path; set the state and re-render.
 
+Reach for `docs/architecture.md` when you need the module dependency graph, which module owns what, or where a new field/string/setting/state/scenario belongs — it carries the detail this file only indexes.
+
 `_block` is one object (`{until, reason}`) or `null`, deliberately: it was briefly two fields and the harness caught them out of sync on the first run. `_service` (`{status, until}` or `null`) follows the same rule for the same reason.
 
 ## Checking your work

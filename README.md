@@ -124,9 +124,12 @@ The extension itself installs nothing — `node_modules/` exists for the linter 
 
 ```bash
 npm test
+npm run coverage       # same suite, gated on coverage of lib/** plus a module census
 ```
 
 `TZ` is pinned to `UTC` in the script because the test suite asserts absolute times and `Intl.DateTimeFormat` resolves against the system timezone. `LC_ALL` is pinned to `C` for the same reason applied to words: no translator is installed under `node --test`, so every string asserts as English.
+
+`npm run coverage` gates `lib/**` at 100% lines, 100% functions and 95% branches, then runs `tools/coverage-census.js` to confirm every `lib/*.js` file was actually imported by the suite — a module the suite never imports has no coverage record at all, so it cannot fail a threshold either, which is exactly what the census exists to catch. `lib/usage.js` is the one exempt module; `docs/development.md` § Coverage and the module census has the rest.
 
 ## Translations
 

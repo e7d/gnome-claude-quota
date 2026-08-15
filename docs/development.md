@@ -43,6 +43,16 @@ Bare — no path argument. `node --test test/` fails on node 24, which tries to 
 
 `lib/format.js`, `lib/model.js`, `lib/policy.js` and `lib/cache.js` import nothing from `gi://`, which is what lets node run them directly. Logic belongs there rather than in `extension.js` for exactly that reason.
 
+## Coverage and the module census
+
+```bash
+npm run coverage
+```
+
+Runs the same suite under `--experimental-test-coverage`, gated at 100% lines, 100% functions and 95% branches over `lib/**`, then runs `node tools/coverage-census.js` against the `lcov.info` it wrote.
+
+The threshold alone cannot catch a module the suite never imports: `node --test`'s coverage report only lists files it actually loaded, so a `lib/` file with no `import` anywhere in `test/` simply has no `SF:` record in `coverage/lcov.info` — it contributes nothing to either side of the percentage, and 100/100/95 is satisfied by the files that *were* touched without that module ever running once. The census closes that gap from the other direction: it reads every `lib/*.js` filename off disk and asserts each one appears in the report, exempting only `lib/usage.js` (it imports `gi://` and cannot run under node at all — see `AGENTS.md` § Shape of the code). Adding a `lib/` module with no test importing it fails the census with `no test imports: lib/<name>.js`, even though the coverage thresholds above it stayed green.
+
 ## Seeing what rendered
 
 ```bash
