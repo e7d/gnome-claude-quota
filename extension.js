@@ -8,8 +8,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {appendRecord, attemptRecord, outcomeFor} from './lib/attempts.js';
-import {deserialize, serialize} from './lib/cache.js';
+import {attemptRecord, outcomeFor} from './lib/attempts.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {numberLocale, timeLocale} from './lib/format.js';
@@ -22,6 +21,7 @@ import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsag
 import {panelView, popupView} from './lib/view.js';
 import {PanelStrip, panelScheme} from './ui/panel-fit.js';
 import {PopupBody} from './ui/popup-body.js';
+import {Store} from './ui/store.js';
 
 const CREDENTIALS_SETTLE_SECONDS = 2;
 const URGENCY = {
@@ -40,6 +40,7 @@ class Indicator extends PanelMenu.Button {
         this._alerts = new Map();
         this._alertTimerId = null;
         this._prefsSignals = [];
+        this._store = new Store();
         this._client = new UsageClient();
         this._status = new StatusClient();
         this._settings = St.Settings.get();
@@ -104,22 +105,8 @@ class Indicator extends PanelMenu.Button {
         this._refresh('startup');
     }
 
-    _cachePath() {
-        return GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-quota', 'usage.json']);
-    }
-
-    _attemptsPath() {
-        return GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-quota', 'attempts.jsonl']);
-    }
-
     _loadCache() {
-        let contents;
-        try {
-            [, contents] = Gio.File.new_for_path(this._cachePath()).load_contents(null);
-        } catch {
-            return;
-        }
-        const cached = deserialize(new TextDecoder().decode(contents));
+        const cached = this._store.load();
         if (cached === null)
             return;
         this._limits = cached.limits;
@@ -130,42 +117,7 @@ class Indicator extends PanelMenu.Button {
     }
 
     _saveCache() {
-        const file = Gio.File.new_for_path(this._cachePath());
-        try {
-            file.get_parent().make_directory_with_parents(null);
-        } catch {
-        }
-        try {
-            file.replace_contents(
-                new TextEncoder().encode(serialize(this._limits, this._fetchedAt, this._fired)),
-                null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-        } catch (error) {
-            logError(error);
-        }
-    }
-
-    _readAttempts(file) {
-        try {
-            const [, contents] = file.load_contents(null);
-            return new TextDecoder().decode(contents);
-        } catch {
-            return '';
-        }
-    }
-
-    _appendAttempt(record) {
-        const file = Gio.File.new_for_path(this._attemptsPath());
-        try {
-            file.get_parent().make_directory_with_parents(null);
-        } catch {
-        }
-        try {
-            file.replace_contents(
-                new TextEncoder().encode(appendRecord(this._readAttempts(file), record)),
-                null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-        } catch (error) {
-            logError(error);
-        }
+        this._store.save({limits: this._limits, fetchedAt: this._fetchedAt, fired: this._fired});
     }
 
     get _scheme() {
@@ -409,7 +361,7 @@ class Indicator extends PanelMenu.Button {
         if (outcome === null)
             return;
         this._adopt(outcome.state);
-        this._appendAttempt(attemptRecord({
+        this._store.appendAttempt(attemptRecord({
             now,
             trigger: 'shared',
             endpoint: 'claude-code',
@@ -539,7 +491,7 @@ class Indicator extends PanelMenu.Button {
 
     _recordAttempt(result, trigger, endpoint = 'usage') {
         this._markSent(result, endpoint);
-        this._appendAttempt(attemptRecord({
+        this._store.appendAttempt(attemptRecord({
             now: new Date(),
             trigger,
             endpoint,

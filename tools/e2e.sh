@@ -680,7 +680,7 @@ prove_refresh() {
 stub_attempt_log() {
     ATTEMPTS_LOG="$(mktemp -t claude-quota-attempts.XXXXXX)"
     shell_eval "delete $IND._refresh;
-        $IND._attemptsPath = () => '$ATTEMPTS_LOG';
+        $IND._store.attemptsPath = () => '$ATTEMPTS_LOG';
         $IND._client.fetch = () => Promise.reject(Object.assign(new Error('Rate limited'),
             {rateLimited: true, retryAfter: 1, status: 429,
              headers: {'authorization': 'Bearer sk-ant-oat01-STUB',
@@ -691,7 +691,7 @@ stub_attempt_log() {
 
 restore_attempt_log() {
     shell_eval "delete $IND._client.fetch;
-        delete $IND._attemptsPath;
+        delete $IND._store.attemptsPath;
         $IND._block = null;
         $IND._refresh = () => {};
         $IND._render();
