@@ -1,6 +1,7 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
+import {describe} from '../lib/errors.js';
 import {panelView, popupView} from '../lib/view.js';
 
 const NOW = new Date('2026-08-14T12:00:00Z');
@@ -50,6 +51,28 @@ test('popupView offers a service incident on one line and on two', () => {
     assert.notEqual(view.issue, null);
     assert.ok(view.issue.oneLine.includes(' · '));
     assert.ok(view.issue.twoLine.includes('\n'));
+    assert.equal(view.separatorVisible, true);
+});
+
+test('popupView leaves the issue as a bare label when there is no until to append', () => {
+    const view = popupView(base({service: {status: 'major_outage', until: null}}));
+    const label = `${view.issue.emoji} ${view.issue.text}`;
+    assert.equal(view.issue.oneLine, label);
+    assert.equal(view.issue.twoLine, label);
+});
+
+test('popupView renders the plain error text when nothing else silences or explains it', () => {
+    const view = popupView(base({error: describe('Something went sideways')}));
+    assert.equal(view.message, 'Something went sideways');
+});
+
+test('popupView keeps the separator down when every quota is hidden, even with a live issue', () => {
+    const view = popupView(base({
+        quotaCount: 2,
+        menuQuotaCount: 0,
+        service: {status: 'major_outage', until: new Date('2026-08-14T14:00:00Z')},
+    }));
+    assert.equal(view.separatorVisible, false);
 });
 
 test('popupView disables refresh while a request is in flight', () => {

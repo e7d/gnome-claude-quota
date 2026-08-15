@@ -47,6 +47,11 @@ test('applyResult on success clears the error, the block and the streak', () => 
     assert.equal(effects.syncAlerts, true);
 });
 
+test('applyResult on success falls back to no limits when the payload carries none', () => {
+    const {state: next} = applyResult({state: state(), result: ok({payload: {}}), now: NOW});
+    assert.deepEqual(next.limits, []);
+});
+
 test('applyResult on success keeps the previous expiry when the result carries none', () => {
     const seen = new Date('2026-08-14T18:00:00Z');
     const {state: next} = applyResult({state: state({seenExpiry: seen}), result: ok(), now: NOW});
