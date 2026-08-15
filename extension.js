@@ -63,7 +63,7 @@ class Indicator extends PanelMenu.Button {
             onDue: () => this._refresh('timer'),
             onSent: () => this._handleSent(),
         });
-        this._seenExpiry = this._poller._credentialExpiry();
+        this._seenExpiry = this._poller.credentialExpiry();
         this._alerts = new Alerts({
             iconPath: this._iconPath,
             onActivate: () => this.menu.open(true),

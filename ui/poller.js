@@ -68,12 +68,12 @@ export class Poller {
             });
     }
 
-    _credentialExpiry() {
+    credentialExpiry() {
         return credentialExpiry();
     }
 
     _onCredentialsWritten() {
-        this._onCredentials(this._credentialExpiry());
+        this._onCredentials(this.credentialExpiry());
     }
 
     async _fetchResult(cancellable, trigger) {

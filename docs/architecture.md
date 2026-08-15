@@ -23,6 +23,13 @@ bar's own resolved foreground colour, because the top bar keeps its own backgrou
 whatever the desktop scheme does. `_render()` reads both and hands each to the widget
 that needs it — never treat them as the same input.
 
+The e2e harness (`tools/e2e.sh`) reaches past the `ui/` modules' public methods and reads
+private members by name over `Eval` — `Alerts._live`/`_source`, `PanelStrip._cells`/
+`_budget`/`_box`, `Poller._cancellable`/`_timerId`, `PopupBody._blocks`/`_body`/
+`_issueItem` and others, across all five `ui/*.js` modules. There is no interface boundary
+protecting these from the test suite: renaming any private field or method inside `ui/`
+is an e2e-breaking change, and `npm run e2e` is the only way to find out.
+
 ## Module map
 
 | Module | Owns | Depends on | Tested |
@@ -62,9 +69,10 @@ described in `AGENTS.md` § Shape of the code and `docs/development.md`, not rep
 
 ## The render path
 
-`extension.js` holds the truth as state fields on `Indicator` (`_quotas`, `_error`,
-`_service`, `_block`, `_refreshing`, `_fetchedAt`, `_lastRequestAt`). `_render()` is the
-only path from that state to the screen:
+`extension.js` holds the truth as state fields on `Indicator` (`_quotas`, `_limits`,
+`_error`, `_service`, `_block`, `_refreshing`, `_fetchedAt`, `_fired`, `_lastRequestAt`,
+`_rateLimitStreak`, `_seenExpiry`). `_render()` is the only path from that state to the
+screen:
 
 ```
 state fields  →  lib/view.js (popupView / panelView)  →  view model  →  ui/ widgets
@@ -86,7 +94,7 @@ Each row names the files in the order you touch them.
 | A new user-facing string | The `lib/` or `ui/` module where it is read with `_()`/`n_()`/`p_()`/`N_()` (already covered by the `lib/*.js`/`ui/*.js` globs in `tools/i18n.sh`) → `npm run i18n` to update `po/claude-quota.pot` and `po/fr.po` and recompile `locale/fr/LC_MESSAGES/claude-quota.mo` → commit all three. If the string instead lives in a file outside `lib/`, `ui/`, `extension.js` or `prefs.js`, add that path to the `extract()` call in `tools/i18n.sh` **first** — `npm run i18n:check` only diffs a fresh extraction against the committed catalog using that same file list, so a path missing from it produces a clean check with the string silently untranslated. |
 | A new setting | `schemas/org.gnome.shell.extensions.claude-quota.gschema.xml` (add the key) → `glib-compile-schemas schemas/` to regenerate the committed `gschemas.compiled` (no npm script does this) → `lib/settings.js` (`SCOPES`/`THRESHOLDS`/`KEYS` or a new export, and `readSettings()`) → `prefs.js` (the control) → `extension.js` if it needs its own read path beyond `_settingsValues()` → `test/settings.test.js` |
 | A new panel/popup state (e.g. a service issue or severity tier) | `lib/policy.js` (the condition, e.g. `serviceIssue()`/`severityFor()`) → `lib/style.js` if it needs a new CSS class name → `stylesheet.css` (the class) → `lib/view.js` (surface it in the view model) → `test/policy.test.js`, `test/style.test.js`, `test/view.test.js` → a scenario in the `tools/lib/` scenario table (`indicator.sh`: `SCENARIOS` and a `setup_for` case) → `npm run a11y`'s ten-scenario list in `docs/development.md` / README if the new state introduces a colour worth scoring |
-| A new e2e scenario | the `tools/lib/` scenario table (`indicator.sh`: `SCENARIOS` array and a `setup_for` case) → `tools/e2e.sh` (assign it to a group, add the assertion) → `README.md` § Development and `.github/workflows/ci.yml`'s comment if the total scenario count is quoted there |
+| A new e2e scenario | the `tools/lib/` scenario table (`indicator.sh`: `SCENARIOS` array and a `setup_for` case) → `tools/e2e.sh` (assign it to a group, add the assertion) → `README.md` § Development if the total scenario count is quoted there |
 
 ## Verifying this file
 

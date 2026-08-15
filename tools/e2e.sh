@@ -766,7 +766,7 @@ assert_expired_token_declined() {
 wake_on_renewed_token() {
     shell_eval "globalThis._wokeWith = null;
         $IND._refresh = trigger => { globalThis._wokeWith = trigger; };
-        $IND._poller._credentialExpiry = () => new Date(Date.now() + 3600000);
+        $IND._poller.credentialExpiry = () => new Date(Date.now() + 3600000);
         $IND._seenExpiry = new Date(Date.now() - 3600000);
         $IND._block = {until: new Date(Date.now() + 900000), reason: 'rate-limit'};
         $IND._poller._onCredentialsWritten();
@@ -778,7 +778,7 @@ wake_on_renewed_token() {
 wake_on_same_token() {
     shell_eval "globalThis._wokeWith = null;
         $IND._refresh = trigger => { globalThis._wokeWith = trigger; };
-        $IND._poller._credentialExpiry = () => new Date(Date.now() + 3600000);
+        $IND._poller.credentialExpiry = () => new Date(Date.now() + 3600000);
         $IND._seenExpiry = new Date(Date.now() + 3600000);
         $IND._block = {until: new Date(Date.now() + 900000), reason: 'rate-limit'};
         $IND._poller._onCredentialsWritten();
@@ -890,7 +890,7 @@ prove_credentials_recovery() {
 }
 
 restore_credentials_stubs() {
-    shell_eval "delete $IND._poller._credentialExpiry;
+    shell_eval "delete $IND._poller.credentialExpiry;
         delete globalThis._wokeWith;
         $IND._block = null;
         'ok'" >/dev/null
