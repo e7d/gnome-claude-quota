@@ -91,9 +91,19 @@ Each row names the files in the order you touch them.
 ## Verifying this file
 
 ```bash
-grep -ohE '(lib|ui|tools|test|docs)/[a-z-]+\.(js|md|sh)' docs/architecture.md \
+grep -ohE '(lib|ui|tools|test|docs)/[a-z0-9./-]+\.(js|md|sh)' docs/architecture.md \
   | sort -u | while read -r f; do [ -e "$f" ] || echo "MISSING: $f"; done
 ```
 
 Expected: no output. Run it after any edit to the tables above — a path this file names
 that does not exist is worse than no documentation at all.
+
+To verify the check can detect a missing path, run this control command separately:
+
+```bash
+[ -e nonexistent.js ] || echo 'control ok: the check can report a missing path'
+```
+
+Expected: `control ok: the check can report a missing path`. A path check that cannot match
+anything looks identical to one that passed, so this control proves the check has real failure
+mode.
