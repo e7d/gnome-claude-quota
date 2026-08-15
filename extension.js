@@ -7,7 +7,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {attemptRecord, outcomeFor} from './lib/attempts.js';
+import {attemptRecord} from './lib/attempts.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {numberLocale, timeLocale} from './lib/format.js';
@@ -15,15 +15,14 @@ import {quotas} from './lib/model.js';
 import {thresholdsFrom} from './lib/notify.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
-import {adoptShared, applyResult, UNKNOWN_SERVICE} from './lib/state.js';
-import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
+import {adoptShared, applyResult} from './lib/state.js';
+import {sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
 import {Alerts} from './ui/alerts.js';
 import {PanelStrip, panelScheme} from './ui/panel-fit.js';
+import {Poller} from './ui/poller.js';
 import {PopupBody} from './ui/popup-body.js';
 import {Store} from './ui/store.js';
-
-const CREDENTIALS_SETTLE_SECONDS = 2;
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
@@ -34,10 +33,7 @@ class Indicator extends PanelMenu.Button {
         this._openPrefs = openPrefs;
         this._prefsSignals = [];
         this._store = new Store();
-        this._client = new UsageClient();
-        this._status = new StatusClient();
         this._settings = St.Settings.get();
-        this._cancellable = null;
         this._destroyed = false;
         this._quotas = [];
         this._error = null;
@@ -47,11 +43,6 @@ class Indicator extends PanelMenu.Button {
         this._block = null;
         this._lastRequestAt = null;
         this._rateLimitStreak = 0;
-        this._timerId = null;
-        this._credentialsMonitor = null;
-        this._credentialsSignal = 0;
-        this._credentialsSettleId = 0;
-        this._seenExpiry = this._credentialExpiry();
         this._limits = [];
         this._fired = {};
         this._locale = timeLocale({
@@ -64,6 +55,14 @@ class Indicator extends PanelMenu.Button {
             LC_NUMERIC: GLib.getenv('LC_NUMERIC'),
             LANG: GLib.getenv('LANG'),
         });
+        this._poller = new Poller({
+            store: this._store,
+            onResult: result => this._handleResult(result),
+            onServiceStatus: service => this._handleServiceStatus(service),
+            onCredentials: expiry => this._handleCredentials(expiry),
+            onDue: () => this._refresh('timer'),
+        });
+        this._seenExpiry = this._poller._credentialExpiry();
         this._alerts = new Alerts({
             iconPath: this._iconPath,
             onActivate: () => this.menu.open(true),
@@ -96,7 +95,6 @@ class Indicator extends PanelMenu.Button {
                 this._refresh('popup-stale');
         });
         this.connect('destroy', () => this._onDestroy());
-        this._watchCredentials();
         this._watchPrefs();
         this._loadCache();
         this._render();
@@ -122,42 +120,7 @@ class Indicator extends PanelMenu.Button {
         return Main.getStyleVariant() === 'light' ? 'light' : 'dark';
     }
 
-    // Claude Code replaces the file rather than editing it in place, and a monitor
-    // on the file itself stops following at the first replace.
-    _watchCredentials() {
-        const file = Gio.File.new_for_path(credentialsPath());
-        try {
-            this._credentialsMonitor = file.get_parent()
-                .monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
-        } catch (error) {
-            logError(error);
-            return;
-        }
-        this._credentialsSignal = this._credentialsMonitor.connect('changed', (monitor, changed) => {
-            if (changed.get_basename() === file.get_basename())
-                this._settleCredentials();
-        });
-    }
-
-    // One replace arrives as several events, and every one of them that reached a
-    // fetch would spend a request against a five-per-five-minutes budget.
-    _settleCredentials() {
-        if (this._credentialsSettleId)
-            GLib.Source.remove(this._credentialsSettleId);
-        this._credentialsSettleId = GLib.timeout_add_seconds(
-            GLib.PRIORITY_LOW, CREDENTIALS_SETTLE_SECONDS, () => {
-                this._credentialsSettleId = 0;
-                this._onCredentialsWritten();
-                return GLib.SOURCE_REMOVE;
-            });
-    }
-
-    _credentialExpiry() {
-        return credentialExpiry();
-    }
-
-    _onCredentialsWritten() {
-        const expiry = this._credentialExpiry();
+    _handleCredentials(expiry) {
         if (!credentialsRenewed(this._seenExpiry, expiry))
             return;
         this._seenExpiry = expiry;
@@ -205,18 +168,6 @@ class Indicator extends PanelMenu.Button {
         });
     }
 
-    _scheduleNext(seconds) {
-        if (this._timerId) {
-            GLib.Source.remove(this._timerId);
-            this._timerId = null;
-        }
-        this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, seconds, () => {
-            this._timerId = null;
-            this._refresh('timer');
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
     _sharedUsage() {
         return sharedUsage();
     }
@@ -251,7 +202,7 @@ class Indicator extends PanelMenu.Button {
         if (effects.syncAlerts)
             this._syncAlerts(now);
         if (effects.schedule > 0)
-            this._scheduleNext(effects.schedule);
+            this._poller.schedule(effects.schedule);
     }
 
     // Claude Code holds the same payload under its own cache, so whichever of the
@@ -287,57 +238,40 @@ class Indicator extends PanelMenu.Button {
         this._syncAlerts(now);
         const settled = pollDelay(this._fetchedAt, now, maxAgeFor(trigger));
         if (settled > 0) {
-            this._scheduleNext(settled);
+            this._poller.schedule(settled);
             this._renderSafely();
             return;
         }
         if (isBlocked(this._block?.until, now)) {
-            this._scheduleNext(nextPollSeconds((this._block.until - now) / 1000));
+            this._poller.schedule(nextPollSeconds((this._block.until - now) / 1000));
             this._render();
             return;
         }
         const wait = minIntervalWait(this._lastRequestAt, now);
         if (wait > 0) {
-            this._scheduleNext(wait);
+            this._poller.schedule(wait);
             this._render();
             return;
         }
-        const cancellable = new Gio.Cancellable();
-        this._cancellable?.cancel();
-        this._cancellable = cancellable;
         this._refreshing = true;
         this._renderSafely();
-        await this._fetchCycle(cancellable, trigger);
-        if (this._destroyed || this._cancellable !== cancellable)
+        const current = await this._poller.refresh(trigger);
+        if (this._destroyed || !current)
             return;
         this._refreshing = false;
         this._renderSafely();
     }
 
-    async _fetchCycle(cancellable, trigger) {
-        const result = await this._fetchResult(cancellable, trigger);
-        if (result === null || this._destroyed || this._cancellable !== cancellable)
-            return;
+    _handleResult(result) {
+        if (result.durationMs !== null)
+            this._lastRequestAt = new Date();
         this._applyResult(result);
-        this._renderSafely();
-        if (!result.serverError)
-            return;
-        await this._refreshServiceStatus(cancellable, trigger);
-        if (this._destroyed || this._cancellable !== cancellable)
-            return;
         this._renderSafely();
     }
 
-    async _refreshServiceStatus(cancellable, trigger) {
-        let result;
-        try {
-            result = await this._status.fetch(cancellable);
-        } catch {
-            this._service = UNKNOWN_SERVICE;
-            return;
-        }
-        this._recordAttempt({...result, expired: false, retryAfter: null, rateLimited: false}, trigger, 'status');
-        this._service = result.value ?? UNKNOWN_SERVICE;
+    _handleServiceStatus(service) {
+        this._service = service;
+        this._renderSafely();
     }
 
     _renderSafely() {
@@ -346,66 +280,6 @@ class Indicator extends PanelMenu.Button {
         } catch (error) {
             logError(error);
         }
-    }
-
-    async _fetchResult(cancellable, trigger) {
-        try {
-            const {payload, status, headers, body, durationMs, expiresAt} = await this._client.fetch(cancellable);
-            return this._recordAttempt({
-                payload,
-                error: null,
-                desc: null,
-                retryAfter: null,
-                rateLimited: false,
-                serverError: false,
-                expired: false,
-                status,
-                headers,
-                body,
-                durationMs,
-                expiresAt,
-            }, trigger);
-        } catch (error) {
-            if (error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                return null;
-            return this._recordAttempt({
-                payload: null,
-                error: error.message,
-                desc: error.desc ?? null,
-                retryAfter: error.retryAfter ?? null,
-                rateLimited: error.rateLimited ?? false,
-                serverError: error.serverError ?? false,
-                expired: error.expired ?? false,
-                status: error.status ?? null,
-                headers: error.headers ?? {},
-                body: error.body ?? null,
-                durationMs: error.durationMs ?? null,
-                expiresAt: error.expiresAt ?? null,
-            }, trigger);
-        }
-    }
-
-    _markSent(result, endpoint) {
-        if (endpoint === 'usage' && result.durationMs !== null)
-            this._lastRequestAt = new Date();
-    }
-
-    _recordAttempt(result, trigger, endpoint = 'usage') {
-        this._markSent(result, endpoint);
-        this._store.appendAttempt(attemptRecord({
-            now: new Date(),
-            trigger,
-            endpoint,
-            outcome: outcomeFor(result),
-            status: result.status,
-            retryAfter: result.retryAfter,
-            durationMs: result.durationMs,
-            tokenExpiresAt: result.expiresAt,
-            tokenExpired: result.expired,
-            headers: result.headers,
-            body: result.body,
-        }));
-        return result;
     }
 
     _applyResult(result) {
@@ -467,28 +341,13 @@ class Indicator extends PanelMenu.Button {
 
     _onDestroy() {
         this._destroyed = true;
-        if (this._timerId) {
-            GLib.Source.remove(this._timerId);
-            this._timerId = null;
-        }
-        if (this._credentialsSettleId) {
-            GLib.Source.remove(this._credentialsSettleId);
-            this._credentialsSettleId = 0;
-        }
-        if (this._credentialsMonitor) {
-            this._credentialsMonitor.disconnect(this._credentialsSignal);
-            this._credentialsMonitor.cancel();
-            this._credentialsMonitor = null;
-        }
+        this._poller.destroy();
         this._popup.destroy();
         this._panel.destroy();
         this._settings.disconnect(this._schemeId);
         this._prefsSignals.forEach(id => this._prefs.disconnect(id));
         this._prefsSignals = [];
         this._alerts.destroy();
-        this._cancellable?.cancel();
-        this._client.destroy();
-        this._status.destroy();
     }
 });
 

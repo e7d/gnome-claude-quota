@@ -13,7 +13,7 @@ FILLER='global.cqPanelFiller'
 # and cancelling does not change that answer — dropping the reference supersedes it.
 freeze() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
-        i._cancellable?.cancel(); i._cancellable = null; i._refresh = () => {}; 'ok'" >/dev/null
+        i._poller._cancellable?.cancel(); i._poller._cancellable = null; i._refresh = () => {}; 'ok'" >/dev/null
 }
 
 # freeze sets _refresh as an own property, so delete restores the prototype method.

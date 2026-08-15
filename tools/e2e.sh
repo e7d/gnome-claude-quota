@@ -627,13 +627,13 @@ group_hover() {
 # fetch never settles because a real poll resolves before the spinner is read.
 unfreeze_refresh() {
     shell_eval "delete $IND._refresh;
-        $IND._fetchCycle = () => new Promise(() => {});
+        $IND._poller.refresh = () => new Promise(() => {});
         'ok'" >/dev/null
 }
 
 refreeze_refresh() {
     shell_eval "$IND._refreshing = false;
-        delete $IND._fetchCycle;
+        delete $IND._poller.refresh;
         $IND._refresh = () => {};
         $IND._render();
         'ok'" >/dev/null
@@ -681,7 +681,7 @@ stub_attempt_log() {
     ATTEMPTS_LOG="$(mktemp -t claude-quota-attempts.XXXXXX)"
     shell_eval "delete $IND._refresh;
         $IND._store.attemptsPath = () => '$ATTEMPTS_LOG';
-        $IND._client.fetch = () => Promise.reject(Object.assign(new Error('Rate limited'),
+        $IND._poller._client.fetch = () => Promise.reject(Object.assign(new Error('Rate limited'),
             {rateLimited: true, retryAfter: 1, status: 429,
              headers: {'authorization': 'Bearer sk-ant-oat01-STUB',
                        'anthropic-ratelimit-requests-remaining': '0'}}));
@@ -690,7 +690,7 @@ stub_attempt_log() {
 }
 
 restore_attempt_log() {
-    shell_eval "delete $IND._client.fetch;
+    shell_eval "delete $IND._poller._client.fetch;
         delete $IND._store.attemptsPath;
         $IND._block = null;
         $IND._refresh = () => {};
@@ -741,7 +741,7 @@ prove_attempt_log() {
 # its expiry must cost no request — and must arm nothing, since only a new token
 # ends the wait.
 stub_expired_token() {
-    shell_eval "$IND._client.fetch = () => Promise.reject(Object.assign(
+    shell_eval "$IND._poller._client.fetch = () => Promise.reject(Object.assign(
         new Error('Token expired, run Claude Code once'),
         {expired: true, status: null, headers: {}, body: null, durationMs: null,
          expiresAt: new Date(Date.now() - 3600000)}));
@@ -750,7 +750,7 @@ stub_expired_token() {
 }
 
 stub_server_unauthorized() {
-    shell_eval "$IND._client.fetch = () => Promise.reject(Object.assign(
+    shell_eval "$IND._poller._client.fetch = () => Promise.reject(Object.assign(
         new Error('Token expired, run Claude Code once'),
         {status: 401, headers: {}, body: null, durationMs: null, expiresAt: null}));
         'ok'" >/dev/null
@@ -766,10 +766,10 @@ assert_expired_token_declined() {
 wake_on_renewed_token() {
     shell_eval "globalThis._wokeWith = null;
         $IND._refresh = trigger => { globalThis._wokeWith = trigger; };
-        $IND._credentialExpiry = () => new Date(Date.now() + 3600000);
+        $IND._poller._credentialExpiry = () => new Date(Date.now() + 3600000);
         $IND._seenExpiry = new Date(Date.now() - 3600000);
         $IND._block = {until: new Date(Date.now() + 900000), reason: 'rate-limit'};
-        $IND._onCredentialsWritten();
+        $IND._poller._onCredentialsWritten();
         'ok'" >/dev/null
 }
 
@@ -778,10 +778,10 @@ wake_on_renewed_token() {
 wake_on_same_token() {
     shell_eval "globalThis._wokeWith = null;
         $IND._refresh = trigger => { globalThis._wokeWith = trigger; };
-        $IND._credentialExpiry = () => new Date(Date.now() + 3600000);
+        $IND._poller._credentialExpiry = () => new Date(Date.now() + 3600000);
         $IND._seenExpiry = new Date(Date.now() + 3600000);
         $IND._block = {until: new Date(Date.now() + 900000), reason: 'rate-limit'};
-        $IND._onCredentialsWritten();
+        $IND._poller._onCredentialsWritten();
         'ok'" >/dev/null
 }
 
@@ -836,7 +836,7 @@ prove_shared_adoption() {
 }
 
 stub_reachable_endpoint() {
-    shell_eval "$IND._client.fetch = () => Promise.reject(Object.assign(
+    shell_eval "$IND._poller._client.fetch = () => Promise.reject(Object.assign(
         new Error('Cannot reach api.anthropic.com'),
         {status: null, headers: {}, body: null, durationMs: 7, expiresAt: null}));
         'ok'" >/dev/null
@@ -890,7 +890,7 @@ prove_credentials_recovery() {
 }
 
 restore_credentials_stubs() {
-    shell_eval "delete $IND._credentialExpiry;
+    shell_eval "delete $IND._poller._credentialExpiry;
         delete globalThis._wokeWith;
         $IND._block = null;
         'ok'" >/dev/null
@@ -1285,17 +1285,17 @@ wait_for_teardown() {
 # after wait_for_indicator measures _timerId null with _refreshing still true.
 wait_for_polling() {
     for _ in $(seq 150); do
-        [ "$(probe "$IND._timerId !== null")" = 'true' ] && return 0
+        [ "$(probe "$IND._poller._timerId !== null")" = 'true' ] && return 0
         sleep 0.2
     done
     return 0
 }
 
 assert_teardown_complete() {
-    assert_eq 'timer released on disable' 'null' "$(probe "globalThis._parked._timerId")"
+    assert_eq 'timer released on disable' 'null' "$(probe "globalThis._parked._poller._timerId")"
     assert_eq 'indicator marked destroyed' 'true' "$(probe "globalThis._parked._destroyed")"
     assert_eq 'in-flight fetch cancelled' 'true' \
-        "$(probe "globalThis._parked._cancellable?.is_cancelled() ?? true")"
+        "$(probe "globalThis._parked._poller._cancellable?.is_cancelled() ?? true")"
     assert_eq 'panel entry removed' 'false' \
         "$(probe "Object.keys(Main.panel.statusArea).includes('$UUID')")"
 }
@@ -1305,13 +1305,13 @@ assert_reenable_registers_once() {
         "$(probe "Object.keys(Main.panel.statusArea).filter(k => k === '$UUID').length")"
     assert_eq 'a fresh indicator replaced the old one' 'false' \
         "$(probe "$IND === globalThis._parked")"
-    assert_eq 'polling resumed' 'true' "$(probe "$IND._timerId !== null")"
+    assert_eq 'polling resumed' 'true' "$(probe "$IND._poller._timerId !== null")"
 }
 
 prove_teardown() {
     prove 'teardown complete' \
-        "shell_eval \"globalThis._parked._timerId = 1; 'ok'\" >/dev/null" \
-        "shell_eval \"globalThis._parked._timerId = null; 'ok'\" >/dev/null" \
+        "shell_eval \"globalThis._parked._poller._timerId = 1; 'ok'\" >/dev/null" \
+        "shell_eval \"globalThis._parked._poller._timerId = null; 'ok'\" >/dev/null" \
         assert_teardown_complete
 }
 
