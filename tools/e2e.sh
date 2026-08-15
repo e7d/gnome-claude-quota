@@ -924,7 +924,7 @@ group_refresh() {
     restore_attempt_log
 }
 
-LIVE_ALERTS="[...$IND._alerts.keys()].sort()"
+LIVE_ALERTS="[...$IND._alerts._live.keys()].sort()"
 
 # The comparison is made in the session because a string cannot come back through
 # probe intact, and the expected list is spelled as a JS array literal because a
@@ -937,14 +937,14 @@ assert_alert_keys() {
 
 assert_source_holds_every_alert() {
     assert_eq "$1 every live alert is in the tray" 'true' \
-        "$(probe "[...$IND._alerts.values()].every(n =>
-            ($IND._source?.notifications ?? []).includes(n)) &&
-            $IND._alerts.size === ($IND._source?.notifications ?? []).length")"
+        "$(probe "[...$IND._alerts._live.values()].every(n =>
+            ($IND._alerts._source?.notifications ?? []).includes(n)) &&
+            $IND._alerts._live.size === ($IND._alerts._source?.notifications ?? []).length")"
 }
 
 assert_alert_urgency() {
     assert_eq "$1 urgency escalates with the level" 'true' \
-        "$(probe "[...$IND._alerts.entries()].every(([key, n]) =>
+        "$(probe "[...$IND._alerts._live.entries()].every(([key, n]) =>
             n.urgency === (key.endsWith('|critical') ? 2 : 1))")"
 }
 
@@ -952,7 +952,7 @@ assert_alert_titles_name_the_quota() {
     local infix
     infix="$(js_string "$(catalog_infix '{name} at {percent}')")"
     assert_eq "$1 each title joins a quota name to its percentage" 'true' \
-        "$(probe "[...$IND._alerts.entries()].every(([key, n]) => {
+        "$(probe "[...$IND._alerts._live.entries()].every(([key, n]) => {
             const quota = $IND._quotas.find(q => key.startsWith(q.key + '|'));
             return n.title.includes($infix) && n.title.includes(quota.name) &&
                 n.title.includes(String(quota.percent));
@@ -1000,24 +1000,24 @@ prove_alerts() {
     sync_alerts
     prove 'every live alert is in the tray' \
         "shell_eval \"const i = $IND;
-            globalThis._ghost = new (i._alerts.values().next().value.constructor)(
-                {source: i._source, title: 'ghost'});
-            i._alerts.set('ghost|warning', globalThis._ghost); 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._alerts.delete('ghost|warning');
+            globalThis._ghost = new (i._alerts._live.values().next().value.constructor)(
+                {source: i._alerts._source, title: 'ghost'});
+            i._alerts._live.set('ghost|warning', globalThis._ghost); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts._live.delete('ghost|warning');
             globalThis._ghost.destroy(1); delete globalThis._ghost; 'ok'\" >/dev/null" \
         assert_source_holds_every_alert_probe
     prove 'urgency escalates with the level' \
-        "shell_eval \"[...$IND._alerts.values()].forEach(n => { n.urgency = 1; }); 'ok'\" >/dev/null" \
-        "shell_eval \"[...$IND._alerts.entries()].forEach(([k, n]) => { n.urgency = k.endsWith('|critical') ? 2 : 1; }); 'ok'\" >/dev/null" \
+        "shell_eval \"[...$IND._alerts._live.values()].forEach(n => { n.urgency = 1; }); 'ok'\" >/dev/null" \
+        "shell_eval \"[...$IND._alerts._live.entries()].forEach(([k, n]) => { n.urgency = k.endsWith('|critical') ? 2 : 1; }); 'ok'\" >/dev/null" \
         assert_alert_urgency_probe
     prove 'each title joins a quota name to its percentage' \
-        "shell_eval \"[...$IND._alerts.values()].forEach(n => { n.title = 'nothing here'; }); 'ok'\" >/dev/null" \
-        "shell_eval \"const i = $IND; [...i._alerts.keys()].forEach(k => i._withdrawAlert(k));
+        "shell_eval \"[...$IND._alerts._live.values()].forEach(n => { n.title = 'nothing here'; }); 'ok'\" >/dev/null" \
+        "shell_eval \"const i = $IND; [...i._alerts._live.keys()].forEach(k => i._alerts._withdrawAlert(k));
             i._fired = {}; i._syncAlerts(new Date()); 'ok'\" >/dev/null" \
         assert_alert_titles_probe
     prove 'a quota shows one banner at a time' \
-        "shell_eval \"$IND._alerts.set('Session (5h)|warning', $IND._alerts.values().next().value); 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._alerts.delete('Session (5h)|warning'); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts._live.set('Session (5h)|warning', $IND._alerts._live.values().next().value); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts._live.delete('Session (5h)|warning'); 'ok'\" >/dev/null" \
         assert_one_alert_per_quota_probe
 }
 
@@ -1054,7 +1054,7 @@ apply_polled_result() {
 
 assert_polled_alert() {
     assert_eq 'a poll that answered posts its own alert' 'true' \
-        "$(probe "[...$IND._alerts.keys()].includes('session|critical')")"
+        "$(probe "[...$IND._alerts._live.keys()].includes('session|critical')")"
 }
 
 prove_polled_alert() {
@@ -1090,7 +1090,7 @@ group_notify() {
     sync_alerts
     assert_alert_keys 'expired at critical' '[]'
     assert_eq 'expired empties the source with the last alert' 'null' \
-        "$(probe "$IND._source")"
+        "$(probe "$IND._alerts._source")"
     reset_alerts
     render_state warning
     sync_alerts
@@ -1138,13 +1138,16 @@ prove_tiers() {
     sync_alerts
     prove 'same tier rewrites rather than reposting' \
         "shell_eval \"$HELD.title = 'stale 78%'; 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._refreshAlerts(new Date()); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts.refresh({
+            quotas: $IND._quotas.map(q => ({...q, expired: q.resetsAt !== null && q.resetsAt <= new Date()})),
+            fired: $IND._fired, now: new Date(), locale: $IND._locale, percentLocale: $IND._percentLocale});
+            'ok'\" >/dev/null" \
         assert_refresh_in_place_probe
     set_percent 96
     sync_alerts
     prove 'crossing a tier posts anew' \
-        "shell_eval \"$IND._alerts.set('Session (5h)|warning', $HELD); 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._alerts.delete('Session (5h)|warning'); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts._live.set('Session (5h)|warning', $HELD); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._alerts._live.delete('Session (5h)|warning'); 'ok'\" >/dev/null" \
         assert_tier_crossing_probe
     reset_alerts
     render_state warning
@@ -1161,7 +1164,7 @@ prove_tiers() {
 HELD='global.cqHeldAlert'
 
 hold_alert() {
-    shell_eval "$HELD = $IND._alerts.get('$1'); 'ok'" >/dev/null
+    shell_eval "$HELD = $IND._alerts._live.get('$1'); 'ok'" >/dev/null
 }
 
 # Moving the percentage inside one tier is how a refresh is observed without waiting a
@@ -1169,14 +1172,14 @@ hold_alert() {
 # nothing and only the rewrite can change what the tray reads.
 assert_refresh_in_place() {
     assert_eq "$1 same tier rewrites the notification it already posted" 'true' \
-        "$(probe "$HELD === $IND._alerts.get('$2') && /$3/.test($HELD.title)")"
+        "$(probe "$HELD === $IND._alerts._live.get('$2') && /$3/.test($HELD.title)")"
 }
 
 assert_tier_crossing_reposts() {
     assert_eq "$1 crossing a tier posts a new notification" 'true' \
-        "$(probe "!$IND._alerts.has('Session (5h)|warning') &&
-            $IND._alerts.has('Session (5h)|critical') &&
-            $IND._alerts.get('Session (5h)|critical') !== $HELD")"
+        "$(probe "!$IND._alerts._live.has('Session (5h)|warning') &&
+            $IND._alerts._live.has('Session (5h)|critical') &&
+            $IND._alerts._live.get('Session (5h)|critical') !== $HELD")"
 }
 
 # A dismissal destroys the notification, so _alerts loses the key while the record keeps
@@ -1184,7 +1187,7 @@ assert_tier_crossing_reposts() {
 # putting it straight back.
 assert_dismissal_sticks() {
     assert_eq "$1 a dismissed alert stays dismissed" 'true' \
-        "$(probe "!$IND._alerts.has('Session (5h)|warning') &&
+        "$(probe "!$IND._alerts._live.has('Session (5h)|warning') &&
             Object.hasOwn($IND._fired, 'Session (5h)|warning')")"
 }
 
@@ -1196,7 +1199,7 @@ assert_dismissal_probe() { assert_dismissal_sticks control; }
 # Naming the constant would need imports.ui.messageTray, and the legacy imports object does
 # not exist under GNOME 50's ESM shell — the Eval fails and the dismissal silently no-ops.
 dismiss_alert() {
-    shell_eval "$IND._alerts.get('$1').destroy(); 'ok'" >/dev/null
+    shell_eval "$IND._alerts._live.get('$1').destroy(); 'ok'" >/dev/null
 }
 
 SEVERITY_CLASSES="$IND._popup._blocks.map(b => b._percent.get_style_class_name())"
@@ -1241,7 +1244,7 @@ assert_lifecycle_arc() {
     arc_step 0 normal
     assert_arc_colour 'arc back at 0%' '!/cq-(warning|critical)-/.test(c)'
     assert_alert_keys 'arc back at 0%' '[]'
-    assert_eq 'arc leaves nothing behind' 'null' "$(probe "$IND._source")"
+    assert_eq 'arc leaves nothing behind' 'null' "$(probe "$IND._alerts._source")"
     reset_alerts
 }
 
@@ -1258,7 +1261,7 @@ prove_arc() {
 
 park_indicator() {
     shell_eval "globalThis._parked = $IND;
-        globalThis._parkedSource = $IND._source; 'ok'" >/dev/null
+        globalThis._parkedSource = $IND._alerts._source; 'ok'" >/dev/null
 }
 
 # A Source with no notification left has already destroyed itself, so _onDestroy's

@@ -5,7 +5,6 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {attemptRecord, outcomeFor} from './lib/attempts.js';
@@ -13,21 +12,18 @@ import {credentialsRenewed} from './lib/credentials.js';
 import {_, resetTranslator, setTranslator} from './lib/i18n.js';
 import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
-import {alertPlan, alertRefresh, refreshDelayMs, thresholdsFrom} from './lib/notify.js';
+import {thresholdsFrom} from './lib/notify.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult, UNKNOWN_SERVICE} from './lib/state.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
+import {Alerts} from './ui/alerts.js';
 import {PanelStrip, panelScheme} from './ui/panel-fit.js';
 import {PopupBody} from './ui/popup-body.js';
 import {Store} from './ui/store.js';
 
 const CREDENTIALS_SETTLE_SECONDS = 2;
-const URGENCY = {
-    warning: MessageTray.Urgency.NORMAL,
-    critical: MessageTray.Urgency.HIGH,
-};
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
@@ -36,9 +32,6 @@ class Indicator extends PanelMenu.Button {
         this._iconPath = iconPath;
         this._prefs = prefs;
         this._openPrefs = openPrefs;
-        this._source = null;
-        this._alerts = new Map();
-        this._alertTimerId = null;
         this._prefsSignals = [];
         this._store = new Store();
         this._client = new UsageClient();
@@ -70,6 +63,11 @@ class Indicator extends PanelMenu.Button {
             LC_ALL: GLib.getenv('LC_ALL'),
             LC_NUMERIC: GLib.getenv('LC_NUMERIC'),
             LANG: GLib.getenv('LANG'),
+        });
+        this._alerts = new Alerts({
+            iconPath: this._iconPath,
+            onActivate: () => this.menu.open(true),
+            onTick: () => this._syncAlerts(new Date()),
         });
         const box = new St.BoxLayout({style_class: 'panel-status-indicators-box'});
         this._icon = new St.Icon({
@@ -183,49 +181,8 @@ class Indicator extends PanelMenu.Button {
             })));
     }
 
-    // A Source destroys itself when its last notification is removed, so the
-    // reference has to be re-made rather than kept — the shell's own
-    // getSystemSource() handles it the same way.
-    _notifySource() {
-        if (this._source !== null)
-            return this._source;
-        this._source = new MessageTray.Source({
-            title: _('Claude Quota'),
-            icon: Gio.icon_new_for_string(this._iconPath),
-        });
-        this._source.connect('destroy', () => {
-            this._source = null;
-        });
-        Main.messageTray.add(this._source);
-        return this._source;
-    }
-
-    _postAlert(alert) {
-        const source = this._notifySource();
-        const notification = new MessageTray.Notification({
-            source,
-            title: alert.title,
-            body: alert.body,
-            gicon: Gio.icon_new_for_string(this._iconPath),
-            urgency: URGENCY[alert.level],
-            isTransient: false,
-        });
-        notification.connect('activated', () => this.menu.open(true));
-        notification.connect('destroy', () => this._alerts.delete(alert.key));
-        this._alerts.set(alert.key, notification);
-        source.addNotification(notification);
-    }
-
-    _withdrawAlert(key) {
-        const notification = this._alerts.get(key);
-        if (notification === undefined)
-            return;
-        this._alerts.delete(key);
-        notification.destroy(MessageTray.NotificationDestroyedReason.EXPIRED);
-    }
-
     _syncAlerts(now) {
-        const plan = alertPlan({
+        const {fired, changed} = this._alerts.sync({
             quotas: markExpired(this._quotas, now),
             fired: this._fired,
             thresholds: thresholdsFrom(this._settingsValues()),
@@ -233,75 +190,19 @@ class Indicator extends PanelMenu.Button {
             locale: this._locale,
             percentLocale: this._percentLocale,
         });
-        plan.withdraw.forEach(key => this._withdrawAlert(key));
-        plan.post.forEach(alert => this._postAlert(alert));
-        this._fired = plan.fired;
+        this._fired = fired;
         // The plan can only have moved an entry by dropping or writing one, and both
         // of those leave a key in withdraw or post — so an empty diff has nothing to
         // persist, which is every ordinary poll.
-        if (plan.post.length || plan.withdraw.length)
+        if (changed)
             this._saveCache();
-        this._refreshAlerts(now);
-        this._trackAlertRefresh();
-    }
-
-    // Writing any property schedules an idle that re-stamps datetime to now, so a
-    // notification refreshed every minute would read "Just now" forever. Assigning
-    // datetime cancels that idle — but only a *different* boxed value emits the notify
-    // that does the cancelling, hence a fresh DateTime over the same instant.
-    _rewrite(notification, {title, body}) {
-        if (notification.title === title && notification.body === body)
-            return;
-        const raisedAt = notification.datetime.to_unix();
-        notification.title = title;
-        notification.body = body;
-        notification.datetime = GLib.DateTime.new_from_unix_local(raisedAt);
-    }
-
-    _refreshAlerts(now) {
-        alertRefresh({
+        this._alerts.refresh({
             quotas: markExpired(this._quotas, now),
-            fired: this._fired,
+            fired,
             now,
             locale: this._locale,
             percentLocale: this._percentLocale,
-        }).forEach(alert => {
-            const notification = this._alerts.get(alert.key);
-            if (notification !== undefined)
-                this._rewrite(notification, alert);
         });
-    }
-
-    // The tick re-plans as well as re-words, so a window ending while the extension is
-    // rate-limited withdraws within the minute instead of waiting for a fetch it is not
-    // allowed to make. It exists only while something is on screen to correct.
-    _trackAlertRefresh() {
-        if (this._alerts.size === 0) {
-            this._stopAlertRefresh();
-            return;
-        }
-        if (this._alertTimerId)
-            return;
-        this._armAlertRefresh();
-    }
-
-    // One shot that re-arms from the tick, rather than a repeating timer: each arming is
-    // measured from the clock, so the cadence cannot drift and a suspended laptop resumes on
-    // the boundary instead of wherever it left off. The id is cleared before the sync, which
-    // is what lets _trackAlertRefresh arm the next one.
-    _armAlertRefresh() {
-        this._alertTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, refreshDelayMs(new Date()), () => {
-            this._alertTimerId = null;
-            this._syncAlerts(new Date());
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    _stopAlertRefresh() {
-        if (!this._alertTimerId)
-            return;
-        GLib.Source.remove(this._alertTimerId);
-        this._alertTimerId = null;
     }
 
     _scheduleNext(seconds) {
@@ -584,10 +485,7 @@ class Indicator extends PanelMenu.Button {
         this._settings.disconnect(this._schemeId);
         this._prefsSignals.forEach(id => this._prefs.disconnect(id));
         this._prefsSignals = [];
-        this._stopAlertRefresh();
-        this._alerts.clear();
-        this._source?.destroy(MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
-        this._source = null;
+        this._alerts.destroy();
         this._cancellable?.cancel();
         this._client.destroy();
         this._status.destroy();

@@ -196,7 +196,7 @@ render_state() {
 # clears it first and asks for the sync explicitly.
 reset_alerts() {
     shell_eval "const i = Main.panel.statusArea['$UUID'];
-        [...i._alerts.keys()].forEach(key => i._withdrawAlert(key));
+        [...i._alerts._live.keys()].forEach(key => i._alerts._withdrawAlert(key));
         i._fired = {}; 'ok'" >/dev/null
 }
 
