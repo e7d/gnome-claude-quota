@@ -305,30 +305,23 @@ class Indicator extends PanelMenu.Button {
         return views.filter(quota => visible[quota.scope][surface]);
     }
 
-    _popupViewModel(quotaViews, menuViews, now) {
-        return {
-            ...popupView({
-                block: this._block,
-                service: this._service,
-                error: this._error,
-                fetchedAt: this._fetchedAt,
-                refreshing: this._refreshing,
-                lastRequestAt: this._lastRequestAt,
-                quotaCount: quotaViews.length,
-                menuQuotaCount: menuViews.length,
-                locale: this._locale,
-                now,
-            }),
-            refreshing: this._refreshing,
-        };
-    }
-
     _render() {
         const now = new Date();
         const scheme = this._scheme;
         const quotaViews = this._quotaViews(now);
         const menuViews = this._visibleOn('menu', quotaViews);
-        const view = this._popupViewModel(quotaViews, menuViews, now);
+        const view = popupView({
+            block: this._block,
+            service: this._service,
+            error: this._error,
+            fetchedAt: this._fetchedAt,
+            refreshing: this._refreshing,
+            lastRequestAt: this._lastRequestAt,
+            quotaCount: quotaViews.length,
+            menuQuotaCount: menuViews.length,
+            locale: this._locale,
+            now,
+        });
         this._popup.update({view, quotas: menuViews, now, scheme, locale: this._locale, percentLocale: this._percentLocale});
         const barScheme = panelScheme();
         const panel = panelView({

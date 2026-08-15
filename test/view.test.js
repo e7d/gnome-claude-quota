@@ -79,6 +79,11 @@ test('popupView disables refresh while a request is in flight', () => {
     assert.equal(popupView(base({refreshing: true})).refreshEnabled, false);
 });
 
+test('popupView returns refreshing as its own field, not just folded into refreshEnabled', () => {
+    assert.equal(popupView(base({refreshing: true})).refreshing, true);
+    assert.equal(popupView(base({refreshing: false})).refreshing, false);
+});
+
 test('popupView disables refresh inside the minimum request interval', () => {
     const view = popupView(base({lastRequestAt: new Date('2026-08-14T11:59:55Z')}));
     assert.equal(view.refreshEnabled, false);
