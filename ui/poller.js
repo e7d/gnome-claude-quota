@@ -8,12 +8,13 @@ import {StatusClient, UsageClient, credentialExpiry, credentialsPath} from '../l
 const CREDENTIALS_SETTLE_SECONDS = 2;
 
 export class Poller {
-    constructor({store, onResult, onServiceStatus, onCredentials, onDue}) {
+    constructor({store, onResult, onServiceStatus, onCredentials, onDue, onSent}) {
         this._store = store;
         this._onResult = onResult;
         this._onServiceStatus = onServiceStatus;
         this._onCredentials = onCredentials;
         this._onDue = onDue;
+        this._onSent = onSent;
         this._client = new UsageClient();
         this._status = new StatusClient();
         this._cancellable = null;
@@ -124,6 +125,8 @@ export class Poller {
     }
 
     _recordAttempt(result, trigger, endpoint = 'usage') {
+        if (endpoint === 'usage' && result.durationMs !== null)
+            this._onSent();
         this._store.appendAttempt(attemptRecord({
             now: new Date(),
             trigger,

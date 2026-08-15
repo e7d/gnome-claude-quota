@@ -61,6 +61,7 @@ class Indicator extends PanelMenu.Button {
             onServiceStatus: service => this._handleServiceStatus(service),
             onCredentials: expiry => this._handleCredentials(expiry),
             onDue: () => this._refresh('timer'),
+            onSent: () => this._handleSent(),
         });
         this._seenExpiry = this._poller._credentialExpiry();
         this._alerts = new Alerts({
@@ -262,9 +263,11 @@ class Indicator extends PanelMenu.Button {
         this._renderSafely();
     }
 
+    _handleSent() {
+        this._lastRequestAt = new Date();
+    }
+
     _handleResult(result) {
-        if (result.durationMs !== null)
-            this._lastRequestAt = new Date();
         this._applyResult(result);
         this._renderSafely();
     }
