@@ -59,6 +59,9 @@ jobs:
       - name: test
         run: docker exec "$C" npm test
 
+      - name: coverage
+        run: docker exec "$C" npm run coverage
+
       - name: e2e
         run: docker exec "$C" npm run e2e -- --a11y
 

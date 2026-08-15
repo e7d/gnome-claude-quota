@@ -5,6 +5,7 @@
   "scripts": {
     "lint": "oxlint",
     "test": "TZ=UTC LC_ALL=C node --test",
+    "coverage": "mkdir -p coverage && TZ=UTC LC_ALL=C node --test --experimental-test-coverage --test-coverage-include='lib/**' --test-coverage-lines=100 --test-coverage-branches=95 --test-coverage-functions=100 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info && node tools/coverage-census.js",
     "dev": "tools/preview.sh --windowed",
     "dev:watch": "tools/preview.sh --windowed --watch",
     "preview": "tools/preview.sh",
