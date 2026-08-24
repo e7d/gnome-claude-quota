@@ -135,9 +135,6 @@ squeeze_for() {
 
 setup_for() {
     case "$1" in
-        # render_state blanks _service so a fabricated scenario is hermetic, which for
-        # live data erases the one field no cache holds — leaving the panel claiming
-        # every service is fine until the status timer next fires, up to 60s later.
         live) echo "i._loadCache(); i._poller._pollStatus();" ;;
         normal) echo "i._quotas = [q('S','Session (5h)',7,270,SESSION), q('W','Weekly',12,9000,WEEK)];" ;;
         over-pace) echo "i._quotas = [q('S','Session (5h)',68,240,SESSION), q('W','Weekly',20,2000,WEEK)];" ;;

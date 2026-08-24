@@ -150,9 +150,6 @@ assert_rate_limit_note() {
             === ($IND._block?.until > new Date())")"
 }
 
-# Every service scenario until 2026-08-24 staged a 503 alongside the issue, so the
-# panel had never been asked to carry an incident and live quotas at once — which is
-# exactly the shape of an outage that degrades the models while /usage answers 200.
 assert_issue_trails_quota() {
     assert_eq "$1 the incident emoji trails live quota cells" 'true' \
         "$(probe "($PANEL_QUOTAS).length > 0

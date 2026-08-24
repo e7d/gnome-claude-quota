@@ -160,10 +160,6 @@ export class Poller {
         return this._cancellable === cancellable;
     }
 
-    // The outage of 2026-08-24 degraded Claude Code while every usage request answered
-    // 200, so our own endpoint's verdict is no evidence about the service and this poll
-    // owes the usage refresh nothing: its own timer, its own cancellable, its own
-    // failures. status.claude.com shares neither host nor allowance with the usage call.
     _pollStatus() {
         const cancellable = new Gio.Cancellable();
         this._statusCancellable?.cancel();

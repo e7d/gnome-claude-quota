@@ -117,9 +117,6 @@ test('applyResult on a plain failure keeps the description and clears any block'
     assert.equal(next.service, null);
 });
 
-// A server error on our own endpoint says nothing about the service: the outage of
-// 2026-08-24 degraded Claude Code while every usage request answered 200, and the
-// reverse holds too. Only the status poll may name a service state.
 test('applyResult invents no service status from a server error', () => {
     const {state: next} = applyResult({
         state: state(),
