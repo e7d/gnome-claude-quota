@@ -138,6 +138,8 @@ tile_name() {
 : "${DEVKIT_SETUP:=}"
 : "${DEVKIT_HEADLESS:=0}"
 : "${DEVKIT_SESSION:=$DEVKIT_NAME}"
+: "${GTK_A11Y:=none}"
+export GTK_A11Y
 DEVKIT_MONITOR='1440x900'
 DEVKIT_VIEWER='/usr/lib/mutter-devkit'
 
