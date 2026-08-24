@@ -51,7 +51,7 @@ The button goes insensitive while a `429` is in force, and while the 2-minute fl
 
 ## Service problems
 
-When a usage request comes back `5xx`, the extension appends an emoji after the quotas in the panel and a matching one-line status at the foot of the popup. That line is itself the button: clicking it opens [status.claude.com](https://status.claude.com/). A single failure is enough to raise it — there is no failure counter to wait out.
+When [status.claude.com](https://status.claude.com/) reports the Claude Code component as anything other than operational, the extension appends an emoji after the quotas in the panel and a matching one-line status at the foot of the popup. That line is itself the button: clicking it opens the status page.
 
 | Line | What it means |
 |---|---|
@@ -59,16 +59,15 @@ When a usage request comes back `5xx`, the extension appends an emoji after the 
 | ⚠️ Partial outage | reported as `partial_outage` |
 | 🔴 Major outage | reported as `major_outage` |
 | 🚧 Under maintenance | reported as `under_maintenance` |
-| 🚨 Service error | the request failed, but the status page reads operational, is unreachable, or answers something unrecognised |
+| 🚨 Service error | the status page is unreachable, or answers something unrecognised |
 
-The wording comes from the Claude Code component on [status.claude.com](https://status.claude.com/); the *decision to show anything at all* comes from your own failed request. Two consequences follow:
+The status page is polled on its own 60-second timer, independent of the quota poll. Neither one's answer decides the other's:
 
-- A degraded status page with no local failures shows nothing. If your requests all succeed, you are not in the outage.
-- `429` is not a failure. The service is working and refusing you, so it raises no error line and no status row — the status page cannot explain a spent allowance. The only sign is the refresh button greying out until the retry time.
+- An outage that leaves the usage endpoint healthy still shows. On 2026-08-24 Claude Code sat at `partial_outage` for hours while every usage request answered `200`; the panel is meant to say so, and your quota figures stay on display beside the emoji because they are still true.
+- A failed usage request raises no service line by itself. An expired token or an unreachable host is your side of the wire, and the status page has nothing to say about it.
+- `429` is not an outage either. The service is working and refusing you; the only sign is the refresh button greying out until the retry time.
 
-A failure the service is not responsible for — an expired token, an unreachable host — states itself on the same line but stays inert, because status.claude.com has nothing to say about it.
-
-The status page is only fetched **after** a `5xx`, so the ordinary 5-minute poll stays a single request and a status.claude.com outage cannot slow it down.
+status.claude.com is unauthenticated, on its own host, and shares nothing with the usage allowance — so the tighter cadence costs the quota poll neither a request nor a delay.
 
 ## Settings
 
@@ -93,19 +92,19 @@ The extension reads your OAuth token from `~/.claude/.credentials.json` (read-on
 
 ```bash
 mkdir -p ~/.local/share/gnome-shell/extensions
-git clone https://github.com/e7d/claude-quota ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
+git clone https://github.com/e7d/gnome-claude-quota ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
 gnome-extensions enable claude-quota@e7d.io
 ```
 
 To keep the checkout elsewhere and symlink it instead, link the clone by absolute path:
 
 ```bash
-git clone https://github.com/e7d/claude-quota
+git clone https://github.com/e7d/gnome-claude-quota
 mkdir -p ~/.local/share/gnome-shell/extensions
-ln -sfn "$(realpath claude-quota)" ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
+ln -sfn "$(realpath gnome-claude-quota)" ~/.local/share/gnome-shell/extensions/claude-quota@e7d.io
 ```
 
-Run that from the directory *containing* the clone, not from inside it. Inside, `claude-quota` resolves against the repository itself and you get a symlink pointing at its own parent.
+Run that from the directory *containing* the clone, not from inside it. Inside, `gnome-claude-quota` resolves against the repository itself and you get a symlink pointing at its own parent.
 
 On Wayland, a running shell session does not detect newly installed extensions until you log out and back in. If `gnome-extensions enable` reports `Extension "claude-quota@e7d.io" does not exist`, log out first. It is not a sign of a broken install.
 

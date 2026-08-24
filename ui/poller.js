@@ -2,6 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {attemptRecord, outcomeFor} from '../lib/attempts.js';
+import {STATUS_POLL_SECONDS} from '../lib/policy.js';
 import {UNKNOWN_SERVICE} from '../lib/state.js';
 import {StatusClient, UsageClient, credentialExpiry, credentialsPath} from '../lib/usage.js';
 
@@ -23,7 +24,10 @@ export class Poller {
         this._credentialsSignal = 0;
         this._credentialsSettleId = 0;
         this._destroyed = false;
+        this._statusCancellable = null;
+        this._statusTimerId = 0;
         this._watchCredentials();
+        this._pollStatus();
     }
 
     schedule(seconds) {
@@ -153,13 +157,32 @@ export class Poller {
         if (result === null || this._destroyed || this._cancellable !== cancellable)
             return false;
         this._onResult(result);
-        if (result.serverError) {
-            const service = await this._refreshServiceStatus(cancellable, trigger);
-            if (this._destroyed || this._cancellable !== cancellable)
-                return false;
-            this._onServiceStatus(service);
-        }
         return this._cancellable === cancellable;
+    }
+
+    // The outage of 2026-08-24 degraded Claude Code while every usage request answered
+    // 200, so our own endpoint's verdict is no evidence about the service and this poll
+    // owes the usage refresh nothing: its own timer, its own cancellable, its own
+    // failures. status.claude.com shares neither host nor allowance with the usage call.
+    _pollStatus() {
+        const cancellable = new Gio.Cancellable();
+        this._statusCancellable?.cancel();
+        this._statusCancellable = cancellable;
+        this._refreshServiceStatus(cancellable, 'status-timer').then(service => {
+            if (this._destroyed || this._statusCancellable !== cancellable)
+                return;
+            this._onServiceStatus(service);
+            this._scheduleStatus();
+        }).catch(logError);
+    }
+
+    _scheduleStatus() {
+        this._statusTimerId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_LOW, STATUS_POLL_SECONDS, () => {
+                this._statusTimerId = 0;
+                this._pollStatus();
+                return GLib.SOURCE_REMOVE;
+            });
     }
 
     destroy() {
@@ -177,7 +200,12 @@ export class Poller {
             this._credentialsMonitor.cancel();
             this._credentialsMonitor = null;
         }
+        if (this._statusTimerId) {
+            GLib.Source.remove(this._statusTimerId);
+            this._statusTimerId = 0;
+        }
         this._cancellable?.cancel();
+        this._statusCancellable?.cancel();
         this._client.destroy();
         this._status.destroy();
     }

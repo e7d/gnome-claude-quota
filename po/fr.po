@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-15 08:40+0200\n"
+"POT-Creation-Date: 2026-08-24 09:44+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -104,23 +104,23 @@ msgstr "H"
 msgid "{name} at {percent}"
 msgstr "{name} à {percent}"
 
-#: lib/policy.js:15
+#: lib/policy.js:19
 msgid "Degraded performance"
 msgstr "Performances dégradées"
 
-#: lib/policy.js:16
+#: lib/policy.js:20
 msgid "Partial outage"
 msgstr "Panne partielle"
 
-#: lib/policy.js:17
+#: lib/policy.js:21
 msgid "Major outage"
 msgstr "Panne majeure"
 
-#: lib/policy.js:18
+#: lib/policy.js:22
 msgid "Under maintenance"
 msgstr "Maintenance en cours"
 
-#: lib/policy.js:21
+#: lib/policy.js:25
 msgid "Service error"
 msgstr "Erreur de service"
 

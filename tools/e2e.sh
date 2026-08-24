@@ -150,6 +150,22 @@ assert_rate_limit_note() {
             === ($IND._block?.until > new Date())")"
 }
 
+# Every service scenario until 2026-08-24 staged a 503 alongside the issue, so the
+# panel had never been asked to carry an incident and live quotas at once — which is
+# exactly the shape of an outage that degrades the models while /usage answers 200.
+assert_issue_trails_quota() {
+    assert_eq "$1 the incident emoji trails live quota cells" 'true' \
+        "$(probe "($PANEL_QUOTAS).length > 0
+            && /cq-panel-issue/.test($PANEL_CELLS.at(-1).label.get_style_class_name() ?? '')")"
+}
+
+assert_issue_trails_quota_probe() { assert_issue_trails_quota control; }
+
+assert_issue_rides_healthy_quota() {
+    render_state service-quota-ok
+    assert_issue_trails_quota "$1"
+}
+
 assert_incident_window() {
     local until
     until="$(js_string "$(catalog_prefix 'until {time}')")"
@@ -334,6 +350,11 @@ prove_state() {
         "shell_eval \"$IND._popup._issueItem.label.text = 'until '.repeat(40); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
         assert_incident_within_popup_probe
+    render_state service-quota-ok
+    prove 'incident emoji trails the quota cells' \
+        "shell_eval \"$IND._service = null; $IND._render(); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._service = {status: 'partial_outage', until: null}; $IND._render(); 'ok'\" >/dev/null" \
+        assert_issue_trails_quota_probe
     render_state normal
     prove 'a lower warning threshold repaints' \
         "shell_eval \"$IND._popup._blocks[0]._percent.style_class = 'cq-percent cq-warning-dark'; $IND._render = () => {}; 'ok'\" >/dev/null" \
@@ -417,6 +438,7 @@ group_state() {
         assert_bar_all_hidden_shows_icon_only "$theme"
         assert_hidden_note_own_line "$theme"
         assert_hidden_note_offers_settings "$theme"
+        assert_issue_rides_healthy_quota "$theme"
     done
     set_animations true
     assert_theme_differs
@@ -1294,8 +1316,12 @@ wait_for_polling() {
 assert_teardown_complete() {
     assert_eq 'timer released on disable' 'null' "$(probe "globalThis._parked._poller._timerId")"
     assert_eq 'indicator marked destroyed' 'true' "$(probe "globalThis._parked._destroyed")"
+    assert_eq 'status timer released on disable' '0' \
+        "$(probe "globalThis._parked._poller._statusTimerId")"
     assert_eq 'in-flight fetch cancelled' 'true' \
         "$(probe "globalThis._parked._poller._cancellable?.is_cancelled() ?? true")"
+    assert_eq 'in-flight status fetch cancelled' 'true' \
+        "$(probe "globalThis._parked._poller._statusCancellable?.is_cancelled() ?? true")"
     assert_eq 'panel entry removed' 'false' \
         "$(probe "Object.keys(Main.panel.statusArea).includes('$UUID')")"
 }

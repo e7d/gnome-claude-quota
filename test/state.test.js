@@ -1,7 +1,7 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
-import {adoptShared, applyResult, UNKNOWN_SERVICE} from '../lib/state.js';
+import {adoptShared, applyResult} from '../lib/state.js';
 
 const NOW = new Date('2026-08-14T12:00:00Z');
 
@@ -117,13 +117,64 @@ test('applyResult on a plain failure keeps the description and clears any block'
     assert.equal(next.service, null);
 });
 
-test('applyResult names the service unknown on a server error before status has answered', () => {
+// A server error on our own endpoint says nothing about the service: the outage of
+// 2026-08-24 degraded Claude Code while every usage request answered 200, and the
+// reverse holds too. Only the status poll may name a service state.
+test('applyResult invents no service status from a server error', () => {
     const {state: next} = applyResult({
         state: state(),
         result: ok({error: 'nope', payload: null, desc: 'Server error', serverError: true}),
         now: NOW,
     });
-    assert.deepEqual(next.service, UNKNOWN_SERVICE);
+    assert.equal(next.service, null);
+});
+
+const DEGRADED = {status: 'partial_outage', until: null};
+
+test('applyResult keeps a known service issue through a successful poll', () => {
+    const {state: next} = applyResult({
+        state: state({service: DEGRADED}),
+        result: ok(),
+        now: NOW,
+    });
+    assert.deepEqual(next.service, DEGRADED);
+});
+
+test('applyResult keeps a known service issue through a plain failure', () => {
+    const {state: next} = applyResult({
+        state: state({service: DEGRADED}),
+        result: ok({error: 'nope', payload: null, desc: 'Network unreachable'}),
+        now: NOW,
+    });
+    assert.deepEqual(next.service, DEGRADED);
+});
+
+test('applyResult keeps a known service issue through a rate-limit block', () => {
+    const {state: next} = applyResult({
+        state: state({service: DEGRADED}),
+        result: ok({error: 'nope', payload: null, desc: 'Rate limited', rateLimited: true, retryAfter: 300}),
+        now: NOW,
+    });
+    assert.deepEqual(next.service, DEGRADED);
+});
+
+test('applyResult prefers a known service issue over the unknown placeholder', () => {
+    const {state: next} = applyResult({
+        state: state({service: DEGRADED}),
+        result: ok({error: 'nope', payload: null, desc: 'Server error', serverError: true}),
+        now: NOW,
+    });
+    assert.deepEqual(next.service, DEGRADED);
+});
+
+test('adoptShared keeps a known service issue', () => {
+    const fresher = new Date('2026-08-14T12:05:00Z');
+    const {state: next} = adoptShared({
+        state: state({fetchedAt: NOW, service: DEGRADED}),
+        shared: {limits: [], fetchedAt: fresher},
+        now: NOW,
+    });
+    assert.deepEqual(next.service, DEGRADED);
 });
 
 test('adoptShared declines a payload that is not fresher than ours', () => {

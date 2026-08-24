@@ -4,7 +4,7 @@ SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-r
            long-name locale rate-limited rate-limited-day error token-expired loading refreshing fresh no-data
            model-scoped-issue narrow-two narrow-one narrow-icon narrow-issue
            service-degraded service-partial service-major service-maintenance
-           service-maintenance-until service-maintenance-day service-error)
+           service-maintenance-until service-maintenance-day service-error service-quota-ok)
 PICKED=()
 FILLER='global.cqPanelFiller'
 
@@ -135,7 +135,10 @@ squeeze_for() {
 
 setup_for() {
     case "$1" in
-        live) echo "i._loadCache();" ;;
+        # render_state blanks _service so a fabricated scenario is hermetic, which for
+        # live data erases the one field no cache holds — leaving the panel claiming
+        # every service is fine until the status timer next fires, up to 60s later.
+        live) echo "i._loadCache(); i._poller._pollStatus();" ;;
         normal) echo "i._quotas = [q('S','Session (5h)',7,270,SESSION), q('W','Weekly',12,9000,WEEK)];" ;;
         over-pace) echo "i._quotas = [q('S','Session (5h)',68,240,SESSION), q('W','Weekly',20,2000,WEEK)];" ;;
         warning) echo "i._quotas = [q('S','Session (5h)',78,90,SESSION), q('W','Weekly',80,2000,WEEK)];" ;;
@@ -157,6 +160,7 @@ setup_for() {
         no-data) echo "i._fetchedAt = null; i._error = {msgid: 'Cannot reach api.anthropic.com', values: {}};" ;;
         model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = {msgid: 'Usage request failed (HTTP {status})', values: {status: 503}}; i._service = {status: 'partial_outage', until: null};" ;;
         narrow-*) setup_for model-scoped ;;
+        service-quota-ok) echo "$(setup_quotas) i._service = {status: 'partial_outage', until: null};" ;;
         service-*) echo "$(setup_quotas) i._error = {msgid: 'Usage request failed (HTTP {status})', values: {status: 503}}; i._service = {status: '$(service_status "$1")', until: $(service_until "$1")};" ;;
         *) die "unknown scenario $1" ;;
     esac
