@@ -7,8 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: git.lan.e7d.io
-  CI_IMAGE: git.lan.e7d.io/${{ github.repository }}-ci
+  REGISTRY: ${{ vars.REGISTRY }}
   UUID: claude-quota@e7d.io
 
 jobs:
@@ -18,21 +17,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: login
-        if: ${{ github.server_url != 'https://github.com' }}
+        if: ${{ vars.REGISTRY }}
         env: { T: "${{ secrets.REGISTRY_TOKEN }}", U: "${{ github.actor }}" }
         run: echo "$T" | docker login "$REGISTRY" -u "$U" --password-stdin
 
       - name: image
-        env:
-          CACHED: ${{ github.server_url != 'https://github.com' }}
         run: |
-          IMAGE="$CI_IMAGE:$(sha256sum .github/ci.Dockerfile | cut -c1-16)"
+          IMAGE="${REGISTRY:+$REGISTRY/}${GITHUB_REPOSITORY}-ci:$(sha256sum .github/ci.Dockerfile | cut -c1-16)"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
-          if [ "$CACHED" = 'true' ] && docker pull "$IMAGE" 2>/dev/null; then
+          if [ -n "$REGISTRY" ] && docker pull "$IMAGE" 2>/dev/null; then
             exit 0
           fi
           docker build -f .github/ci.Dockerfile -t "$IMAGE" .github
-          if [ "$CACHED" = 'true' ]; then
+          if [ -n "$REGISTRY" ]; then
             docker push "$IMAGE"
           fi
 
