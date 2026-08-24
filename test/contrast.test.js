@@ -162,12 +162,14 @@ const STYLESHEET = `
     color: #ffffff;
     -barlevel-background-color: rgba(255, 255, 255, 0.1);
     -barlevel-active-background-color: #d97757;
+    -barlevel-overdrive-color: #d97757;
 }
 
 .cq-bar-light {
     color: #000000;
     -barlevel-background-color: rgba(34, 34, 38, 0.1);
     -barlevel-active-background-color: #c6613f;
+    -barlevel-overdrive-color: #c6613f;
 }
 `;
 
