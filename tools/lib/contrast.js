@@ -362,14 +362,26 @@ function withoutBlends(findings) {
         && isBlend(finding.ink, finding.background, other.ink)));
 }
 
-function declaredColor(cssText, scheme, property) {
-    const block = new RegExp(`\\.cq-bar-${scheme}\\s*\\{([^}]*)\\}`).exec(cssText)?.[1];
+function ruleColor(cssText, selector, property) {
+    const block = new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`).exec(cssText)?.[1];
     if (block === undefined)
-        throw new Error(`stylesheet has no .cq-bar-${scheme} rule`);
+        throw new Error(`stylesheet has no .${selector} rule`);
     const value = new RegExp(`(?:^|[;{\\s])${property}\\s*:\\s*([^;]+);`).exec(block)?.[1]?.trim();
     if (value === undefined)
-        throw new Error(`.cq-bar-${scheme} declares no ${property}`);
+        throw new Error(`.${selector} declares no ${property}`);
     return parseColor(value);
+}
+
+function declaredColor(cssText, scheme, property) {
+    return ruleColor(cssText, `cq-bar-${scheme}`, property);
+}
+
+// Read from the stylesheet rather than copied beside the waiver that uses them: a palette
+// change would otherwise leave the waiver naming colours nothing paints any more, which
+// waives nothing and reads exactly like a waiver that is still working.
+export function severityInks(cssText) {
+    return ['warning', 'critical'].flatMap(level =>
+        ['dark', 'light'].map(scheme => ruleColor(cssText, `cq-${level}-${scheme}`, 'color')));
 }
 
 function parseColor(value) {

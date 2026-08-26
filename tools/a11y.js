@@ -3,11 +3,12 @@ import {readFileSync, readdirSync} from 'node:fs';
 import {basename, dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {scanImage, tickFindings, toHex} from './lib/contrast.js';
+import {scanImage, severityInks, tickFindings, toHex} from './lib/contrast.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SHOTS = join(ROOT, 'preview');
 const STYLESHEET = join(ROOT, 'stylesheet.css');
+const SEVERITY_INKS = severityInks(readFileSync(STYLESHEET, 'utf8')).map(toHex);
 
 function readImage(path) {
     const size = execFileSync('magick', ['identify', '-format', '%w %h\n', path], {encoding: 'utf8'});
@@ -40,9 +41,13 @@ const TRANSIENT_PANEL_PILL_SURFACES = ['#474747', '#bdbdbf', '#2b2b2b', '#d5d5d7
 
 const CI_PANEL_PILL_SURFACES = ['#5e5e61', '#46464a'];
 
+// Both halves are required. Darkening a severity colour until it clears 4.5:1 on a pill the
+// pointer paints for a moment turns amber into brown and destroys the meaning the colour
+// exists to carry — a trade no other ink can claim, so no other ink is waived on it.
 function accepted(finding) {
-    return [...TRANSIENT_PANEL_PILL_SURFACES, ...CI_PANEL_PILL_SURFACES]
-        .some(surface => near(finding.background, surface));
+    return SEVERITY_INKS.some(ink => near(finding.ink, ink)) &&
+        [...TRANSIENT_PANEL_PILL_SURFACES, ...CI_PANEL_PILL_SURFACES]
+            .some(surface => near(finding.background, surface));
 }
 
 function near(color, hex) {
@@ -62,11 +67,15 @@ function report(path) {
     const under = findings.filter(finding => finding.ratio < finding.threshold.ratio);
     const failed = under.filter(finding => !accepted(finding))
         .toSorted((one, other) => one.ratio - other.ratio);
-    const waived = under.length - failed.length;
+    const waived = under.filter(accepted);
     console.log(`${basename(path)}: ${findings.length} pair(s) measured, ${failed.length} under threshold`
-        + (waived ? `, ${waived} accepted` : ''));
+        + (waived.length ? `, ${waived.length} accepted` : ''));
     for (const finding of failed)
         console.log(`  ${describe(finding)}`);
+    // A waiver nobody can read is a threshold quietly lowered, so each one says what it let
+    // through — the whole point of accepting a pair rather than dropping the measurement.
+    for (const finding of waived)
+        console.log(`  accepted: ${describe(finding)}`);
     return failed.length;
 }
 

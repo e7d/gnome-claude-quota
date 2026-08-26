@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
 import {
     blendFraction, chroma, clusterColors, colorDistance, contrastRatio, isBlend, isTextLike,
-    LARGE_TEXT, measureMark, NORMAL_TEXT, scanImage, textThreshold, tickFindings, toHex,
+    LARGE_TEXT, measureMark, NORMAL_TEXT, scanImage, severityInks, textThreshold, tickFindings, toHex,
 } from '../tools/lib/contrast.js';
 
 const WHITE = {red: 255, green: 255, blue: 255};
@@ -198,4 +199,17 @@ test('tickFindings reports a tick that cannot be seen on the surface it sits on'
 
 test('tickFindings refuses a stylesheet missing a colour rather than scoring three', () => {
     assert.throws(() => tickFindings(STYLESHEET.replace('color: #000000;', '')), /declares no color/);
+});
+
+// The a11y waiver accepts a pair only when its ink is one of these, so a palette change has
+// to reach the waiver — reading them from the stylesheet is what makes that automatic.
+test('severityInks reads both levels in both schemes off the stylesheet', () => {
+    const inks = severityInks(readFileSync(new URL('../stylesheet.css', import.meta.url), 'utf8'));
+    assert.deepEqual(inks.map(toHex).toSorted(), ['#a6600a', '#c01c28', '#f5c211', '#ff7b63']);
+});
+
+test('severityInks refuses a stylesheet that lost a severity rule rather than returning three', () => {
+    const css = readFileSync(new URL('../stylesheet.css', import.meta.url), 'utf8');
+    assert.throws(() => severityInks(css.replace('.cq-critical-light {', '.cq-gone-light {')),
+        /no \.cq-critical-light rule/);
 });
