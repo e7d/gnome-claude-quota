@@ -102,8 +102,21 @@ class Indicator extends PanelMenu.Button {
         this._refresh('startup');
     }
 
+    // The file holds a payload we did not author and this runs from _init, so a throw
+    // here would fail enable() at every login until the user found the file and deleted it.
     _loadCache() {
-        const cached = this._store.load();
+        try {
+            this._adoptCache(this._store.load());
+        } catch (error) {
+            logError(error);
+            this._limits = [];
+            this._quotas = [];
+            this._fetchedAt = null;
+            this._fired = {};
+        }
+    }
+
+    _adoptCache(cached) {
         if (cached === null)
             return;
         this._limits = cached.limits;
@@ -145,9 +158,20 @@ class Indicator extends PanelMenu.Button {
             })));
     }
 
+    // Guarded for the same reason _render is: it reaches the shell's own message tray, and
+    // every caller of it either arms the next poll or runs from _init.
     _syncAlerts(now) {
+        try {
+            this._planAlerts(now);
+        } catch (error) {
+            logError(error);
+        }
+    }
+
+    _planAlerts(now) {
+        const dated = markExpired(this._quotas, now);
         const {fired, changed} = this._alerts.sync({
-            quotas: markExpired(this._quotas, now),
+            quotas: dated,
             fired: this._fired,
             thresholds: thresholdsFrom(this._settingsValues()),
             now,
@@ -161,7 +185,7 @@ class Indicator extends PanelMenu.Button {
         if (changed)
             this._saveCache();
         this._alerts.refresh({
-            quotas: markExpired(this._quotas, now),
+            quotas: dated,
             fired,
             now,
             locale: this._locale,
@@ -197,13 +221,15 @@ class Indicator extends PanelMenu.Button {
         this._rateLimitStreak = state.rateLimitStreak;
     }
 
+    // The timer is armed before the side effects, not after: a throw in either of them
+    // would otherwise take the next poll with it and the indicator would never fetch again.
     _perform(effects, now) {
+        if (effects.schedule > 0)
+            this._poller.schedule(effects.schedule);
         if (effects.save)
             this._saveCache();
         if (effects.syncAlerts)
             this._syncAlerts(now);
-        if (effects.schedule > 0)
-            this._poller.schedule(effects.schedule);
     }
 
     // Claude Code holds the same payload under its own cache, so whichever of the
@@ -256,11 +282,24 @@ class Indicator extends PanelMenu.Button {
         }
         this._refreshing = true;
         this._renderSafely();
-        const current = await this._poller.refresh(trigger);
-        if (this._destroyed || !current)
+        const outcome = await this._settle(trigger);
+        if (this._destroyed || outcome === 'superseded')
             return;
         this._refreshing = false;
         this._renderSafely();
+    }
+
+    // Everything past the request runs against the shell itself — the tray, the actors —
+    // so a throw there would leave the spinner turning, the refresh button refusing and
+    // no timer armed, which is a dead indicator with no way back for the user.
+    async _settle(trigger) {
+        try {
+            return await this._poller.refresh(trigger) ? 'settled' : 'superseded';
+        } catch (error) {
+            logError(error);
+            this._poller.schedule(nextPollSeconds(null));
+            return 'failed';
+        }
     }
 
     _handleSent() {
@@ -292,24 +331,23 @@ class Indicator extends PanelMenu.Button {
         this._perform(effects, now);
     }
 
-    _quotaViews(now) {
-        const settings = this._settingsValues();
+    _quotaViews(now, settings) {
         return markSeverity(markExpired(this._quotas, now), {
             warning: settings.warning.percent,
             critical: settings.critical.percent,
         });
     }
 
-    _visibleOn(surface, views) {
-        const visible = this._settingsValues().visible;
+    _visibleOn(surface, views, visible) {
         return views.filter(quota => visible[quota.scope][surface]);
     }
 
     _render() {
         const now = new Date();
         const scheme = this._scheme;
-        const quotaViews = this._quotaViews(now);
-        const menuViews = this._visibleOn('menu', quotaViews);
+        const settings = this._settingsValues();
+        const quotaViews = this._quotaViews(now, settings);
+        const menuViews = this._visibleOn('menu', quotaViews, settings.visible);
         const view = popupView({
             block: this._block,
             service: this._service,
@@ -325,7 +363,7 @@ class Indicator extends PanelMenu.Button {
         this._popup.update({view, quotas: menuViews, now, scheme, locale: this._locale, percentLocale: this._percentLocale});
         const barScheme = panelScheme();
         const panel = panelView({
-            quotas: this._visibleOn('bar', quotaViews),
+            quotas: this._visibleOn('bar', quotaViews, settings.visible),
             hasAnyQuota: quotaViews.length > 0,
             service: this._service,
             error: this._error,
