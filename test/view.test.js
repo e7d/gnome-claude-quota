@@ -61,6 +61,10 @@ test('popupView leaves the issue as a bare label when there is no until to appen
     assert.equal(view.issue.twoLine, label);
 });
 
+test('popupView carries no issue while the component is operational', () => {
+    assert.equal(popupView(base({service: {status: 'operational', until: null}})).issue, null);
+});
+
 test('popupView renders the plain error text when nothing else silences or explains it', () => {
     const view = popupView(base({error: describe('Something went sideways')}));
     assert.equal(view.message, 'Something went sideways');
@@ -137,6 +141,19 @@ test('panelView shows no fallback when the user hid every bar quota', () => {
         quotas: [], hasAnyQuota: true, service: null, error: null,
         scheme: 'dark', percentLocale: 'en-US'});
     assert.equal(cells.length, 0);
+});
+
+test('panelView appends no emoji while the component is operational', () => {
+    const {cells, issueLast} = panelView({
+        quotas: [{short: 'S', percent: 40, severity: 'normal'}],
+        hasAnyQuota: true,
+        service: {status: 'operational'},
+        error: null,
+        scheme: 'dark',
+        percentLocale: 'en-US',
+    });
+    assert.equal(cells.length, 1);
+    assert.equal(issueLast, false);
 });
 
 test('panelView appends an incident emoji and flags it as last', () => {

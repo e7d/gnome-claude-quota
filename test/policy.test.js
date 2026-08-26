@@ -203,8 +203,8 @@ test('serviceIssue keeps the warning glyph in emoji presentation', () => {
     assert.deepEqual(points, [0x26A0, 0xFE0F]);
 });
 
-test('serviceIssue falls back to the generic error when the page reads operational', () => {
-    assert.deepEqual(serviceIssue('operational'), SERVICE_ERROR);
+test('serviceIssue reports no issue while the Claude Code component is operational', () => {
+    assert.equal(serviceIssue('operational'), null);
 });
 
 test('serviceIssue falls back to the generic error for an unknown status', () => {

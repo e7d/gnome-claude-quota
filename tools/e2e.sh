@@ -163,6 +163,23 @@ assert_issue_rides_healthy_quota() {
     assert_issue_trails_quota "$1"
 }
 
+stage_service() {
+    shell_eval "$IND._service = {status: '$1', until: null}; $IND._render(); 'ok'" >/dev/null
+}
+
+assert_no_issue_while_operational() {
+    assert_eq "$1 an operational component carries no issue emoji" 'false' \
+        "$(probe "$PANEL_CELLS.some(c => /cq-panel-issue/.test(c.label.get_style_class_name() ?? ''))")"
+}
+
+assert_no_issue_while_operational_probe() { assert_no_issue_while_operational control; }
+
+assert_operational_clears_the_issue() {
+    render_state service-quota-ok
+    stage_service operational
+    assert_no_issue_while_operational "$1"
+}
+
 assert_incident_window() {
     local until
     until="$(js_string "$(catalog_prefix 'until {time}')")"
@@ -352,6 +369,11 @@ prove_state() {
         "shell_eval \"$IND._service = null; $IND._render(); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._service = {status: 'partial_outage', until: null}; $IND._render(); 'ok'\" >/dev/null" \
         assert_issue_trails_quota_probe
+    stage_service operational
+    prove 'an operational component carries no issue emoji' \
+        "stage_service partial_outage" \
+        "stage_service operational" \
+        assert_no_issue_while_operational_probe
     render_state normal
     prove 'a lower warning threshold repaints' \
         "shell_eval \"$IND._popup._blocks[0]._percent.style_class = 'cq-percent cq-warning-dark'; $IND._render = () => {}; 'ok'\" >/dev/null" \
@@ -436,6 +458,7 @@ group_state() {
         assert_hidden_note_own_line "$theme"
         assert_hidden_note_offers_settings "$theme"
         assert_issue_rides_healthy_quota "$theme"
+        assert_operational_clears_the_issue "$theme"
     done
     set_animations true
     assert_theme_differs
