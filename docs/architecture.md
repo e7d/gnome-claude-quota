@@ -67,6 +67,12 @@ libraries, covered by `test/devkit.test.js`, `test/assert.test.js`, `test/attrib
 `test/contrast.test.js`, `test/log-view.test.js` and `test/coverage-census.test.js`. They are
 described in `AGENTS.md` § Shape of the code and `docs/development.md`, not repeated here.
 
+`schemas/gschemas.compiled` is a committed build artifact of the XML beside it, because the
+checkout is what a user installs and the shell reads the compiled file rather than the source.
+`test/schema.test.js` recompiles the XML into a temporary directory and compares the bytes, so
+an edit nobody ran `glib-compile-schemas` over fails the suite instead of changing only the
+review.
+
 ## The render path
 
 `extension.js` holds the truth as state fields on `Indicator` (`_quotas`, `_limits`,
@@ -92,7 +98,7 @@ Each row names the files in the order you touch them.
 | --- | --- |
 | A new quota field | `lib/model.js` (`quotas()`, from the payload's `limit.*`) → `lib/state.js` if it changes what the reducer carries → `lib/view.js` (into the view model) → `ui/quota-block.js` and/or `ui/panel-fit.js` (render it) → `test/model.test.js`, `test/view.test.js` → a scenario in the `tools/lib/` scenario table (`indicator.sh`) if no existing one exercises it |
 | A new user-facing string | The `lib/` or `ui/` module where it is read with `_()`/`n_()`/`p_()`/`N_()` (already covered by the `lib/*.js`/`ui/*.js` globs in `tools/i18n.sh`) → `npm run i18n` to update `po/claude-quota.pot` and `po/fr.po` and recompile `locale/fr/LC_MESSAGES/claude-quota.mo` → commit all three. If the string instead lives in a file outside `lib/`, `ui/`, `extension.js` or `prefs.js`, add that path to the `extract()` call in `tools/i18n.sh` **first** — `npm run i18n:check` only diffs a fresh extraction against the committed catalog using that same file list, so a path missing from it produces a clean check with the string silently untranslated. |
-| A new setting | `schemas/org.gnome.shell.extensions.claude-quota.gschema.xml` (add the key) → `glib-compile-schemas schemas/` to regenerate the committed `gschemas.compiled` (no npm script does this) → `lib/settings.js` (`SCOPES`/`THRESHOLDS`/`KEYS` or a new export, and `readSettings()`) → `prefs.js` (the control) → `extension.js` if it needs its own read path beyond `_settingsValues()` → `test/settings.test.js` |
+| A new setting | `schemas/org.gnome.shell.extensions.claude-quota.gschema.xml` (add the key) → `glib-compile-schemas schemas/` to regenerate the committed `gschemas.compiled` (no npm script does this, but `test/schema.test.js` fails if you forget — the shell reads the compiled file, not the XML) → `lib/settings.js` (`SCOPES`/`THRESHOLDS`/`KEYS` or a new export, and `readSettings()`) → `prefs.js` (the control) → `extension.js` if it needs its own read path beyond `_settingsValues()` → `test/settings.test.js` |
 | A new panel/popup state (e.g. a service issue or severity tier) | `lib/policy.js` (the condition, e.g. `serviceIssue()`/`severityFor()`) → `lib/style.js` if it needs a new CSS class name → `stylesheet.css` (the class) → `lib/view.js` (surface it in the view model) → `test/policy.test.js`, `test/style.test.js`, `test/view.test.js` → a scenario in the `tools/lib/` scenario table (`indicator.sh`: `SCENARIOS` and a `setup_for` case) → `npm run a11y`'s ten-scenario list in `docs/development.md` / README if the new state introduces a colour worth scoring |
 | A new e2e scenario | the `tools/lib/` scenario table (`indicator.sh`: `SCENARIOS` array and a `setup_for` case) → `tools/e2e.sh` (assign it to a group, add the assertion) → `README.md` § Development if the total scenario count is quoted there |
 
