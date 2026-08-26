@@ -1,6 +1,7 @@
 {
   "name": "claude-quota",
   "private": true,
+  "license": "GPL-2.0-or-later",
   "type": "module",
   "scripts": {
     "lint": "oxlint",

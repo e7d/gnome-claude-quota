@@ -5,5 +5,6 @@
   "gettext-domain": "claude-quota",
   "shell-version": ["50"],
   "settings-schema": "org.gnome.shell.extensions.claude-quota",
+  "url": "https://github.com/e7d/gnome-claude-quota",
   "version": 1
 }
