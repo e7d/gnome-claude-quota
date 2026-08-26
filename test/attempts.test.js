@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {MAX_BODY_CHARS, MAX_RECORDS, appendRecord, attemptRecord, outcomeFor, parseLog} from '../lib/attempts.js';
+import {MAX_BODY_CHARS, MAX_RECORDS, appendRecord, attemptRecord, outcomeFor, parseLog, recordLine} from '../lib/attempts.js';
 
 const now = new Date('2026-08-11T11:55:12.482Z');
 
@@ -122,6 +122,20 @@ test('outcomeFor reads the outcome off a fetch result', () => {
     assert.equal(outcomeFor({error: 'Token expired', rateLimited: false, status: null, expired: true}), 'token-expired');
     assert.equal(outcomeFor({error: 'Cannot reach api.anthropic.com', rateLimited: false, status: null}), 'error');
     assert.equal(outcomeFor({error: 'Usage request failed (HTTP 503)', rateLimited: false, status: 503}), 'error');
+});
+
+// The store appends this to a log it has not read, so the terminator has to come from the
+// line rather than from a join it is no longer part of.
+test('a record line carries its own terminator and parses on its own', () => {
+    const line = recordLine(ok({trigger: 'manual'}));
+    assert.equal(line.endsWith('\n'), true);
+    assert.equal(line.slice(0, -1).includes('\n'), false);
+    assert.deepEqual(parseLog(line).map(record => record.trigger), ['manual']);
+});
+
+test('lines appended one at a time read back as the same log a rewrite would hold', () => {
+    const lines = recordLine(ok()) + recordLine(ok({trigger: 'manual'}));
+    assert.deepEqual(parseLog(lines), parseLog(appendRecord(appendRecord('', ok()), ok({trigger: 'manual'}))));
 });
 
 test('appending writes one line of JSON per record', () => {
