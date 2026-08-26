@@ -932,6 +932,61 @@ prove_request_floor() {
         assert_floor_holds
 }
 
+status_attempts() {
+    local count
+    count="$(grep -c '"endpoint":"status"' "$ATTEMPTS_LOG" 2>/dev/null || true)"
+    echo "${count:-0}"
+}
+
+# The break stubs the status client before it plants a token, or the poll it unblocks
+# reaches status.claude.com for real — which is the thing being fixed.
+plant_credentials() {
+    shell_eval "$IND._poller._status.fetch = () => Promise.resolve({value: null, status: null,
+        headers: {}, body: null, durationMs: 3, error: 'Cannot reach status.claude.com'});
+        $IND._poller._statusPolling = false; 'ok'" >/dev/null
+    mkdir -p "$SANDBOX_HOME/.claude"
+    printf '{}\n' > "$SANDBOX_HOME/.claude/.credentials.json"
+}
+
+remove_token() {
+    rm -f "$SANDBOX_HOME/.claude/.credentials.json"
+}
+
+drop_credentials() {
+    remove_token
+    shell_eval "$IND._poller._statusPolling = false; 'ok'" >/dev/null
+}
+
+# Without a token the poll never leaves, so the teardown assertions on the status
+# timer and its cancellable would otherwise hold over objects that never existed.
+arm_status_poll() {
+    plant_credentials
+    shell_eval "$IND._poller._pollStatus(); 'ok'" >/dev/null
+    for _ in $(seq 50); do
+        [ "$(probe "$IND._poller._statusTimerId !== 0")" = 'true' ] && return 0
+        sleep 0.1
+    done
+    die 'the status poll never armed its timer'
+}
+
+assert_status_poll_needs_credentials() {
+    local before after
+    before="$(status_attempts)"
+    shell_eval "$IND._poller._pollStatus(); 'ok'" >/dev/null
+    sleep 1
+    after="$(status_attempts)"
+    assert_eq 'a status poll with no token is never sent' "$before" "$after"
+}
+
+prove_status_needs_credentials() {
+    drop_credentials
+    prove 'a token is what lets the status poll leave' \
+        plant_credentials \
+        drop_credentials \
+        assert_status_poll_needs_credentials
+    shell_eval "delete $IND._poller._status.fetch; 'ok'" >/dev/null
+}
+
 prove_credentials_recovery() {
     stub_expired_token
     prove 'an expired token costs no request' \
@@ -973,6 +1028,8 @@ group_refresh() {
     restore_shared_usage
     prove_request_floor
     assert_floor_holds
+    prove_status_needs_credentials
+    assert_status_poll_needs_credentials
     prove_credentials_recovery
     assert_expired_token_declined
     assert_credentials_wake
@@ -1393,10 +1450,12 @@ prove_source_closed() {
 group_lifecycle() {
     echo 'lifecycle:'
     arm_alert
+    arm_status_poll
     park_indicator
     shell_eval "Main.extensionManager.disableExtension('$UUID'); 'ok'" >/dev/null
     wait_for_teardown
     prove_teardown
+    remove_token
     assert_teardown_complete
     prove_source_closed
     assert_source_closed_on_disable

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-24 15:52+0200\n"
+"POT-Creation-Date: 2026-08-26 09:20+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -92,7 +92,7 @@ msgstr ""
 msgid "until {time}"
 msgstr ""
 
-#: lib/format.js:111 lib/usage.js:110
+#: lib/format.js:111 lib/usage.js:114
 msgid "Rate limited"
 msgstr ""
 
@@ -142,27 +142,27 @@ msgstr ""
 msgid "Model-specific"
 msgstr ""
 
-#: lib/usage.js:26
+#: lib/usage.js:30
 msgid "Cannot read ~/.claude/.credentials.json"
 msgstr ""
 
-#: lib/usage.js:30
+#: lib/usage.js:34
 msgid "No Claude token in ~/.claude/.credentials.json"
 msgstr ""
 
-#: lib/usage.js:84 lib/usage.js:107
+#: lib/usage.js:88 lib/usage.js:111
 msgid "Token expired, run Claude Code once"
 msgstr ""
 
-#: lib/usage.js:96
+#: lib/usage.js:100
 msgid "Cannot reach api.anthropic.com"
 msgstr ""
 
-#: lib/usage.js:117
+#: lib/usage.js:121
 msgid "Usage request failed (HTTP {status})"
 msgstr ""
 
-#: lib/usage.js:124
+#: lib/usage.js:128
 msgid "Unexpected response from the usage endpoint"
 msgstr ""
 

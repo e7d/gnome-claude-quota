@@ -4,7 +4,7 @@ import GLib from 'gi://GLib';
 import {attemptRecord, outcomeFor} from '../lib/attempts.js';
 import {STATUS_POLL_SECONDS} from '../lib/policy.js';
 import {UNKNOWN_SERVICE} from '../lib/state.js';
-import {StatusClient, UsageClient, credentialExpiry, credentialsPath} from '../lib/usage.js';
+import {StatusClient, UsageClient, credentialExpiry, credentialsExist, credentialsPath} from '../lib/usage.js';
 
 const CREDENTIALS_SETTLE_SECONDS = 2;
 
@@ -26,6 +26,7 @@ export class Poller {
         this._destroyed = false;
         this._statusCancellable = null;
         this._statusTimerId = 0;
+        this._statusPolling = false;
         this._watchCredentials();
         this._pollStatus();
     }
@@ -78,6 +79,8 @@ export class Poller {
 
     _onCredentialsWritten() {
         this._onCredentials(this.credentialExpiry());
+        if (!this._statusTimerId)
+            this._pollStatus();
     }
 
     async _fetchResult(cancellable, trigger) {
@@ -160,16 +163,26 @@ export class Poller {
         return this._cancellable === cancellable;
     }
 
+    // A checkout with no token has no quotas to explain, and the nested sessions the
+    // tooling runs are exactly that — so this is also what keeps a dev shell off the
+    // network, the same way a missing token already refuses the usage fetch.
     _pollStatus() {
+        if (!credentialsExist() || this._statusPolling)
+            return;
         const cancellable = new Gio.Cancellable();
         this._statusCancellable?.cancel();
         this._statusCancellable = cancellable;
+        this._statusPolling = true;
         this._refreshServiceStatus(cancellable, 'status-timer').then(service => {
+            this._statusPolling = false;
             if (this._destroyed || this._statusCancellable !== cancellable)
                 return;
             this._onServiceStatus(service);
             this._scheduleStatus();
-        }).catch(logError);
+        }).catch(error => {
+            this._statusPolling = false;
+            logError(error);
+        });
     }
 
     _scheduleStatus() {
