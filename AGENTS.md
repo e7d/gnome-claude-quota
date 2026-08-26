@@ -47,7 +47,7 @@ Every screenshot stacks the panel button's three states: resting, hovered, then 
 
     npm run e2e -- --group=state --dark-only --scenario=loading
 
-A bare `npm run e2e` now shoots every scenario in both themes by default — 31 × 2, minutes rather than seconds. `--a11y` narrows the shoot to the ten scenarios `npm run a11y` scores; `--assert` shoots nothing at all, which is the form to reach for when only behaviour, not pixels, is in question. Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
+A bare `npm run e2e` now shoots every scenario in both themes by default — 31 × 2, minutes rather than seconds. `--a11y` narrows the shoot to the ten scenarios `npm run a11y` scores; `--assert` shoots nothing at all, which is the form to reach for when only behaviour, not pixels, is in question. Every assertion is proven able to fail before it is trusted, on every run. Verdicts are marked `✅ ok` and `❌ FAIL`, so a failure stands out in a long log. A `❌ control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
 
 `npm run a11y` scores the contrast of whatever is currently in `preview/`, so it is only as current as your last capture or full e2e run — the e2e state group shoots the ten scenarios it scores, and a narrowed run leaves the rest as they were. It exits non-zero on a finding.
 

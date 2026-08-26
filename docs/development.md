@@ -171,11 +171,15 @@ Shooting every scenario is the default, which is also why a bare `npm run e2e` n
 control status row highlights: still passed with the break applied
 ```
 
-That line says **the assertion is dead, not the extension**. Fix the assertion, never the control. A `prove …` line on stdout is therefore not a passing test but a licence for the tests after it, and it leaves the tally alone — the counters are saved and restored around every control, so the summary counts real assertions only.
+That line says **the assertion is dead, not the extension**. Fix the assertion, never the control. Every verdict carries a marker so a failure cannot be skimmed past in a thousand-line CI log: `✅ ok`, `❌ FAIL`, `❌ control`, and the summary line takes whichever of the two the tally earned. A `prove …` line on stdout is therefore not a passing test but a licence for the tests after it, and it leaves the tally alone — the counters are saved and restored around every control, so the summary counts real assertions only.
 
 The breaks are mutations over `Eval` and the restores are re-renders, since `_render()` rebuilds every actor from state. Staging a failure by editing `extension.js` is the one thing a control must never be: it has to be undone inside the run, and a control that outlives its run is a broken checkout.
 
 The attempt-log control is the one break that runs real code rather than mutating an actor: it triggers a second fetch with `trigger` set to `timer` and expects the assertion on the newest record to fail, then triggers a `manual` one to restore. That works only because the block a `429` arms is cleared before each deliberate attempt — a blocked `_refresh` makes no upstream call and therefore writes no record, which would leave the log unchanged and read as a dead assertion.
+
+**Every attempt-log assertion counts our own records, never the file's bytes.** `own_attempts` and `last_own_attempt` filter `"endpoint":"status"` out, because the status poll appends to the same log on its own 60-second timer: a byte count answers "did anything happen" where all three of these assertions ask "did we spend a request". Measured on 2026-08-26, a status record is 213–258 bytes, and one landing inside `assert_floor_holds`' one-second window failed `a request inside the minimum interval is never sent` on GitHub with `expected '2075', got '2332'` — a 257-byte growth that was the status poll, not a request. `log_attempt` waits on the same filtered count, so a status record can no longer satisfy the wait for a usage record either, and `last_attempt_field` can no longer read a status record's fields as if they were the attempt under test.
+
+**A control that stages "the same token" has to pin one timestamp.** `credentialsRenewed` is a strict `>`, so two `new Date(Date.now() + 3600000)` calls a millisecond apart are a *renewal*: `wake_on_same_token` set `_seenExpiry` immediately and left `credentialExpiry` a lambda evaluated later, inside `_onCredentialsWritten`, so on a loaded runner the break cleared the block it was supposed to leave standing and `a renewed token ends the block` reported `still passed with the break applied` — which is the Forgejo failure of run 22. Both sides now read one `globalThis._sameExpiry`.
 
 ## Attributing a 429
 

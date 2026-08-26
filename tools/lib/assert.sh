@@ -5,12 +5,12 @@ ASSERT_FAILED=0
 
 assert_pass() {
     ASSERT_PASSED=$((ASSERT_PASSED + 1))
-    echo "ok $1"
+    echo "✅ ok $1"
 }
 
 assert_reject() {
     ASSERT_FAILED=$((ASSERT_FAILED + 1))
-    echo "FAIL $1: $2"
+    echo "❌ FAIL $1: $2"
 }
 
 assert_eq() {
@@ -41,12 +41,16 @@ assert_not_empty() {
 }
 
 assert_summary() {
-    echo "$ASSERT_PASSED passed, $ASSERT_FAILED failed"
+    if [ "$ASSERT_FAILED" -eq 0 ]; then
+        echo "✅ $ASSERT_PASSED passed, $ASSERT_FAILED failed"
+    else
+        echo "❌ $ASSERT_PASSED passed, $ASSERT_FAILED failed"
+    fi
     [ "$ASSERT_FAILED" -eq 0 ]
 }
 
 assert_abort() {
-    echo "control $1: $2" >&2
+    echo "❌ control $1: $2" >&2
     exit 1
 }
 

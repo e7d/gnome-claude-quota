@@ -8,36 +8,37 @@ const LIB = fileURLToPath(new URL('../tools/lib/assert.sh', import.meta.url));
 function run(script) {
     try {
         const stdout = execFileSync('bash', ['-c', `set -euo pipefail\n. "${LIB}"\n${script}`], {encoding: 'utf8'});
-        return {status: 0, stdout};
+        return {status: 0, stdout, stderr: ''};
     } catch (error) {
-        return {status: error.status, stdout: error.stdout ?? ''};
+        return {status: error.status, stdout: error.stdout ?? '', stderr: error.stderr ?? ''};
     }
 }
 
 test('a passing assertion is counted and reported', () => {
     const {status, stdout} = run('assert_eq label one one\nassert_summary');
     assert.equal(status, 0);
-    assert.match(stdout, /^ok label$/m);
-    assert.match(stdout, /1 passed, 0 failed/);
+    assert.match(stdout, /^✅ ok label$/m);
+    assert.match(stdout, /^✅ 1 passed, 0 failed$/m);
 });
 
 test('a failing assertion reports both values and fails the summary', () => {
     const {status, stdout} = run('assert_eq label one two\nassert_summary');
     assert.equal(status, 1);
-    assert.match(stdout, /FAIL label: expected 'one', got 'two'/);
-    assert.match(stdout, /0 passed, 1 failed/);
+    assert.match(stdout, /^❌ FAIL label: expected 'one', got 'two'$/m);
+    assert.match(stdout, /^❌ 0 passed, 1 failed$/m);
 });
 
 test('an assertion never returns non-zero, so set -e cannot abort the run', () => {
     const {status, stdout} = run('assert_eq first one two\nassert_eq second three three\nassert_summary');
     assert.equal(status, 1);
-    assert.match(stdout, /^ok second$/m);
+    assert.match(stdout, /^❌ FAIL first: expected 'one', got 'two'$/m);
+    assert.match(stdout, /^✅ ok second$/m);
 });
 
 test('assert_not_empty rejects the empty string', () => {
     const {status, stdout} = run("assert_not_empty label ''\nassert_summary");
     assert.equal(status, 1);
-    assert.match(stdout, /FAIL label: expected a value, got ''/);
+    assert.match(stdout, /^❌ FAIL label: expected a value, got ''$/m);
 });
 
 test('prove accepts an assertion that fails under its break', () => {
@@ -66,9 +67,10 @@ test('prove aborts on an assertion that cannot fail', () => {
         check() { assert_eq check ok ok; }
         prove check 'true' 'true' check
         echo unreachable`;
-    const {status, stdout} = run(script);
+    const {status, stdout, stderr} = run(script);
     assert.equal(status, 1);
     assert.doesNotMatch(stdout, /unreachable/);
+    assert.match(stderr, /^❌ control check: still passed with the break applied$/m);
 });
 
 test('prove aborts when the restore does not take', () => {

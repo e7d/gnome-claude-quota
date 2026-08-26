@@ -301,7 +301,7 @@ asserts against the tray, which is why its verdicts do not depend on what a shoo
 
 Shooting every scenario is now the default, so a bare `npm run e2e` costs minutes — 31 scenarios in both themes is 62 tiles plus `overview.png`. The fast path while iterating is a narrowed run (`--group=`, `--scenario=`, `--dark-only`) or `--assert` when only behaviour, not pixels, is in question.
 
-Every assertion is proven able to fail before it is trusted, on every run. A `control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
+Every assertion is proven able to fail before it is trusted, on every run. Verdicts are marked `✅ ok` and `❌ FAIL`, so a failure stands out in a long log. A `❌ control …` line on stderr with a non-zero exit means **the assertion is dead, not the extension** — fix the assertion, never the control. `docs/development.md` § Asserting what it does carries the rest.
 
 `tools/lib/devkit.sh` owns the session lifecycle shared by all three scripts — the private dconf copy, starting and stopping the shell, `Eval` over D-Bus, and choosing the backend. `tools/lib/indicator.sh` drives the extension into a state, `tools/lib/capture.sh` turns that state into a PNG, and `tools/lib/assert.sh` holds the assertion primitives, so `preview.sh` and `e2e.sh` are drivers over one shared layer and a fix to any of it lands in one place. Nothing under `tools/lib/` is meant to be run directly.
 

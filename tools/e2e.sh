@@ -742,25 +742,38 @@ restore_attempt_log() {
     ATTEMPTS_LOG=''
 }
 
+# The status poll writes to the same log on its own 60-second timer, so a byte
+# count answers "did anything happen" where every assertion here asks "did we
+# spend a request" — the two diverged the moment that timer existed.
+own_attempts() {
+    local count
+    count="$(grep -vc '"endpoint":"status"' "$ATTEMPTS_LOG" 2>/dev/null || true)"
+    echo "${count:-0}"
+}
+
+last_own_attempt() {
+    grep -v '"endpoint":"status"' "$ATTEMPTS_LOG" 2>/dev/null | tail -n 1
+}
+
 # Three things stop a _refresh short of an upstream attempt, and any of them
 # leaves the log unchanged, which reads as a dead assertion: an armed block, the
 # minimum interval, and data too fresh for the trigger to want more. All three are
 # cleared before each deliberate attempt.
 log_attempt() {
     local before
-    before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    before="$(own_attempts)"
     shell_eval "$IND._block = null; $IND._lastRequestAt = null;
         $IND._fetchedAt = new Date(Date.now() - 3600000);
         $IND._refresh('$1'); 'ok'" >/dev/null
     for _ in $(seq 100); do
-        [ "$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)" -gt "$before" ] && return 0
+        [ "$(own_attempts)" -gt "$before" ] && return 0
         sleep 0.1
     done
     die "the $1 attempt was never logged"
 }
 
 last_attempt_field() {
-    tail -n 1 "$ATTEMPTS_LOG" 2>/dev/null | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"
+    last_own_attempt | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"
 }
 
 assert_attempt_logged() {
@@ -769,7 +782,7 @@ assert_attempt_logged() {
     assert_eq 'attempt keeps the rate-limit header' '0' \
         "$(last_attempt_field anthropic-ratelimit-requests-remaining)"
     assert_eq 'attempt carries no credential' '' \
-        "$(tail -n 1 "$ATTEMPTS_LOG" 2>/dev/null | grep -oiE 'bearer|authorization|sk-ant' | head -1 || true)"
+        "$(last_own_attempt | grep -oiE 'bearer|authorization|sk-ant' | head -1 || true)"
 }
 
 prove_attempt_log() {
@@ -819,9 +832,10 @@ wake_on_renewed_token() {
 # rewritten with no newer token must leave the block standing.
 wake_on_same_token() {
     shell_eval "globalThis._wokeWith = null;
+        globalThis._sameExpiry = new Date(Date.now() + 3600000);
         $IND._refresh = trigger => { globalThis._wokeWith = trigger; };
-        $IND._poller.credentialExpiry = () => new Date(Date.now() + 3600000);
-        $IND._seenExpiry = new Date(Date.now() + 3600000);
+        $IND._poller.credentialExpiry = () => globalThis._sameExpiry;
+        $IND._seenExpiry = globalThis._sameExpiry;
         $IND._block = {until: new Date(Date.now() + 900000), reason: 'rate-limit'};
         $IND._poller._onCredentialsWritten();
         'ok'" >/dev/null
@@ -854,14 +868,14 @@ stub_stale_shared_usage() {
 
 assert_shared_adopted() {
     local before after
-    before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    before="$(own_attempts)"
     shell_eval "$IND._refresh('timer'); 'ok'" >/dev/null
     sleep 1
-    after="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    after="$(own_attempts)"
     assert_eq 'a fresher shared cache is adopted' '41' "$(probe "$IND._quotas[0].percent")"
     assert_eq 'adopting spends no request' 'true' "$(probe "$IND._lastRequestAt === null")"
     assert_eq 'the adoption is recorded' 'adopted' \
-        "$(tail -n 1 "$ATTEMPTS_LOG" | sed -n 's/.*"outcome":"\([^"]*\)".*/\1/p')"
+        "$(last_own_attempt | sed -n 's/.*"outcome":"\([^"]*\)".*/\1/p')"
     assert_ne 'the adoption reached the log' "$before" "$after"
 }
 
@@ -899,10 +913,10 @@ drop_floor() {
 
 assert_floor_holds() {
     local before after
-    before="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    before="$(own_attempts)"
     shell_eval "$IND._refresh('manual'); 'ok'" >/dev/null
     sleep 1
-    after="$(wc -c < "$ATTEMPTS_LOG" 2>/dev/null || echo 0)"
+    after="$(own_attempts)"
     assert_eq 'a request inside the minimum interval is never sent' "$before" "$after"
     assert_eq 'the refresh button is insensitive while the interval holds' 'false' \
         "$(probe "$IND._popup._refreshButton.reactive")"
