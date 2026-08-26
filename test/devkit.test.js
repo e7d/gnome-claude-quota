@@ -170,14 +170,45 @@ test('locale_subdir names both axes, and is empty when neither is set', () => {
     assert.deepEqual(stdout.trim().split('\n'), ['[]', 'fr_FR-C', 'C-fr_FR', 'fr_FR-fr_FR']);
 });
 
-// locale -a prints fr_FR.utf8, so an exact match would reject the very spelling
-// the flag documents.
-// TODO: broken on forgejo actions, to fix
-test.skip('locale_available compares case and dashes loosely', () => {
+// locale -a prints fr_FR.utf8, so an exact match would reject the very spelling the flag
+// documents. The listing is stubbed rather than read from the host: keyed on the host's own
+// generated locales this asserted nothing on a runner that carries only C, and it spent
+// weeks skipped for that reason instead of being made independent of where it runs.
+const LOCALE_STUB = "locale() { printf 'C\\nPOSIX\\nfr_FR.utf8\\n'; }\n";
+
+test('locale_available compares case and dashes loosely', () => {
     const root = runtimeRoot();
-    assert.equal(run('locale_available C', root).status, 0);
-    assert.equal(run('locale_available en_US.UTF-8', root).status, 0);
-    assert.equal(run('locale_available zz_ZZ.UTF-8', root).status, 1);
+    assert.equal(run(`${LOCALE_STUB}locale_available C`, root).status, 0);
+    assert.equal(run(`${LOCALE_STUB}locale_available fr_FR.UTF-8`, root).status, 0);
+    assert.equal(run(`${LOCALE_STUB}locale_available FR_fr.utf8`, root).status, 0);
+});
+
+test('locale_available refuses a locale the host does not generate', () => {
+    const root = runtimeRoot();
+    assert.equal(run(`${LOCALE_STUB}locale_available zz_ZZ.UTF-8`, root).status, 1);
+    assert.equal(run(`${LOCALE_STUB}locale_available de_DE.utf8`, root).status, 1);
+});
+
+// A fixed name under a world-writable /tmp is a path another user can own first, and the
+// lock and the sandbox home both live in it.
+test('the runtime root falls back to a uid-scoped path, never a shared one', () => {
+    const root = runtimeRoot();
+    const {stdout} = run('unset XDG_RUNTIME_DIR\ndefault_runtime_root', root);
+    assert.equal(stdout, `/tmp/claude-quota-${process.getuid()}`);
+});
+
+test('the runtime root prefers the session runtime directory when there is one', () => {
+    const root = runtimeRoot();
+    const {stdout} = run('XDG_RUNTIME_DIR=/run/user/4242 default_runtime_root', root);
+    assert.equal(stdout, '/run/user/4242/claude-quota');
+});
+
+test('claim_session refuses a runtime root owned by somebody else', () => {
+    const root = runtimeRoot();
+    const {status, stdout} = run(
+        'RUNTIME_ROOT=/tmp\nclaim_session e2e && echo "claimed"', root);
+    assert.doesNotMatch(stdout, /claimed/);
+    assert.equal(status, 1);
 });
 
 test('claim_session refuses a session another run already holds', () => {

@@ -3,7 +3,18 @@
 UUID='claude-quota@e7d.io'
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLED="$HOME/.local/share/gnome-shell/extensions/$UUID"
-RUNTIME_ROOT="${CLAUDE_QUOTA_RUNTIME:-${XDG_RUNTIME_DIR:-/tmp}/claude-quota}"
+# A fixed name under a world-writable /tmp is a path any other user on the host can create
+# first, and what goes in it is a lock and a sandbox home. Without a runtime directory to
+# put it in, the fallback is at least scoped to this uid.
+default_runtime_root() {
+    if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        printf '%s/claude-quota' "$XDG_RUNTIME_DIR"
+    else
+        printf '/tmp/claude-quota-%s' "$(id -u)"
+    fi
+}
+
+RUNTIME_ROOT="${CLAUDE_QUOTA_RUNTIME:-$(default_runtime_root)}"
 DEVKIT_LANGUAGE="${DEVKIT_LANGUAGE:-C}"
 DEVKIT_LOCALE="${DEVKIT_LOCALE:-C}"
 
@@ -123,7 +134,10 @@ state_get() {
 
 state_set() {
     local kept="$RUN/state.next"
-    [ -f "$STATE_FILE" ] && grep -v "^$1=" "$STATE_FILE" > "$kept" || : > "$kept"
+    : > "$kept"
+    if [ -f "$STATE_FILE" ]; then
+        grep -v "^$1=" "$STATE_FILE" > "$kept" || true
+    fi
     echo "$1=$2" >> "$kept"
     mv "$kept" "$STATE_FILE"
 }
@@ -182,6 +196,8 @@ own_session() {
 # their state and their pointer, which reads as a defect anywhere in the run.
 claim_session() {
     mkdir -p "$RUNTIME_ROOT"
+    [ -O "$RUNTIME_ROOT" ] || die "$RUNTIME_ROOT is not owned by this user; remove it and retry"
+    chmod 700 "$RUNTIME_ROOT"
     exec 9>"$RUNTIME_ROOT/$1.lock"
     flock -n 9 || die "session '$1' is already running; wait for it, or --stop it first"
 }
@@ -401,6 +417,11 @@ hide_overview() {
     echo "$DEVKIT_NAME: overview would not stay hidden" >&2
 }
 
+# gdbus wraps a reply as (true, '<payload>'), and JSON's own quoting comes off with the
+# wrapper: a scalar arrives bare and a structure arrives with every string unquoted, which is
+# the shape every assertion in the suite compares against. The consequence is the part worth
+# knowing — a value whose own text contains a quote is indistinguishable from one that does
+# not, so read such a thing as a number or one field at a time rather than as a joined string.
 unwrap() {
     sed -n "s/^(true, '\(.*\)')\$/\1/p" | tr -d '"'
 }
