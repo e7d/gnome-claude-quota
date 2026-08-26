@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
+import {captionLine} from '../lib/format.js';
 import {resetTranslator, setTranslator} from '../lib/i18n.js';
 import {claudeCodeService, quotas} from '../lib/model.js';
+import {alertPlan} from '../lib/notify.js';
 
 const now = new Date('2026-08-10T08:49:59.966Z');
 const zeroScopedNow = new Date('2026-08-04T07:51:00Z');
@@ -247,6 +249,40 @@ test('every quota carries a key, and two scoped limits of one kind do not collid
     const keys = quotas({limits}, now).map(quota => quota.key);
     assert.deepEqual(keys, ['session', 'weekly_scoped:Fable', 'weekly_scoped:opus-x']);
     assert.equal(new Set(keys).size, keys.length);
+});
+
+test('an unparsable reset time yields no reset rather than an Invalid Date', () => {
+    const limits = [{kind: 'session', group: 'session', percent: 80, resets_at: 'not-a-date'}];
+    const [quota] = quotas({limits}, now);
+    assert.equal(quota.resetsAt, null);
+    assert.equal(quota.windowProgress, null);
+    assert.equal(quota.aheadOfPace, false);
+});
+
+// The KO half of the pair: an Invalid Date is truthy, so it passes every `!resetsAt`
+// guard and reaches Intl and toISOString, which throw where nothing catches them.
+test('the consumers a bad reset time would reach throw on an Invalid Date', () => {
+    const broken = {key: 'session', name: 'Session (5h)', percent: 80,
+        expired: false, resetsAt: new Date('not-a-date')};
+    assert.throws(() => captionLine(broken, now), RangeError);
+    assert.throws(() => alertPlan({
+        quotas: [broken],
+        fired: {},
+        thresholds: [{level: 'warning', percent: 75, enabled: true}],
+        now,
+    }), RangeError);
+});
+
+test('a quota built from an unparsable reset time is safe to format and to plan on', () => {
+    const limits = [{kind: 'session', group: 'session', percent: 80, resets_at: 'not-a-date'}];
+    const [quota] = quotas({limits}, now);
+    assert.equal(captionLine({...quota, expired: false}, now), '-');
+    assert.deepEqual(alertPlan({
+        quotas: [{...quota, expired: false}],
+        fired: {},
+        thresholds: [{level: 'warning', percent: 75, enabled: true}],
+        now,
+    }).post.map(alert => alert.key), ['session|warning']);
 });
 
 test('a quota carries its settings scope and no severity of its own', () => {
