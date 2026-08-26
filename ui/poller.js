@@ -173,16 +173,24 @@ export class Poller {
         this._statusCancellable?.cancel();
         this._statusCancellable = cancellable;
         this._statusPolling = true;
-        this._refreshServiceStatus(cancellable, 'status-timer').then(service => {
-            this._statusPolling = false;
-            if (this._destroyed || this._statusCancellable !== cancellable)
-                return;
-            this._onServiceStatus(service);
-            this._scheduleStatus();
-        }).catch(error => {
-            this._statusPolling = false;
+        this._statusRound(cancellable);
+    }
+
+    // The next round is armed whatever this one did. A poller that stops on its first bad
+    // answer looks exactly like one with nothing to report, and the badge it feeds is the
+    // only thing on screen that would have said otherwise.
+    async _statusRound(cancellable) {
+        try {
+            const service = await this._refreshServiceStatus(cancellable, 'status-timer');
+            if (!this._destroyed && this._statusCancellable === cancellable)
+                this._onServiceStatus(service);
+        } catch (error) {
             logError(error);
-        });
+        } finally {
+            this._statusPolling = false;
+        }
+        if (!this._destroyed && this._statusCancellable === cancellable)
+            this._scheduleStatus();
     }
 
     _scheduleStatus() {
