@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-26 09:20+0200\n"
+"POT-Creation-Date: 2026-08-26 14:12+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -44,7 +44,7 @@ msgstr "Afficher dans la barre supérieure"
 msgid "Show in menu"
 msgstr "Afficher dans le menu"
 
-#: prefs.js:81
+#: prefs.js:85
 msgid "Thresholds"
 msgstr "Seuils"
 

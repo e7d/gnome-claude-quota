@@ -75,8 +75,12 @@ function clampToEachOther(settings, rows) {
 }
 
 export default class ClaudeQuotaPreferences extends ExtensionPreferences {
+    // The bindings and handlers below are the settings object's only referrers, and it owns
+    // their closures in turn — a cycle GJS is free to collect, after which every row quietly
+    // stops following the key it is bound to. The window outlives them and holds it instead.
     fillPreferencesWindow(window) {
-        const settings = this.getSettings();
+        window._settings = this.getSettings();
+        const settings = window._settings;
         const page = new Adw.PreferencesPage();
         const thresholds = new Adw.PreferencesGroup({title: _('Thresholds')});
         const spins = THRESHOLDS.map(level => {
