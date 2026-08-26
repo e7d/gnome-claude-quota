@@ -339,7 +339,7 @@ Pairing a foreground with its background is the hard part, and the method is an 
 - Anything whose interior sits more than two pixels from its own background is a region rather than ink — the wallpaper, another indicator's pill, a progress bar. Windows touching one are skipped.
 - Anti-aliasing lays a ramp of blends between ink and background. A colour on the line between the background and a stronger ink nearby is dropped, so a half-lit edge pixel is not reported as faint text.
 
-A finding on the pill GNOME paints under a hovered or pressed panel button is reported as accepted rather than failed, and counted in the per-file line so the waiver is never silent. Those four greys are the only surfaces treated that way: severity colours are judged against the top bar and the popup card, and darkening amber until it clears a surface that exists for as long as the pointer rests there would cost the colour its meaning.
+A finding is reported as accepted rather than failed when **both** halves hold: its background is one of the greys GNOME paints under a hovered or pressed panel button, and its ink is one of the four severity colours, read out of `stylesheet.css` rather than copied beside the waiver. Severity colours are judged against the top bar and the popup card, and darkening amber until it clears a surface that exists for as long as the pointer rests there would cost the colour its meaning — which is a trade no other ink can claim, so no other ink is waived on those greys. Each accepted pair is printed with the ratio it was let through at, so the waiver is never a threshold quietly lowered.
 
 What that costs: text on a saturated background is never measured, nor is anything within three pixels of a bar or an emoji; colour emoji are scored as though they were text, which is what the `service-error` shots report; the ratio comes from the strongest pixel of a stroke, so a stroke too thin to ever reach its own colour is scored optimistically; and large text is inferred from glyph height, which reads short on a word with no ascender and so errs towards the stricter threshold. It measures pixels, not CSS — a colour no scenario renders is a colour it never checks.
 
@@ -354,6 +354,11 @@ Two of the waived pill greys exist only for CI. A shell running in a container p
 The e2e step asserts all 31 scenarios in both themes and photographs ten of them: `normal`, `warning`, `critical`, `model-scoped`, `error`, `service-major`, `over-pace`, `rate-limited`, `rate-limited-day` and `no-data`. Between them they render every colour `a11y` can measure — each severity, the pace verdict, the status button, the error surface and the empty-state text. The scenarios left out differ in text rather than in colour, and photographing all 62 would cost minutes per run to say the same thing.
 
 It replaced a step that shot six of those scenarios and asserted nothing: the screenshots are never uploaded, so all a preview run could prove was that six states rendered without throwing. An assertion is a property read back over `Eval` and costs a fraction of a screenshot, so the same shell boot now checks every state and every interaction, and still produces the shots the contrast scan scores.
+
+## License
+
+GPL-2.0-or-later — the full text is in [`LICENSE`](LICENSE). It matches the licence GNOME
+Shell itself carries, which is the one an extension importing its modules can rely on.
 
 ---
 

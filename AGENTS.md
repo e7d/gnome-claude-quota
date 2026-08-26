@@ -8,7 +8,9 @@ Workspace-wide rules (commit identity, Forgejo tooling) live in [`../AGENTS.md`]
 
 | Path | Runs in | Rule |
 | --- | --- | --- |
-| `extension.js` | GNOME Shell (GJS) | Actors, signals, timers, D-Bus. The only file allowed to touch the shell. |
+| `extension.js` | GNOME Shell (GJS) | Wiring. The indicator's state fields, `_render()`, and the signals and timers that reach the shell on their behalf. No policy and no drawing of its own. |
+| `prefs.js` | GNOME Shell (a separate process) | The preferences window. Reads `lib/settings.js`, holds no state, and cannot see the indicator. |
+| `ui/*.js` | GNOME Shell only | Actors and widgets. One module per piece of the shell surface, each rendering from the arguments it is handed rather than from anything it polls itself. |
 | `lib/*.js` | Shell **and** `node --test` | Pure logic: formatting, policy, model, theme, cache, HTTP shaping. |
 | `tools/*.sh`, `tools/*.js` | Your machine | Entrypoints. Never shipped to users. |
 | `tools/lib/*` | Your machine | Sourced or imported by the entrypoints, never run directly. |

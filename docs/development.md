@@ -183,7 +183,7 @@ The attempt-log control is the one break that runs real code rather than mutatin
 
 ## Attributing a 429
 
-Every upstream attempt appends one JSON object to `~/.cache/claude-quota/attempts.jsonl`, beside the cache — see § Reading the exchange log for the fields and the reader. The file is capped at 2000 records, trimmed on write.
+Every upstream attempt appends one JSON object to `~/.cache/claude-quota/attempts.jsonl`, beside the cache — see § Reading the exchange log for the fields and the reader. The append itself costs one open and one write whatever the log holds; trimming to 2000 records has to read the whole file, so it runs on one append in two hundred and on the first of each session. The log therefore sits a little above 2000 rather than exactly on it, and a line torn by an interrupted write is healed at the next trim rather than immediately — `parseLog` drops an unparseable line in the meantime. Doing it the other way round — rewriting the whole file on every attempt — put a read, a split and a write of every record on the compositor's own thread, several times a minute.
 
 ```bash
 npm run attribution                  # or: node tools/quota-attribution.js --window=20
