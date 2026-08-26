@@ -6,6 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ${{ vars.REGISTRY }}
   UUID: claude-quota@e7d.io
@@ -14,7 +21,7 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: login
         if: ${{ vars.REGISTRY }}
@@ -43,6 +50,11 @@ jobs:
           docker exec -u root "$C" chown -R ci:ci /work
           docker exec "$C" bash -c 'mkdir -p ~/.local/share/gnome-shell/extensions && ln -sfn /work ~/.local/share/gnome-shell/extensions/'"$UUID"
           docker exec -u root "$C" .github/logind-stub.sh
+
+      # The base image is a rolling one on purpose — the point is to run against the GNOME
+      # the distribution ships today — so what a run was measured against is worth a line.
+      - name: toolchain
+        run: docker exec "$C" bash -c 'gnome-shell --version; node --version; npm --version'
 
       - name: install
         run: docker exec "$C" npm ci
