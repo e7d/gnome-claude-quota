@@ -5,6 +5,8 @@ import St from 'gi://St';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import {shortenEmail} from '../lib/ellipsis.js';
+
 import {CAPTION_OPACITY, QuotaBlock, displayItem} from './quota-block.js';
 
 const STATUS_URL = 'https://status.claude.com/';
@@ -13,7 +15,7 @@ const SPIN_DURATION_MS = 900;
 function detailRow(layout, row) {
     const name = new St.Label({style_class: 'cq-detail', opacity: CAPTION_OPACITY});
     const value = new St.Label({style_class: 'cq-detail', x_expand: true});
-    value.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+    value.clutter_text.ellipsize = Pango.EllipsizeMode.END;
     layout.attach(name, 0, row, 1, 1);
     layout.attach(value, 1, row, 1, 1);
     return {name, value};
@@ -69,10 +71,41 @@ export class PopupBody {
     }
 
     _buildDetails() {
-        const layout = new Clutter.GridLayout({column_spacing: 12, row_spacing: 4});
-        this._details = new St.Widget({style_class: 'cq-details', layout_manager: layout, x_expand: true});
-        this._account = detailRow(layout, 0);
-        this._plan = detailRow(layout, 1);
+        this._detailLayout = new Clutter.GridLayout({column_spacing: 12, row_spacing: 4});
+        this._details = new St.Widget({
+            style_class: 'cq-details',
+            layout_manager: this._detailLayout,
+            x_expand: true,
+        });
+        this._account = detailRow(this._detailLayout, 0);
+        this._plan = detailRow(this._detailLayout, 1);
+    }
+
+    // Pango can only cut at the end or the middle of a label, and an address wants its
+    // domain kept, so the cut is made here against the width the value column really has.
+    _fitAccount(detail) {
+        if (detail === null)
+            return;
+        const width = this._valueWidth();
+        const layout = this._account.value.clutter_text.get_layout().copy();
+        layout.set_width(-1);
+        layout.set_ellipsize(Pango.EllipsizeMode.NONE);
+        const fits = text => {
+            layout.set_text(text, -1);
+            return layout.get_pixel_size()[0] <= width;
+        };
+        this._account.value.text = shortenEmail(detail.value, fits);
+    }
+
+    _valueWidth() {
+        if (this._details.get_stage() === null)
+            return Infinity;
+        const cap = this._details.get_theme_node().get_max_width();
+        if (cap < 0)
+            return Infinity;
+        const names = [this._account, this._plan].filter(row => row.name.visible)
+            .map(row => row.name.get_preferred_width(-1)[1]);
+        return cap - Math.max(...names) - this._detailLayout.column_spacing;
     }
 
     _buildMessage() {
@@ -194,6 +227,7 @@ export class PopupBody {
         this._refreshLabel.text = view.refreshText;
         renderDetail(this._account, view.account);
         renderDetail(this._plan, view.plan);
+        this._fitAccount(view.account);
         this._details.visible = view.account !== null || view.plan !== null;
         this._issueItem.visible = view.issue !== null;
         this._renderIssue(view.issue);

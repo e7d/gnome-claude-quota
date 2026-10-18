@@ -206,8 +206,20 @@ assert_detail_row() {
         "$(probe "(() => {
             const shown = $IND._prefs.get_boolean('$5') && $IND.$4 !== null;
             const row = $IND._popup.$3;
+            const text = row.value.text;
+            const cut = text.indexOf('…');
+            const stands = text === $IND.$4 || (cut > 0 && $IND.$4.startsWith(text.slice(0, cut)));
             return row.name.visible === shown && row.value.visible === shown
-                && (!shown || (row.name.text === $label && row.value.text === $IND.$4));
+                && (!shown || (row.name.text === $label && stands));
+        })()")"
+}
+
+assert_account_fits_its_column() {
+    assert_eq "$1 the account value fits its column without Pango cutting it" 'true' \
+        "$(probe "(() => {
+            const popup = $IND._popup;
+            return !popup._account.value.visible
+                || popup._account.value.get_preferred_width(-1)[1] <= popup._valueWidth();
         })()")"
 }
 
@@ -309,6 +321,7 @@ assert_state() {
     assert_account_row "$1"
     assert_plan_row "$1"
     assert_detail_rows_in_order "$1"
+    assert_account_fits_its_column "$1"
     assert_detail_values_aligned "$1"
     assert_detail_margins_match_header "$1"
     assert_hidden_details_take_no_space "$1"
@@ -438,6 +451,7 @@ assert_account_row_probe() { assert_account_row control; }
 assert_plan_row_probe() { assert_plan_row control; }
 assert_detail_rows_in_order_probe() { assert_detail_rows_in_order control; }
 assert_detail_values_aligned_probe() { assert_detail_values_aligned control; }
+assert_account_fits_its_column_probe() { assert_account_fits_its_column control; }
 assert_detail_margins_match_header_probe() { assert_detail_margins_match_header control; }
 assert_hidden_details_take_no_space_probe() { assert_hidden_details_take_no_space control; }
 assert_details_within_popup_probe() { assert_details_within_popup control; }
@@ -478,6 +492,10 @@ prove_state() {
         "shell_eval \"const d = $IND._popup._details, n = $IND._popup._account.name; d.remove_child(n); d.add_child(n); 'ok'\" >/dev/null" \
         "shell_eval \"const d = $IND._popup._details, n = $IND._popup._account.name; d.remove_child(n); d.insert_child_at_index(n, 0); 'ok'\" >/dev/null" \
         assert_detail_rows_in_order_probe
+    prove 'the account value fits its column' \
+        "shell_eval \"$IND._render = () => {}; $IND._popup._account.value.text = 'a'.repeat(120); 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_account_fits_its_column_probe
     prove 'the detail values share a column' \
         "shell_eval \"$IND._popup._plan.value.translation_x = 20; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._popup._plan.value.translation_x = 0; 'ok'\" >/dev/null" \

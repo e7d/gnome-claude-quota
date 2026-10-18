@@ -38,14 +38,15 @@ is an e2e-breaking change, and `npm run e2e` is the only way to find out.
 | `lib/bar.js` | Pace-bar tick geometry | — | `test/bar.test.js` |
 | `lib/cache.js` | `usage.json` (de)serialization | — | `test/cache.test.js` |
 | `lib/credentials.js` | Parsing `.credentials.json`, expiry and renewal checks | — | `test/credentials.test.js` |
+| `lib/ellipsis.js` | Shortening an email address to a width, keeping its domain | — | `test/ellipsis.test.js` |
 | `lib/errors.js` | Turning a fetch error into a displayable description | `lib/i18n.js` | `test/errors.test.js` |
 | `lib/format.js` | Every rendered string that isn't a static label: times, percentages, window progress | `lib/i18n.js` | `test/format.test.js` |
 | `lib/i18n.js` | The `_`/`n_`/`p_`/`N_` translator indirection | — | `test/i18n.test.js` |
 | `lib/model.js` | Turning a usage payload into quota view objects and the Claude Code service status | `lib/format.js`, `lib/i18n.js`, `lib/settings.js` | `test/model.test.js` |
 | `lib/notify.js` | Threshold crossing and the withdraw/post plan for notifications | `lib/format.js`, `lib/i18n.js` | `test/notify.test.js` |
 | `lib/panel.js` | How many cells fit the panel's available width | — | `test/panel.test.js` |
-| `lib/policy.js` | Poll timing, rate-limit backoff, blocking, severity thresholds | `lib/i18n.js` | `test/policy.test.js` |
 | `lib/plan.js` | Turning the plan and rate-limit tier Claude Code stores into a display name | — | `test/plan.test.js` |
+| `lib/policy.js` | Poll timing, rate-limit backoff, blocking, severity thresholds | `lib/i18n.js` | `test/policy.test.js` |
 | `lib/settings.js` | The gschema key list and reading it into a typed settings object | `lib/i18n.js` | `test/settings.test.js` |
 | `lib/shared-usage.js` | Reading Claude Code's own cached usage file, and the account email and plan beside it | `lib/plan.js` | `test/shared-usage.test.js` |
 | `lib/state.js` | The state/effects reducer: `applyResult`, `adoptShared` | `lib/model.js`, `lib/policy.js`, `lib/shared-usage.js` | `test/state.test.js` |

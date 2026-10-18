@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 
 SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-reset
-           long-name locale rate-limited rate-limited-day error token-expired loading refreshing fresh no-data
+           long-name account-normal account-long-user account-long-domain account-long-both plan-long
+           locale rate-limited rate-limited-day error token-expired loading refreshing fresh no-data
            model-scoped-issue narrow-two narrow-one narrow-icon narrow-issue
            service-degraded service-partial service-major service-maintenance
            service-maintenance-until service-maintenance-day service-error service-quota-ok)
@@ -145,7 +146,12 @@ setup_for() {
         expired) echo "i._quotas = [q('S','Session (5h)',40,-5,SESSION), q('W','Weekly',60,-5,WEEK)];" ;;
         model-scoped) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('W','Weekly',44,5000,WEEK), q('O','Opus',78,200,SESSION)];" ;;
         no-reset) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('W','Weekly',44,5000,WEEK), {...q('O','Opus',72,200,SESSION), resetsAt: null, windowProgress: null, aheadOfPace: false}];" ;;
-        long-name) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('So','Sonnet with a very long display name',61,200,SESSION)]; i._accountEmail = 'a.remarkably.long.address.for.testing@subdomain.example.org'; i._accountPlan = 'A Remarkably Long Plan Name For Testing The Row';" ;;
+        long-name) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('So','Sonnet with a very long display name',61,200,SESSION)];" ;;
+        account-normal) echo "$(setup_quotas) i._accountEmail = 'user@domain.tld';" ;;
+        account-long-user) echo "$(setup_quotas) i._accountEmail = 'areallylongusernamebeforedomain@domain.tld';" ;;
+        account-long-domain) echo "$(setup_quotas) i._accountEmail = 'user@areallylongdomainafteruser.tld';" ;;
+        account-long-both) echo "$(setup_quotas) i._accountEmail = 'areallylongusernamebeforedomain@areallylongdomainafteruser.tld';" ;;
+        plan-long) echo "$(setup_quotas) i._accountPlan = 'A Remarkably Long Plan Name For Testing The Row';" ;;
         locale) echo "$(setup_quotas) i._locale = 'fr-FR';" ;;
         rate-limited) echo "i._quotas = [q('S','Session (5h)',21,253,SESSION), q('W','Weekly',94,13,WEEK)]; i._block = {until: new Date(Date.now() + 180000), reason: 'rate-limit'};" ;;
         rate-limited-day) echo "$(setup_quotas) i._fetchedAt = new Date(Date.now() - 26 * 3600000); i._block = {until: new Date(Date.now() + 26 * 3600000), reason: 'rate-limit'};" ;;
