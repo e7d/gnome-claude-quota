@@ -48,7 +48,7 @@ export class PopupBody {
         });
         this._refreshLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._refreshButton = new St.Button({
-            style_class: 'cq-refresh',
+            style_class: 'cq-meta-button',
             child: new St.Icon({
                 style_class: 'popup-menu-icon',
                 icon_name: 'view-refresh-symbolic',
@@ -57,8 +57,19 @@ export class PopupBody {
             can_focus: true,
         });
         this._refreshButton.connect('clicked', () => this._onRefresh());
+        this._prefsButton = new St.Button({
+            style_class: 'cq-meta-button',
+            child: new St.Icon({
+                style_class: 'popup-menu-icon',
+                icon_name: 'emblem-system-symbolic',
+            }),
+            y_align: Clutter.ActorAlign.CENTER,
+            can_focus: true,
+        });
+        this._prefsButton.connect('clicked', () => this._onOpenPrefs());
         this._metaBox.add_child(this._refreshLabel);
         this._metaBox.add_child(this._refreshButton);
+        this._metaBox.add_child(this._prefsButton);
         this._buildDetails();
         this._buildMessage();
         this._buildBody();

@@ -53,8 +53,7 @@ Groups:
 Scenarios:
   ${SCENARIOS[*]}
 
-Needs magick, and gnome-shell with this checkout symlinked at
-$INSTALLED
+Needs magick and gnome-shell.
 USAGE
 }
 
@@ -1191,6 +1190,34 @@ restore_credentials_stubs() {
         'ok'" >/dev/null
 }
 
+assert_prefs_button_after_refresh() {
+    assert_eq 'settings button follows the refresh button in the meta row' 'true' "$(probe "(() => {
+        const kids = $IND._popup._metaBox.get_children();
+        return kids.indexOf($IND._popup._prefsButton) === kids.indexOf($IND._popup._refreshButton) + 1;
+    })()")"
+}
+
+assert_prefs_button_opens_settings() {
+    reopen_menu
+    shell_eval "globalThis._prefsOpened = false;
+        $IND._openPrefs = () => { globalThis._prefsOpened = true; };
+        $IND._popup._prefsButton.emit('clicked', 1);
+        'ok'" >/dev/null
+    assert_eq 'settings button opens the preferences' 'true' "$(probe "globalThis._prefsOpened === true")"
+    assert_eq 'settings button closes the menu' 'false' "$(probe "$IND.menu.isOpen")"
+}
+
+prove_prefs_button() {
+    prove 'settings button sits after refresh' \
+        "shell_eval \"$IND._popup._metaBox.set_child_below_sibling($IND._popup._prefsButton, $IND._popup._refreshButton); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._metaBox.set_child_above_sibling($IND._popup._prefsButton, $IND._popup._refreshButton); 'ok'\" >/dev/null" \
+        assert_prefs_button_after_refresh
+    prove 'settings button opens the preferences' \
+        "shell_eval \"globalThis._origPrefs = $IND._popup._onOpenPrefs; $IND._popup._onOpenPrefs = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._onOpenPrefs = globalThis._origPrefs; 'ok'\" >/dev/null" \
+        assert_prefs_button_opens_settings
+}
+
 group_refresh() {
     echo 'refresh:'
     render_state normal
@@ -1201,6 +1228,8 @@ group_refresh() {
     prove_refresh
     assert_menu_survives_refresh
     assert_spinner_runs
+    prove_prefs_button
+    reopen_menu
     refreeze_refresh
     sleep 1
     assert_spinner_cleared
