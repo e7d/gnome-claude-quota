@@ -179,8 +179,15 @@ stop_shell() {
     : > "$BUS_FILE"
 }
 
+keep_log() {
+    [ -n "${DEVKIT_KEEP_LOG:-}" ] && [ -s "$LOG" ] || return 0
+    mkdir -p "$(dirname "$DEVKIT_KEEP_LOG")"
+    cp "$LOG" "$DEVKIT_KEEP_LOG"
+}
+
 release_session() {
     stop_shell
+    keep_log
     rm -rf "$RUN"
 }
 
@@ -297,6 +304,12 @@ start_shell() {
 
 # A call that fails or stalls says so on stderr: under set -e a failed Eval otherwise ends the
 # run with status 1 and no text, which is how a CI job sat silent for two minutes and died.
+stall_evidence() {
+    echo "devkit: load $(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)" >&2
+    [ -s "$LOG" ] && { echo "devkit: shell log tail" >&2; tail -15 "$LOG" >&2; }
+    return 0
+}
+
 shell_eval() {
     local out status started elapsed
     started="$(date +%s)"
@@ -306,6 +319,7 @@ shell_eval() {
     if [ -z "${DEVKIT_EVAL_QUIET:-}" ]; then
         [ "$elapsed" -lt 5 ] || echo "devkit: slow Eval (${elapsed}s, status $status): $(tr '\n' ' ' <<< "${1:0:120}")" >&2
         [ "$status" -eq 0 ] || echo "devkit: Eval failed (status $status): ${out:0:200} :: $(tr '\n' ' ' <<< "${1:0:120}")" >&2
+        [ "$elapsed" -lt 5 ] || stall_evidence
     fi
     printf '%s\n' "$out"
     return "$status"

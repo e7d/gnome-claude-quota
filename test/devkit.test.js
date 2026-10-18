@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, existsSync, writeFileSync, mkdirSync} from 'node:fs';
+import {mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -230,4 +230,38 @@ test('a session freed by its holder can be claimed again', () => {
     const root = runtimeRoot();
     const {status} = run('( claim_session e2e )\nclaim_session e2e', root);
     assert.equal(status, 0);
+});
+
+test('release_session keeps the shell log where DEVKIT_KEEP_LOG says, then removes the session', () => {
+    const root = runtimeRoot();
+    const kept = join(root, 'out', 'shell.log');
+    const script = `use_session shots\nmkdir -p "$RUN"\necho "mutter stalled" > "$LOG"\nDEVKIT_KEEP_LOG="${kept}" release_session\n[ ! -d "$RUN" ] && echo gone`;
+    const {status, stdout} = run(script, root);
+    assert.equal(status, 0);
+    assert.equal(stdout.trim(), 'gone');
+    assert.equal(readFileSync(kept, 'utf8'), 'mutter stalled\n');
+});
+
+test('release_session keeps nothing when DEVKIT_KEEP_LOG is unset', () => {
+    const root = runtimeRoot();
+    const {status} = run('use_session shots\nmkdir -p "$RUN"\necho x > "$LOG"\nrelease_session', root);
+    assert.equal(status, 0);
+    assert.equal(existsSync(join(root, 'out')), false);
+});
+
+test('release_session leaves no empty copy when the shell wrote no log', () => {
+    const root = runtimeRoot();
+    const kept = join(root, 'out', 'shell.log');
+    run(`use_session shots\nmkdir -p "$RUN"\nDEVKIT_KEEP_LOG="${kept}" release_session`, root);
+    assert.equal(existsSync(kept), false);
+});
+
+test('stall_evidence prints the load and the end of the shell log', () => {
+    const root = runtimeRoot();
+    const script = 'use_session shots\nmkdir -p "$RUN"\nseq 1 30 > "$LOG"\nstall_evidence 2>&1';
+    const {stdout} = run(script, root);
+    assert.match(stdout, /devkit: load /);
+    assert.match(stdout, /devkit: shell log tail\n16\n/);
+    assert.match(stdout, /\n30\n$/);
+    assert.doesNotMatch(stdout, /\n15\n/);
 });

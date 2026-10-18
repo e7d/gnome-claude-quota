@@ -84,3 +84,12 @@ test('a moving tag, or a commit with no exact version beside it, is caught', () 
     assert.deepEqual(looseReferences(`uses: actions/checkout@${sha} # v4.4.0`), []);
     assert.deepEqual(looseReferences('uses: ./.github/actions/ci-image'), []);
 });
+
+test('every e2e step keeps the nested shell log beside its report', () => {
+    [GITHUB, FORGEJO].forEach(text => {
+        const suites = text.match(/npm run e2e/g).length;
+        const kept = text.match(/-e "?DEVKIT_KEEP_LOG=ci-out\/shell-[^ "]+/g);
+        assert.equal(suites, 2);
+        assert.equal(kept.length, suites);
+    });
+});

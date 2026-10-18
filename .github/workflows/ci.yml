@@ -92,7 +92,7 @@ jobs:
         with: { name: e2e-behaviour, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: e2e
         run: |
-          docker exec "$C" bash -c '
+          docker exec -e DEVKIT_KEEP_LOG=ci-out/shell-behaviour.log "$C" bash -c '
             set -o pipefail
             mkdir -p ci-out
             npm run e2e -- --group=state --group=panel --group=hover --group=refresh --group=notify --group=lifecycle --scenario=critical --assert 2>&1 | tee ci-out/e2e-behaviour.log'
@@ -136,7 +136,7 @@ jobs:
       - name: e2e
         env: { SHARD: "${{ matrix.shard }}", ARGS: "${{ matrix.args }}" }
         run: |
-          docker exec -e SHARD -e ARGS "$C" bash -c '
+          docker exec -e SHARD -e ARGS -e "DEVKIT_KEEP_LOG=ci-out/shell-$SHARD.log" "$C" bash -c '
             set -o pipefail
             mkdir -p ci-out
             npm run e2e -- $ARGS 2>&1 | tee "ci-out/e2e-$SHARD.log"'
