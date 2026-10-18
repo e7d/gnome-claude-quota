@@ -41,7 +41,8 @@ Reach for `docs/architecture.md` when you need the module dependency graph, whic
 That opens a Mutter devkit window and blocks. Recall it from another terminal to
 change the shape live — `--light`, `--open`, `--scenario=no-data` — and only what
 you name changes. `--headless --detach --capture` shoots the tile instead of
-showing it, which is the form to reach for when nobody is watching.
+showing it, which is the form to reach for when nobody is watching. The windowed
+form is for a person; an agent follows § Driving the preview as an agent.
 
 Every screenshot stacks the panel button's three states: resting, hovered, then pressed with the popup open below it. If a change concerns a state no scenario covers, add the scenario to `SCENARIOS` and `setup_for` in `tools/lib/indicator.sh` rather than eyeballing it once by hand.
 
@@ -62,6 +63,22 @@ A bare `npm run e2e` now shoots every scenario in both themes by default — 31 
 `npm run logs` prints what the extension actually exchanged with the two endpoints — every request and every one it declined to send, with statuses, `retry-after`, and error bodies. **Reach for it before theorising about a refusal**, and before adding instrumentation: it is already recording, and `--all --runs` shows a bad morning in a dozen lines. `docs/development.md` § Reading the exchange log carries the fields and the redaction rule; § Rate limits carries the two measured limiters and why a `401` is the expensive one.
 
 `README.md` § Development is the user-facing reference for all of these and their flags. Update it in the same change when you alter a flag or add a script.
+
+## Driving the preview as an agent
+
+A window left open on the operator's desktop blocks the next preview command until they close it by hand, and nothing in the output says why. These rules exist so that does not happen.
+
+**Every `tools/preview.sh` call an agent makes carries `--headless --detach`, without exception.** `preview.sh` defaults to a windowed session and, without `--detach`, holds the terminal until the window is closed. A call that finds no live session starts one in that default mode, so an omitted flag does not fail: it opens a window and hangs. That includes the recalls that only change one thing, since the call that finds the session gone is the one that opens the window. `npm run dev`, `npm run dev:watch` and a bare `npm run preview` are for a person.
+
+**Pass the whole flag set on every call** (`--headless --detach --dark --open --language=… --locale=… --scenario=… --capture`). An axis you omit is left alone on a live session and takes its default on a fresh one, so a call that restarted the session quietly drops your theme and language. The tell is a tile saved as `default-<scenario>.png`, or in `preview/` when it should be in `preview/<language>-<locale>/`.
+
+**Open a windowed session only when the operator asks to see one.** Then `--stop` any headless session first, start the window with `run_in_background`, and send no other preview or e2e command until it is closed. The session name `preview` is exclusive. Tell the operator that closing the window ends the session, and run `--stop` yourself once they say they are done.
+
+**Look before you start and after you finish.** `ls "$XDG_RUNTIME_DIR/claude-quota"` lists a `preview` entry while a session is up (`e2e.lock` is always there). `--stop` prints nothing, so confirm by listing the directory again. Leave nothing running.
+
+**Prove each capture happened before you read it.** `--capture` prints the PNG path, and the file's modification time must be newer than the call. A montage or crop step that fails leaves the previous output in place, and reading it shows stale pixels as the new result, so delete the output before building it and check it exists before reading it.
+
+Captures land in `preview/<theme>-<scenario>.png`, or in `preview/<language>-<locale>/` when `--language` or `--locale` is set. Positions and widths only read true while the popup is open (`--open`); a closed popup keeps a stale allocation. Run one e2e at a time, headless, with `--assert` when no pixels are needed.
 
 ## Behave like the platform
 
