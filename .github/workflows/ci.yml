@@ -15,30 +15,47 @@ env:
   UUID: claude-quota@e7d.io
 
 jobs:
+  # The one place the image is chosen and built. It asks Arch which gnome-shell is current
+  # once, publishes the image under that version if the registry lacks it, and hands the tag to
+  # every other job, so a run tests one GNOME and seven jobs never race to push the same layers.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - id: image
+        uses: ./.github/actions/ci-image
+        with: { role: publish, token: "${{ secrets.REGISTRY_TOKEN }}" }
+
   lint:
+    needs: image
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
-        with: { name: lint, token: "${{ secrets.REGISTRY_TOKEN }}" }
+        with: { name: lint, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: lint
         run: docker exec "$C" npm run lint
       - name: shellcheck
-        run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh tools/lib/*.sh'
+        run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh tools/lib/*.sh .github/*.sh'
       - name: cleanup
         if: always()
         run: docker rm -f "$C" 2>/dev/null || true
 
   test:
+    needs: image
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
-        with: { name: test, token: "${{ secrets.REGISTRY_TOKEN }}" }
+        with: { name: test, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: test
         run: docker exec "$C" npm test
       - name: cleanup
@@ -46,13 +63,14 @@ jobs:
         run: docker rm -f "$C" 2>/dev/null || true
 
   coverage:
+    needs: image
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
-        with: { name: coverage, token: "${{ secrets.REGISTRY_TOKEN }}" }
+        with: { name: coverage, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: coverage
         run: docker exec "$C" npm run coverage
       - name: cleanup
@@ -65,6 +83,7 @@ jobs:
   # repaints per scheme only runs when a single invocation covers both.
   e2e:
     name: e2e (${{ matrix.shard }})
+    needs: image
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -81,7 +100,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
-        with: { name: "e2e-${{ matrix.shard }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+        with: { name: "e2e-${{ matrix.shard }}", image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: e2e
         env: { SHARD: "${{ matrix.shard }}", ARGS: "${{ matrix.args }}" }
         run: |
@@ -111,7 +130,7 @@ jobs:
         run: docker rm -f "$C" 2>/dev/null || true
 
   a11y:
-    needs: e2e
+    needs: [image, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -124,7 +143,7 @@ jobs:
           merge-multiple: true
           path: .
       - uses: ./.github/actions/ci-container
-        with: { name: a11y, token: "${{ secrets.REGISTRY_TOKEN }}" }
+        with: { name: a11y, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: a11y
         run: docker exec "$C" npm run a11y
       - name: cleanup
@@ -134,7 +153,7 @@ jobs:
   # Keeps the status context this repository has always reported, so what a merge waits on
   # does not change, and fails when any job did not succeed or any shard left no summary.
   ci:
-    needs: [lint, test, coverage, e2e, a11y]
+    needs: [image, lint, test, coverage, e2e, a11y]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

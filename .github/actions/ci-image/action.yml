@@ -1,0 +1,47 @@
+name: ci-image
+description: Choose the CI image for the GNOME Arch ships today, then publish it once or fetch it.
+
+inputs:
+  role:
+    description: publish (build and push it once) or use (fetch it, or build it where there is no registry to share through).
+    required: true
+  image:
+    description: The tag the publishing job chose. Empty for the publishing job itself.
+    required: false
+    default: ''
+  token:
+    description: Registry token, when REGISTRY is set.
+    required: false
+    default: ''
+
+outputs:
+  image:
+    description: The image tag every job of the run uses.
+    value: ${{ steps.resolve.outputs.image }}
+
+runs:
+  using: composite
+  steps:
+    - name: login
+      if: ${{ env.REGISTRY != '' }}
+      shell: bash
+      env: { T: "${{ inputs.token }}", U: "${{ github.actor }}" }
+      run: echo "$T" | docker login "$REGISTRY" -u "$U" --password-stdin
+
+    # The tag carries gnome-shell's version, so a new GNOME is a new tag; the build is told
+    # that version so a cached layer cannot hide it, and what is installed is checked before
+    # the image is pushed or used, because an image that says 51.1 and holds 50.4 is the
+    # failure this exists to prevent.
+    - name: resolve
+      id: resolve
+      shell: bash
+      env: { GIVEN: "${{ inputs.image }}" }
+      run: |
+        RESOLVED="$(bash .github/ci-image.sh resolve)"
+        echo "$RESOLVED" >> "$GITHUB_ENV"
+        echo "image=$(sed -n 's/^IMAGE=//p' <<< "$RESOLVED")" >> "$GITHUB_OUTPUT"
+
+    - name: ${{ inputs.role }}
+      shell: bash
+      env: { ROLE: "${{ inputs.role }}" }
+      run: bash .github/ci-image.sh "$ROLE"
