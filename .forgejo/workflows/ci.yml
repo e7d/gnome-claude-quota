@@ -81,6 +81,41 @@ jobs:
         if: always()
         run: docker rm -f "$C" 2>/dev/null || true
 
+  # Every other group, plus one scenario in both themes, because the check that a severity
+  # repaints per scheme only runs when a single invocation covers both. It shoots nothing, so
+  # a11y has no reason to wait for it.
+  behaviour:
+    name: e2e (behaviour)
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/ci-container
+        with: { name: e2e-behaviour, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: e2e
+        run: |
+          docker exec "$C" bash -c '
+            set -o pipefail
+            mkdir -p ci-out
+            npm run e2e -- --group=state --group=panel --group=hover --group=refresh --group=notify --group=lifecycle --scenario=critical --assert 2>&1 | tee ci-out/e2e-behaviour.log'
+      - name: collect
+        if: always()
+        run: |
+          mkdir -p artifact
+          docker cp "$C":/work/ci-out artifact/ci-out 2>/dev/null || true
+      - name: upload
+        if: always()
+        uses: forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4.3.1 + GHES check disabled
+        with:
+          name: e2e-behaviour
+          path: artifact
+          retention-days: 7
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
   # Each e2e job boots its own nested shell, so none depends on another. The two state shards
   # split the scenario matrix by theme and shoot the subset a11y scores, which is all a11y
   # waits for.
@@ -120,41 +155,6 @@ jobs:
         uses: forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4.3.1 + GHES check disabled
         with:
           name: e2e-${{ matrix.shard }}
-          path: artifact
-          retention-days: 7
-      - name: cleanup
-        if: always()
-        run: docker rm -f "$C" 2>/dev/null || true
-
-  # Every other group, plus one scenario in both themes, because the check that a severity
-  # repaints per scheme only runs when a single invocation covers both. It shoots nothing, so
-  # a11y has no reason to wait for it.
-  behaviour:
-    name: e2e (behaviour)
-    needs: image
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/ci-container
-        with: { name: e2e-behaviour, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
-      - name: e2e
-        run: |
-          docker exec "$C" bash -c '
-            set -o pipefail
-            mkdir -p ci-out
-            npm run e2e -- --group=state --group=panel --group=hover --group=refresh --group=notify --group=lifecycle --scenario=critical --assert 2>&1 | tee ci-out/e2e-behaviour.log'
-      - name: collect
-        if: always()
-        run: |
-          mkdir -p artifact
-          docker cp "$C":/work/ci-out artifact/ci-out 2>/dev/null || true
-      - name: upload
-        if: always()
-        uses: forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4.3.1 + GHES check disabled
-        with:
-          name: e2e-behaviour
           path: artifact
           retention-days: 7
       - name: cleanup
