@@ -28,18 +28,31 @@ set_theme() {
 }
 
 # warp_pointer is ignored while the devkit viewer owns the pointer, so hover has
-# to come from a virtual device emitting real motion events.
+# to come from a virtual device emitting real motion events. Clutter.get_default_backend
+# is gone in GNOME 51, and an Eval that throws returns nothing, so a move that did not
+# happen has to be caught by reading the pointer back rather than by the Eval's status.
+POINTER_DEVICE="globalThis._vd ||= global.stage.context.get_backend().get_default_seat()
+    .create_virtual_device(imports.gi.Clutter.InputDeviceType.POINTER_DEVICE);"
+
+move_pointer() {
+    local target landed
+    target="$(shell_eval "$POINTER_DEVICE
+        const [x, y] = $1;
+        globalThis._vd.notify_absolute_motion(imports.gi.GLib.get_monotonic_time(), x, y);
+        JSON.stringify([x, y])" | unwrap)"
+    [ -n "$target" ] || die 'the pointer could not be moved: the Eval threw'
+    await_style
+    landed="$(shell_eval "JSON.stringify(global.get_pointer().slice(0, 2))" | unwrap)"
+    [ "$landed" = "$target" ] || die "the pointer landed at ${landed:-nowhere}, not at $target"
+}
+
 point_at_actor() {
-    shell_eval "const C = imports.gi.Clutter;
-        globalThis._vd ||= C.get_default_backend().get_default_seat()
-            .create_virtual_device(C.InputDeviceType.POINTER_DEVICE);
+    move_pointer "(() => {
         const a = $1;
         const [ax, ay] = a.get_transformed_position();
         const [aw, ah] = a.get_transformed_size();
-        globalThis._vd.notify_absolute_motion(global.get_current_time(),
-            Math.round(ax + aw / 2), Math.round(ay + ah / 2));
-        'ok'" >/dev/null
-    await_style
+        return [Math.round(ax + aw / 2), Math.round(ay + ah / 2)];
+    })()"
 }
 
 point_at() {
@@ -51,14 +64,10 @@ point_at() {
 }
 
 point_at_away() {
-    shell_eval "const C = imports.gi.Clutter;
-        globalThis._vd ||= C.get_default_backend().get_default_seat()
-            .create_virtual_device(C.InputDeviceType.POINTER_DEVICE);
+    move_pointer "(() => {
         const mon = Main.layoutManager.primaryMonitor;
-        globalThis._vd.notify_absolute_motion(global.get_current_time(),
-            Math.round(mon.width / 2), mon.height - 8);
-        'ok'" >/dev/null
-    await_style
+        return [Math.round(mon.width / 2), mon.height - 8];
+    })()"
 }
 
 QUOTA="const q = (short, name, percent, leftMin, winMin) => {
