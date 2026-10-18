@@ -299,9 +299,20 @@ start_shell() {
     export DBUS_SESSION_BUS_ADDRESS
 }
 
+# A call that fails or stalls says so on stderr: under set -e a failed Eval otherwise ends the
+# run with status 1 and no text, which is how a CI job sat silent for two minutes and died.
 shell_eval() {
-    gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
-        --method org.gnome.Shell.Eval "$1" 2>/dev/null
+    local out status started elapsed
+    started="$(date +%s)"
+    out="$(gdbus call --session --timeout 30 --dest org.gnome.Shell --object-path /org/gnome/Shell \
+        --method org.gnome.Shell.Eval "$1" 2>&1)" && status=0 || status=$?
+    elapsed=$(($(date +%s) - started))
+    if [ -z "${DEVKIT_EVAL_QUIET:-}" ]; then
+        [ "$elapsed" -lt 5 ] || echo "devkit: slow Eval (${elapsed}s, status $status): $(tr '\n' ' ' <<< "${1:0:120}")" >&2
+        [ "$status" -eq 0 ] || echo "devkit: Eval failed (status $status): ${out:0:200} :: $(tr '\n' ' ' <<< "${1:0:120}")" >&2
+    fi
+    printf '%s\n' "$out"
+    return "$status"
 }
 
 eval_json() {
@@ -368,7 +379,7 @@ is_true() {
 
 wait_for_indicator() {
     for _ in $(seq 240); do
-        is_true "$(shell_eval "Object.keys(Main.panel.statusArea).includes('$UUID').toString()")" &&
+        is_true "$(DEVKIT_EVAL_QUIET=1 shell_eval "Object.keys(Main.panel.statusArea).includes('$UUID').toString()")" &&
             return 0
         sleep 0.25
     done
