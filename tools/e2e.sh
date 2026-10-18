@@ -216,9 +216,9 @@ assert_account_within_popup() {
         "$(probe "(() => {
             const label = $IND._popup._accountLabel;
             const shown = label.visible;
-            const width = $IND._popup._body.get_preferred_width(-1)[1];
+            const width = $IND.menu.box.get_preferred_width(-1)[1];
             label.visible = false;
-            const without = $IND._popup._body.get_preferred_width(-1)[1];
+            const without = $IND.menu.box.get_preferred_width(-1)[1];
             label.visible = shown;
             return width === without;
         })()")"
