@@ -6,7 +6,7 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const GITHUB = read('../.github/workflows/ci.yml');
 const FORGEJO = read('../.forgejo/workflows/ci.yml');
 
-const FORK = /forgejo\/(upload|download)-artifact@[0-9a-f]{40} # v[\d.]+/g;
+const FORK = /forgejo\/(upload|download)-artifact@[0-9a-f]{40} # v[\d.]+ \+ GHES check disabled/g;
 const OFFICIAL = /actions\/(upload|download)-artifact@[0-9a-f]{40} # v[\d.]+/g;
 const LEADING_COMMENT = /^(?:#[^\n]*\n)+/;
 
@@ -62,4 +62,25 @@ test('every job but the image job waits for it', () => {
         assert.equal(waiting.length, jobs.length);
         waiting.forEach(needs => assert.match(needs, /\bimage\b/));
     });
+});
+
+const EXTERNAL = /uses: ([^./\s][^@\s]*)@(\S+)(?: # (.*))?$/gm;
+
+function looseReferences(text) {
+    return [...text.matchAll(EXTERNAL)]
+        .filter(([, , ref, note]) => !/^[0-9a-f]{40}$/.test(ref) || !/^v\d+\.\d+\.\d+/.test(note ?? ''))
+        .map(([line]) => line);
+}
+
+test('every external action is pinned by commit and says which exact version that is', () => {
+    [GITHUB, FORGEJO].forEach(text => assert.deepEqual(looseReferences(text), []));
+});
+
+test('a moving tag, or a commit with no exact version beside it, is caught', () => {
+    assert.deepEqual(looseReferences('uses: actions/checkout@v4'), ['uses: actions/checkout@v4']);
+    const sha = '11d5960a326750d5838078e36cf38b85af677262';
+    assert.equal(looseReferences(`uses: actions/checkout@${sha} # v4`).length, 1);
+    assert.equal(looseReferences(`uses: actions/checkout@${sha}`).length, 1);
+    assert.deepEqual(looseReferences(`uses: actions/checkout@${sha} # v4.4.0`), []);
+    assert.deepEqual(looseReferences('uses: ./.github/actions/ci-image'), []);
 });

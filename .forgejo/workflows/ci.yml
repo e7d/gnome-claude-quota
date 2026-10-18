@@ -28,7 +28,7 @@ jobs:
     outputs:
       image: ${{ steps.image.outputs.image }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
       - id: image
         uses: ./.github/actions/ci-image
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: lint, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: test, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: coverage, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
@@ -101,7 +101,7 @@ jobs:
           - shard: state-light
             args: --group=state --light-only --a11y
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: "e2e-${{ matrix.shard }}", image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
@@ -120,7 +120,7 @@ jobs:
           docker cp "$C":/work/preview artifact/preview 2>/dev/null || true
       - name: upload
         if: always()
-        uses: forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        uses: forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4.3.1 + GHES check disabled
         with:
           name: e2e-${{ matrix.shard }}
           path: artifact
@@ -134,9 +134,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
-      - uses: forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e # v4
+      - uses: forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e # v4.1.4 + GHES check disabled
         with:
           pattern: e2e-state-*
           merge-multiple: true
@@ -157,9 +157,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
-      - uses: forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e # v4
+      - uses: forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e # v4.1.4 + GHES check disabled
         continue-on-error: true
         with:
           pattern: e2e-*
