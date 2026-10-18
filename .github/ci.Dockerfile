@@ -1,6 +1,9 @@
 FROM archlinux:base
 
-RUN pacman -Syu --noconfirm --needed \
+ARG GNOME_VERSION=unset
+
+RUN echo "building for gnome-shell ${GNOME_VERSION}" \
+    && pacman -Syu --noconfirm --needed \
         adwaita-icon-theme \
         cantarell-fonts \
         dbus \

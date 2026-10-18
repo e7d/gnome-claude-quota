@@ -19,15 +19,30 @@ runs:
       env: { T: "${{ inputs.token }}", U: "${{ github.actor }}" }
       run: echo "$T" | docker login "$REGISTRY" -u "$U" --password-stdin
 
+    # The image tracks the GNOME Arch ships today: its tag carries gnome-shell's version, so a
+    # new release is a new tag, and the build is told that version so a cached layer cannot
+    # hide it. What was installed is checked before it is trusted or pushed, because an image
+    # that says 51.1 and holds 50.4 is the failure this exists to prevent.
     - name: image
       shell: bash
       run: |
-        IMAGE="${REGISTRY:+$REGISTRY/}${GITHUB_REPOSITORY}-ci:$(sha256sum .github/ci.Dockerfile | cut -c1-16)"
+        PACKAGE="$(curl -fsS --retry 3 https://archlinux.org/packages/extra/x86_64/gnome-shell/json/)"
+        GNOME="$(jq -r '(if .epoch == 0 then "" else "\(.epoch):" end) + .pkgver + "-" + .pkgrel' <<< "$PACKAGE")"
+        case "$GNOME" in
+          ''|*null*) echo "cannot tell which gnome-shell Arch ships today" >&2; exit 1 ;;
+        esac
+        IMAGE="${REGISTRY:+$REGISTRY/}${GITHUB_REPOSITORY}-ci:$(sha256sum .github/ci.Dockerfile | cut -c1-16)-gnome-${GNOME//:/_}"
         echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+        verify() {
+          INSTALLED="$(docker run --rm "$IMAGE" pacman -Q gnome-shell | cut -d' ' -f2)"
+          [ "$INSTALLED" = "$GNOME" ] || { echo "$IMAGE holds gnome-shell $INSTALLED, not $GNOME" >&2; return 1; }
+        }
         if [ -n "$REGISTRY" ] && docker pull "$IMAGE" 2>/dev/null; then
+          verify
           exit 0
         fi
-        docker build -f .github/ci.Dockerfile -t "$IMAGE" .github
+        docker build --pull --build-arg "GNOME_VERSION=$GNOME" -f .github/ci.Dockerfile -t "$IMAGE" .github
+        verify
         if [ -n "$REGISTRY" ]; then
           docker push "$IMAGE"
         fi
