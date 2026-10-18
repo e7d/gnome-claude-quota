@@ -145,7 +145,7 @@ setup_for() {
         expired) echo "i._quotas = [q('S','Session (5h)',40,-5,SESSION), q('W','Weekly',60,-5,WEEK)];" ;;
         model-scoped) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('W','Weekly',44,5000,WEEK), q('O','Opus',78,200,SESSION)];" ;;
         no-reset) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('W','Weekly',44,5000,WEEK), {...q('O','Opus',72,200,SESSION), resetsAt: null, windowProgress: null, aheadOfPace: false}];" ;;
-        long-name) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('So','Sonnet with a very long display name',61,200,SESSION)];" ;;
+        long-name) echo "i._quotas = [q('S','Session (5h)',30,200,SESSION), q('So','Sonnet with a very long display name',61,200,SESSION)]; i._accountEmail = 'a.remarkably.long.address.for.testing@subdomain.example.org';" ;;
         locale) echo "$(setup_quotas) i._locale = 'fr-FR';" ;;
         rate-limited) echo "i._quotas = [q('S','Session (5h)',21,253,SESSION), q('W','Weekly',94,13,WEEK)]; i._block = {until: new Date(Date.now() + 180000), reason: 'rate-limit'};" ;;
         rate-limited-day) echo "$(setup_quotas) i._fetchedAt = new Date(Date.now() - 26 * 3600000); i._block = {until: new Date(Date.now() + 26 * 3600000), reason: 'rate-limit'};" ;;
@@ -185,7 +185,7 @@ render_state() {
         const ANCHOR = $(window_anchor);
         $QUOTA
         $FILLER?.destroy(); $FILLER = null;
-        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); $(fixture_locales)
+        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._accountEmail = 'jane.doe@example.org'; $(fixture_locales)
         $(setup_for "$1")
         i.menu.open(false); i._render();
         $(squeeze_for "$1")

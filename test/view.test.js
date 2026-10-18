@@ -14,6 +14,7 @@ function base(overrides = {}) {
         fetchedAt: NOW,
         refreshing: false,
         lastRequestAt: null,
+        accountEmail: null,
         quotaCount: 2,
         menuQuotaCount: 2,
         locale: 'en-US',
@@ -33,6 +34,18 @@ test('popupView hides the message entirely once quotas are on screen', () => {
     assert.equal(view.message, '');
     assert.equal(view.messageVisible, false);
     assert.equal(view.bodyVisible, true);
+});
+
+test('popupView shows the connected account under the refresh line', () => {
+    const view = popupView(base({accountEmail: 'jane.doe@example.org'}));
+    assert.equal(view.accountText, 'Account: jane.doe@example.org');
+    assert.equal(view.accountVisible, true);
+});
+
+test('popupView hides the account row when no account is known', () => {
+    const view = popupView(base());
+    assert.equal(view.accountText, '');
+    assert.equal(view.accountVisible, false);
 });
 
 test('popupView silences an error while the extension is rate-limited', () => {

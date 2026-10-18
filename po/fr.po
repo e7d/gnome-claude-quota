@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-08-26 14:12+0200\n"
+"POT-Creation-Date: 2026-10-18 10:29+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -74,19 +74,23 @@ msgstr[1] "{m} min restantes"
 msgid "Last refresh: {time}"
 msgstr "Mise à jour : {time}"
 
-#: lib/format.js:99
+#: lib/format.js:94
+msgid "Account: {email}"
+msgstr "Compte : {email}"
+
+#: lib/format.js:103
 msgid "retry at {time}"
 msgstr "prochain essai à {time}"
 
-#: lib/format.js:100
+#: lib/format.js:104
 msgid "retry {time}"
 msgstr "prochain essai {time}"
 
-#: lib/format.js:106
+#: lib/format.js:110
 msgid "until {time}"
 msgstr "jusqu'à {time}"
 
-#: lib/format.js:111 lib/usage.js:114
+#: lib/format.js:115 lib/usage.js:123
 msgid "Rate limited"
 msgstr "Quota de requêtes atteint"
 
@@ -144,19 +148,19 @@ msgstr "Lecture impossible de ~/.claude/.credentials.json"
 msgid "No Claude token in ~/.claude/.credentials.json"
 msgstr "Aucun jeton Claude dans ~/.claude/.credentials.json"
 
-#: lib/usage.js:88 lib/usage.js:111
+#: lib/usage.js:97 lib/usage.js:120
 msgid "Token expired, run Claude Code once"
 msgstr "Jeton expiré, relancez Claude Code"
 
-#: lib/usage.js:100
+#: lib/usage.js:109
 msgid "Cannot reach api.anthropic.com"
 msgstr "api.anthropic.com injoignable"
 
-#: lib/usage.js:121
+#: lib/usage.js:130
 msgid "Usage request failed (HTTP {status})"
 msgstr "Échec de la requête (HTTP {status})"
 
-#: lib/usage.js:128
+#: lib/usage.js:137
 msgid "Unexpected response from the usage endpoint"
 msgstr "Réponse inattendue du point d'accès"
 

@@ -39,6 +39,8 @@ export class PopupBody {
         this._refreshButton.connect('clicked', () => this._onRefresh());
         this._metaBox.add_child(this._refreshLabel);
         this._metaBox.add_child(this._refreshButton);
+        this._accountLabel = new St.Label({style_class: 'cq-account', opacity: CAPTION_OPACITY, x_expand: true});
+        this._accountLabel.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
         this._buildMessage();
         this._buildBody();
         this._buildHiddenNote();
@@ -77,6 +79,7 @@ export class PopupBody {
             x_expand: true,
         });
         this._bodyBox.add_child(this._metaBox);
+        this._bodyBox.add_child(this._accountLabel);
         this._bodyBox.add_child(this._blockBox);
         this._body.add_child(this._bodyBox);
     }
@@ -165,6 +168,8 @@ export class PopupBody {
 
     _renderMessage(view) {
         this._refreshLabel.text = view.refreshText;
+        this._accountLabel.text = view.accountText;
+        this._accountLabel.visible = view.accountVisible;
         this._issueItem.visible = view.issue !== null;
         this._renderIssue(view.issue);
         this._messageLabel.text = view.message;

@@ -196,7 +196,47 @@ assert_incident_within_popup() {
             $IND._popup._issueItem.get_preferred_width(-1)[1] <= $IND._popup._body.get_preferred_width(-1)[1]")"
 }
 
+assert_account_row() {
+    local prefix
+    prefix="$(js_string "$(catalog_prefix 'Account: {email}')")"
+    assert_eq "$1 the account row shows the connected account, or hides" 'true' \
+        "$(probe "$IND._popup._accountLabel.visible === ($IND._accountEmail !== null)
+            && ($IND._accountEmail === null || $IND._popup._accountLabel.text === $prefix + $IND._accountEmail)")"
+    assert_eq "$1 the account row sits between the header and the quotas" 'true' \
+        "$(probe "(() => {
+            const kids = $IND._popup._bodyBox.get_children();
+            const at = actor => kids.indexOf(actor);
+            const account = at($IND._popup._accountLabel);
+            return account === at($IND._popup._metaBox) + 1 && account === at($IND._popup._blockBox) - 1;
+        })()")"
+}
+
+assert_account_within_popup() {
+    assert_eq "$1 the account row never widens the popup" 'true' \
+        "$(probe "(() => {
+            const label = $IND._popup._accountLabel;
+            const shown = label.visible;
+            const width = $IND._popup._body.get_preferred_width(-1)[1];
+            label.visible = false;
+            const without = $IND._popup._body.get_preferred_width(-1)[1];
+            label.visible = shown;
+            return width === without;
+        })()")"
+}
+
+stage_account() {
+    shell_eval "$IND._accountEmail = $1; $IND._render(); 'ok'" >/dev/null
+}
+
+assert_no_account_hides_the_row() {
+    render_state normal
+    stage_account null
+    assert_account_row "$1"
+}
+
 assert_state() {
+    assert_account_row "$1"
+    assert_account_within_popup "$1"
     assert_rows_filled "$1"
     assert_no_placeholders "$1"
     assert_block_count "$1"
@@ -318,6 +358,8 @@ assert_hidden_note_offers_settings() {
     assert_eq "$1 the settings button sits under the note, not beside it" 'true' "$below"
 }
 
+assert_account_row_probe() { assert_account_row control; }
+assert_account_within_popup_probe() { assert_account_within_popup control; }
 assert_rows_filled_probe() { assert_rows_filled control; }
 assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
@@ -335,6 +377,18 @@ assert_hidden_note_offers_settings_probe() { assert_hidden_note_offers_settings 
 
 prove_state() {
     render_state normal
+    prove 'the account row shows the connected account' \
+        "shell_eval \"$IND._popup._accountLabel.text = 'Account: nobody@example.org'; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_account_row_probe
+    prove 'the account row sits between the header and the quotas' \
+        "shell_eval \"$IND._popup._bodyBox.remove_child($IND._popup._accountLabel); $IND._popup._bodyBox.add_child($IND._popup._accountLabel); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._popup._bodyBox.remove_child($IND._popup._accountLabel); $IND._popup._bodyBox.insert_child_at_index($IND._popup._accountLabel, 1); 'ok'\" >/dev/null" \
+        assert_account_row_probe
+    prove 'the account row stays inside the popup' \
+        "shell_eval \"$IND._popup._accountLabel.set_style('max-width: 2000px'); $IND._popup._accountLabel.text = 'a'.repeat(200); $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._popup._accountLabel.set_style(null); $IND._render(); 'ok'\" >/dev/null" \
+        assert_account_within_popup_probe
     prove 'rows filled' \
         "shell_eval \"$IND._popup._blocks[0]._caption.text = ''; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
@@ -459,6 +513,7 @@ group_state() {
         assert_hidden_note_offers_settings "$theme"
         assert_issue_rides_healthy_quota "$theme"
         assert_operational_clears_the_issue "$theme"
+        assert_no_account_hides_the_row "$theme"
     done
     set_animations true
     assert_theme_differs

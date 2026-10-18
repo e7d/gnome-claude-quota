@@ -50,6 +50,11 @@
     max-width: 260px;
 }
 
+.cq-account {
+    font-size: 0.9em;
+    max-width: 260px;
+}
+
 .cq-meta {
     spacing: 6px;
     font-size: 0.9em;

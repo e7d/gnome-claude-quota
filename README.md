@@ -45,6 +45,8 @@ Whatever asks — the timer, the popup, the button — **no two requests go out 
 
 The popup's first line carries `Last refresh: 10:48 AM` with a circular-arrow button on the right. Clicking it polls and **leaves the popup open**, so the numbers land in front of you. The icon spins while the poll is in flight and the button is insensitive until it finishes, so a poll cannot be fired twice.
 
+Under it, a second grey line reads `Account: you@example.org`, the address Claude Code reports for the logged-in account. It is read from the same `~/.claude.json`, on every poll, and the line is hidden when no address can be read. Nothing else is shown on that row, and it never widens the popup: a long address is shortened in the middle.
+
 There is no `Up to date` state: the timestamp beside the button already says how fresh the numbers are.
 
 The button goes insensitive while a `429` is in force, and while the 2-minute floor between requests has not lifted — in both cases because clicking it could not send anything. Nothing in either response reports how much of the allowance is left, so the extension declines to be what spends it.

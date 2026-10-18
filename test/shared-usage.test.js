@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {fresherThan, parseSharedUsage} from '../lib/shared-usage.js';
+import {fresherThan, parseAccountEmail, parseSharedUsage} from '../lib/shared-usage.js';
 
 const ACCOUNT = '3e1c3aca-0000-4000-8000-000000000000';
 const LIMITS = [
@@ -92,4 +92,38 @@ test('any block beats holding nothing', () => {
 test('an unreadable block is never fresher than anything', () => {
     assert.equal(fresherThan(null, null), false);
     assert.equal(fresherThan(null, new Date('2026-08-13T09:00:00Z')), false);
+});
+
+test('the account email is read from the logged-in account', () => {
+    const text = JSON.stringify({oauthAccount: {accountUuid: ACCOUNT, emailAddress: 'jane.doe@example.org'}});
+    assert.equal(parseAccountEmail(text), 'jane.doe@example.org');
+});
+
+test('the account email is found even when the usage block is foreign', () => {
+    const text = JSON.stringify({
+        oauthAccount: {accountUuid: ACCOUNT, emailAddress: 'jane.doe@example.org'},
+        cachedUsageUtilization: {accountUuid: 'someone-else'},
+    });
+    assert.equal(parseAccountEmail(text), 'jane.doe@example.org');
+    assert.equal(parseSharedUsage(text), null);
+});
+
+test('surrounding whitespace is dropped from the account email', () => {
+    const text = JSON.stringify({oauthAccount: {emailAddress: '  jane@example.org\n'}});
+    assert.equal(parseAccountEmail(text), 'jane@example.org');
+});
+
+test('anything that is not a single address yields no email', () => {
+    const cases = [
+        {oauthAccount: {}},
+        {oauthAccount: {emailAddress: null}},
+        {oauthAccount: {emailAddress: 42}},
+        {oauthAccount: {emailAddress: ''}},
+        {oauthAccount: {emailAddress: 'no-at-sign'}},
+        {oauthAccount: {emailAddress: 'two words@example.org'}},
+        {oauthAccount: {emailAddress: 'a@b@example.org'}},
+        {},
+    ];
+    cases.forEach(data => assert.equal(parseAccountEmail(JSON.stringify(data)), null, JSON.stringify(data)));
+    assert.equal(parseAccountEmail('not json'), null);
 });

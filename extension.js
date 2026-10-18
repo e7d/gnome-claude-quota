@@ -16,7 +16,7 @@ import {thresholdsFrom} from './lib/notify.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
 import {KEYS, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult} from './lib/state.js';
-import {sharedUsage} from './lib/usage.js';
+import {accountEmail, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
 import {Alerts} from './ui/alerts.js';
 import {PanelStrip, panelScheme} from './ui/panel-fit.js';
@@ -42,6 +42,7 @@ class Indicator extends PanelMenu.Button {
         this._fetchedAt = null;
         this._block = null;
         this._lastRequestAt = null;
+        this._accountEmail = null;
         this._rateLimitStreak = 0;
         this._limits = [];
         this._fired = {};
@@ -261,6 +262,7 @@ class Indicator extends PanelMenu.Button {
     // over. Withdrawing there is what keeps the tray agreeing with the popup.
     async _refresh(trigger) {
         const now = new Date();
+        this._accountEmail = accountEmail();
         this._adoptShared(now);
         this._syncAlerts(now);
         const settled = pollDelay(this._fetchedAt, now, maxAgeFor(trigger));
@@ -355,6 +357,7 @@ class Indicator extends PanelMenu.Button {
             fetchedAt: this._fetchedAt,
             refreshing: this._refreshing,
             lastRequestAt: this._lastRequestAt,
+            accountEmail: this._accountEmail,
             quotaCount: quotaViews.length,
             menuQuotaCount: menuViews.length,
             locale: this._locale,
