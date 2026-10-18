@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: lint, token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: lint
@@ -35,6 +36,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: test, token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: test
@@ -48,6 +50,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: coverage, token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: coverage
@@ -76,6 +79,7 @@ jobs:
             args: --group=state --light-only --a11y
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
       - uses: ./.github/actions/ci-container
         with: { name: "e2e-${{ matrix.shard }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: e2e
@@ -112,6 +116,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         env: { GITHUB_SERVER_URL: "${{ vars.ARTIFACT_SERVER_URL || github.server_url }}" }
         with:
@@ -135,6 +140,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         continue-on-error: true
         env: { GITHUB_SERVER_URL: "${{ vars.ARTIFACT_SERVER_URL || github.server_url }}" }
