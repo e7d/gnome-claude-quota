@@ -187,7 +187,7 @@ The attempt-log control is the one break that runs real code rather than mutatin
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` is one job per stage — `lint`, `test`, `coverage`, `e2e`, `a11y` — plus a final `ci` job. `README.md` § Continuous integration says what each does; this section is for changing it.
+`.github/workflows/ci.yml` is one job per stage — `lint`, `test`, `coverage`, `e2e`, `a11y` — plus a final `report` job. `README.md` § Continuous integration says what each does; this section is for changing it.
 
 **The `e2e` matrix works because every `e2e.sh` invocation boots its own nested shell**, so two groups never share state unless they are in the same invocation. A state shard is one entry of the `e2e` matrix's `include` list: a `shard` name and the `args` handed to `npm run e2e`. `behaviour` is a job of its own because `needs` waits for every leg of a matrix and `a11y` only needs the jobs that shoot. Whatever the job, it writes `ci-out/e2e-<name>.log` and uploads `e2e-<name>`, and `tools/ci-report.js` finds logs by that name, so a new job or entry needs nothing else.
 
@@ -207,9 +207,9 @@ The attempt-log control is the one break that runs real code rather than mutatin
 
 **Checkouts do not persist their credentials.** `actions/checkout` leaves the job token in `.git/config`, and `ci-container` copies the whole checkout, `.git` included, into the container where `npm ci` runs package install scripts. Nothing in the pipeline fetches or pushes after checkout, so every checkout sets `persist-credentials: false` and the token never reaches that container. A step that needs git credentials later has to ask for them itself.
 
-**Artifacts are the hand-off, not an archive.** Each shard uploads `ci-out` and, for the state shards, `preview` as `e2e-<shard>` (`actions/upload-artifact` and `actions/download-artifact`, v4, pinned by commit). `a11y` downloads `e2e-state-*` merged into the workspace root, which puts the tiles where `npm run a11y` reads them; `ci` downloads every `e2e-*` unmerged, so each log keeps its own directory. They are kept for seven days so a failure can be looked at after the run.
+**Artifacts are the hand-off, not an archive.** Each shard uploads `ci-out` and, for the state shards, `preview` as `e2e-<shard>` (`actions/upload-artifact` and `actions/download-artifact`, v4, pinned by commit). `a11y` downloads `e2e-state-*` merged into the workspace root, which puts the tiles where `npm run a11y` reads them; `report` downloads every `e2e-*` unmerged, so each log keeps its own directory. They are kept for seven days so a failure can be looked at after the run.
 
-**The `ci` job keeps its name on purpose.** The status contexts `CI / ci (pull_request)` and `CI / ci (push)` are what `forgejo_pr_ff_merge` and anything else waiting on this repository's checks read; renaming the job would make them wait on a context that never arrives. It runs with `if: always()` and reads `needs`, because a skipped job (`a11y` after a failed `e2e`) is not a success and would otherwise let a gate that only checks for failures through.
+**The last job is `report`, and it runs whatever the others did.** It was called `ci` until 2026-10-18, so the status contexts `CI / ci (pull_request)` and `CI / ci (push)` became `CI / report (pull_request)` and `CI / report (push)`. `forgejo_pr_ff_merge` waits for every status on the head rather than for a named one, so it is unaffected; a branch protection that requires a named check would have to be updated. It runs with `if: always()` and reads `needs`, because a skipped job (`a11y` after a failed `e2e`) is not a success and would otherwise let a gate that only checks for failures through.
 
 **A shard that dies without a summary is a failure, with a reason.** The old single job failed on `main` at 09:37 on 2026-10-18 with 36 seconds of silence and no step name. `ci-report` treats a log with no final `✅ N passed, M failed` line as `no-summary` and prints the `❌ control` and `❌ FAIL` lines it did find, so a crash reads as one.
 

@@ -181,9 +181,9 @@ jobs:
         if: always()
         run: docker rm -f "$C" 2>/dev/null || true
 
-  # Keeps the status context this repository has always reported, so what a merge waits on
-  # does not change, and fails when any job did not succeed or any shard left no summary.
-  ci:
+  # Gathers every job and every e2e log into one table, and fails when any job did not succeed
+  # or any e2e job left no summary line.
+  report:
     needs: [image, lint, test, coverage, e2e, behaviour, a11y]
     if: ${{ always() }}
     runs-on: ubuntu-latest
