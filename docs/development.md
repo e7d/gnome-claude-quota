@@ -181,6 +181,24 @@ The attempt-log control is the one break that runs real code rather than mutatin
 
 **A control that stages "the same token" has to pin one timestamp.** `credentialsRenewed` is a strict `>`, so two `new Date(Date.now() + 3600000)` calls a millisecond apart are a *renewal*: `wake_on_same_token` set `_seenExpiry` immediately and left `credentialExpiry` a lambda evaluated later, inside `_onCredentialsWritten`, so on a loaded runner the break cleared the block it was supposed to leave standing and `a renewed token ends the block` reported `still passed with the break applied` — which is the Forgejo failure of run 22. Both sides now read one `globalThis._sameExpiry`.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` is one job per stage — `lint`, `test`, `coverage`, `e2e`, `a11y` — plus a final `ci` job. `README.md` § Continuous integration says what each does; this section is for changing it.
+
+**The `e2e` matrix works because every `e2e.sh` invocation boots its own nested shell**, so two groups never share state unless they are in the same invocation. A shard is one entry of the matrix's `include` list: a `shard` name and the `args` handed to `npm run e2e`. The step writes `ci-out/e2e-<shard>.log`, and `tools/ci-report.js` finds shards by that name, so a new entry needs nothing else.
+
+**What decides where a group can go.** Any group other than `state` may sit in any shard. `state` can be split by `--dark-only` and `--light-only` or by `--scenario`, but a check that needs both themes inside one invocation, such as `assert_theme_differs`, is skipped silently when `THEMES` has one entry — which is why the `behaviour` shard carries `--group=state --scenario=critical`. Splitting further means asking what else is guarded by `${#THEMES[@]}` before trusting a green shard.
+
+**Balance it from a measurement, never a guess.** Measured on 2026-10-18 from the log of the single-job run 7801 (98 s end to end): `dark` 21 s, `light` 26 s, `refresh` 16 s, `panel` + `hover` + `notify` + `lifecycle` about 9 s, e2e startup about 8 s per invocation, and about 9 s of checkout, container setup and teardown per job. A shard therefore pays about 17 s before its first assertion, so splitting a 10 s block in two loses time. The runners are five, and `lint`, `test` and `coverage` take three of them for the first seconds, so more than three shards queue behind them.
+
+**Artifacts are the hand-off, not an archive.** Each shard uploads `ci-out` and, for the state shards, `preview` as `e2e-<shard>` (`actions/upload-artifact` and `actions/download-artifact`, v4, pinned by commit). `a11y` downloads `e2e-state-*` merged into the workspace root, which puts the tiles where `npm run a11y` reads them; `ci` downloads every `e2e-*` unmerged, so each log keeps its own directory. They are kept for seven days so a failure can be looked at after the run.
+
+**The `ci` job keeps its name on purpose.** The status contexts `CI / ci (pull_request)` and `CI / ci (push)` are what `forgejo_pr_ff_merge` and anything else waiting on this repository's checks read; renaming the job would make them wait on a context that never arrives. It runs with `if: always()` and reads `needs`, because a skipped job (`a11y` after a failed `e2e`) is not a success and would otherwise let a gate that only checks for failures through.
+
+**A shard that dies without a summary is a failure, with a reason.** The old single job failed on `main` at 09:37 on 2026-10-18 with 36 seconds of silence and no step name. `ci-report` treats a log with no final `✅ N passed, M failed` line as `no-summary` and prints the `❌ control` and `❌ FAIL` lines it did find, so a crash reads as one.
+
+**Forgejo specifics worth knowing.** `uses:` without a URL resolves against `data.forgejo.org`, which mirrors the `actions` organisation. A local action (`uses: ./.github/actions/ci-container`) only resolves after `actions/checkout` has run. A composite action has no post step, so each job removes its own container in an `if: always()` step; the container name carries the run id and the job name so concurrent jobs on one runner cannot collide.
+
 ## Attributing a 429
 
 Every upstream attempt appends one JSON object to `~/.cache/claude-quota/attempts.jsonl`, beside the cache — see § Reading the exchange log for the fields and the reader. The append itself costs one open and one write whatever the log holds; trimming to 2000 records has to read the whole file, so it runs on one append in two hundred and on the first of each session. The log therefore sits a little above 2000 rather than exactly on it, and a line torn by an interrupted write is healed at the next trim rather than immediately — `parseLog` drops an unparseable line in the meantime. Doing it the other way round — rewriting the whole file on every attempt — put a read, a split and a write of every record on the compositor's own thread, several times a minute.

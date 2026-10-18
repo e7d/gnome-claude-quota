@@ -18,65 +18,126 @@ env:
   UUID: claude-quota@e7d.io
 
 jobs:
-  ci:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: login
-        if: ${{ vars.REGISTRY }}
-        env: { T: "${{ secrets.REGISTRY_TOKEN }}", U: "${{ github.actor }}" }
-        run: echo "$T" | docker login "$REGISTRY" -u "$U" --password-stdin
-
-      - name: image
-        run: |
-          IMAGE="${REGISTRY:+$REGISTRY/}${GITHUB_REPOSITORY}-ci:$(sha256sum .github/ci.Dockerfile | cut -c1-16)"
-          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
-          if [ -n "$REGISTRY" ] && docker pull "$IMAGE" 2>/dev/null; then
-            exit 0
-          fi
-          docker build -f .github/ci.Dockerfile -t "$IMAGE" .github
-          if [ -n "$REGISTRY" ]; then
-            docker push "$IMAGE"
-          fi
-
-      - name: setup
-        run: |
-          C="claude-quota-${GITHUB_RUN_ID}"
-          echo "C=$C" >> $GITHUB_ENV
-          docker create --name "$C" -w /work "$IMAGE" sleep infinity
-          docker cp ./. "$C":/work/
-          docker start "$C"
-          docker exec -u root "$C" chown -R ci:ci /work
-          docker exec "$C" bash -c 'mkdir -p ~/.local/share/gnome-shell/extensions && ln -sfn /work ~/.local/share/gnome-shell/extensions/'"$UUID"
-          docker exec -u root "$C" .github/logind-stub.sh
-
-      # The base image is a rolling one on purpose — the point is to run against the GNOME
-      # the distribution ships today — so what a run was measured against is worth a line.
-      - name: toolchain
-        run: docker exec "$C" bash -c 'gnome-shell --version; node --version; npm --version'
-
-      - name: install
-        run: docker exec "$C" npm ci
-
+      - uses: ./.github/actions/ci-container
+        with: { name: lint, token: "${{ secrets.REGISTRY_TOKEN }}" }
       - name: lint
         run: docker exec "$C" npm run lint
-
       - name: shellcheck
         run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh tools/lib/*.sh'
-
-      - name: test
-        run: docker exec "$C" npm test
-
-      - name: coverage
-        run: docker exec "$C" npm run coverage
-
-      - name: e2e
-        run: docker exec "$C" npm run e2e -- --a11y
-
-      - name: a11y
-        run: docker exec "$C" npm run a11y
-
       - name: cleanup
         if: always()
         run: docker rm -f "$C" 2>/dev/null || true
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/ci-container
+        with: { name: test, token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: test
+        run: docker exec "$C" npm test
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/ci-container
+        with: { name: coverage, token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: coverage
+        run: docker exec "$C" npm run coverage
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  # Each shard boots its own nested shell, so none depends on another. The two state shards
+  # split the scenario matrix by theme and shoot the subset a11y scores; the third carries
+  # every other group, plus one scenario in both themes, because the check that a severity
+  # repaints per scheme only runs when a single invocation covers both.
+  e2e:
+    name: e2e (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: behaviour
+            args: --group=state --group=panel --group=hover --group=refresh --group=notify --group=lifecycle --scenario=critical --assert
+          - shard: state-dark
+            args: --group=state --dark-only --a11y
+          - shard: state-light
+            args: --group=state --light-only --a11y
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/ci-container
+        with: { name: "e2e-${{ matrix.shard }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: e2e
+        env: { SHARD: "${{ matrix.shard }}", ARGS: "${{ matrix.args }}" }
+        run: |
+          docker exec -e SHARD -e ARGS "$C" bash -c '
+            set -o pipefail
+            mkdir -p ci-out
+            npm run e2e -- $ARGS 2>&1 | tee "ci-out/e2e-$SHARD.log"'
+      - name: collect
+        if: always()
+        run: |
+          mkdir -p artifact
+          docker cp "$C":/work/ci-out artifact/ci-out 2>/dev/null || true
+          docker cp "$C":/work/preview artifact/preview 2>/dev/null || true
+      - name: upload
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-${{ matrix.shard }}
+          path: artifact
+          retention-days: 7
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  a11y:
+    needs: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: e2e-state-*
+          merge-multiple: true
+          path: .
+      - uses: ./.github/actions/ci-container
+        with: { name: a11y, token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: a11y
+        run: docker exec "$C" npm run a11y
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  # Keeps the status context this repository has always reported, so what a merge waits on
+  # does not change, and fails when any job did not succeed or any shard left no summary.
+  ci:
+    needs: [lint, test, coverage, e2e, a11y]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: e2e-*
+          path: reports
+      - name: report
+        env: { NEEDS: "${{ toJSON(needs) }}" }
+        run: node tools/ci-report.js --reports reports --needs "$NEEDS"

@@ -1,0 +1,56 @@
+name: ci-container
+description: Build or pull the CI image, start a container holding this checkout, and install its dependencies.
+
+inputs:
+  name:
+    description: Distinguishes this job's container from its siblings'.
+    required: true
+  token:
+    description: Registry token, when REGISTRY is set.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: login
+      if: ${{ env.REGISTRY != '' }}
+      shell: bash
+      env: { T: "${{ inputs.token }}", U: "${{ github.actor }}" }
+      run: echo "$T" | docker login "$REGISTRY" -u "$U" --password-stdin
+
+    - name: image
+      shell: bash
+      run: |
+        IMAGE="${REGISTRY:+$REGISTRY/}${GITHUB_REPOSITORY}-ci:$(sha256sum .github/ci.Dockerfile | cut -c1-16)"
+        echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+        if [ -n "$REGISTRY" ] && docker pull "$IMAGE" 2>/dev/null; then
+          exit 0
+        fi
+        docker build -f .github/ci.Dockerfile -t "$IMAGE" .github
+        if [ -n "$REGISTRY" ]; then
+          docker push "$IMAGE"
+        fi
+
+    - name: container
+      shell: bash
+      env: { NAME: "${{ inputs.name }}" }
+      run: |
+        C="claude-quota-${GITHUB_RUN_ID}-${NAME}"
+        echo "C=$C" >> "$GITHUB_ENV"
+        docker create --name "$C" -w /work "$IMAGE" sleep infinity
+        docker cp ./. "$C":/work/
+        docker start "$C"
+        docker exec -u root "$C" chown -R ci:ci /work
+        docker exec "$C" bash -c 'mkdir -p ~/.local/share/gnome-shell/extensions && ln -sfn /work ~/.local/share/gnome-shell/extensions/'"$UUID"
+        docker exec -u root "$C" .github/logind-stub.sh
+
+    # The base image is a rolling one on purpose — the point is to run against the GNOME
+    # the distribution ships today — so what a run was measured against is worth a line.
+    - name: toolchain
+      shell: bash
+      run: docker exec "$C" bash -c 'gnome-shell --version; node --version; npm --version'
+
+    - name: install
+      shell: bash
+      run: docker exec "$C" npm ci
