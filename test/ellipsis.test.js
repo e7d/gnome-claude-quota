@@ -38,9 +38,14 @@ test('the domain keeps as many trailing characters as fit', () => {
     assert.equal(shortenEmail(email, within(12)), 'bro…@…in.tld');
 });
 
-test('a name of three characters or fewer is not given an ellipsis of its own', () => {
+test('a name that cutting would not shorten is kept whole', () => {
     assert.equal(shortenEmail('bro@subdomain.areallylongdomain.tld', within(26)), 'bro@…areallylongdomain.tld');
     assert.equal(shortenEmail('al@subdomain.areallylongdomain.tld', within(20)), 'al@…lylongdomain.tld');
+    assert.equal(shortenEmail('user@subdomain.areallylongdomain.tld', within(26)), 'user@…reallylongdomain.tld');
+});
+
+test('a name one character past the minimum is cut only where that makes it shorter', () => {
+    assert.equal(shortenEmail('users@subdomain.areallylongdomain.tld', within(27)), 'use…@…areallylongdomain.tld');
 });
 
 test('nothing fitting yields the shortest form rather than nothing', () => {
