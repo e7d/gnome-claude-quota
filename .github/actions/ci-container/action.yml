@@ -44,7 +44,12 @@ runs:
         docker build --pull --build-arg "GNOME_VERSION=$GNOME" -f .github/ci.Dockerfile -t "$IMAGE" .github
         verify
         if [ -n "$REGISTRY" ]; then
-          docker push "$IMAGE"
+          for attempt in 1 2 3; do
+            docker push "$IMAGE" && exit 0
+            echo "push attempt $attempt failed" >&2
+            sleep $((attempt * 15))
+          done
+          echo "::warning::could not push $IMAGE; this job goes on with its local copy and later jobs rebuild"
         fi
 
     - name: container
