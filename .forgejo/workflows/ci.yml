@@ -1,0 +1,169 @@
+# Forgejo's runner sets its own GITHUB_SERVER_URL for every action, and @actions/artifact
+# refuses any server but github.com, so the artifact steps use the Forgejo forks, which drop
+# that check. .github/workflows/ci.yml is this file with the official actions for GitHub, and
+# test/workflows.test.js fails when the two differ anywhere else.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ${{ vars.REGISTRY }}
+  UUID: claude-quota@e7d.io
+
+jobs:
+  # The one place the image is chosen and built. It asks Arch which gnome-shell is current
+  # once, publishes the image under that version if the registry lacks it, and hands the tag to
+  # every other job, so a run tests one GNOME and seven jobs never race to push the same layers.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - id: image
+        uses: ./.github/actions/ci-image
+        with: { role: publish, token: "${{ secrets.REGISTRY_TOKEN }}" }
+
+  lint:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/ci-container
+        with: { name: lint, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: lint
+        run: docker exec "$C" npm run lint
+      - name: shellcheck
+        run: docker exec "$C" bash -c 'shellcheck -x tools/*.sh tools/lib/*.sh .github/*.sh'
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  test:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/ci-container
+        with: { name: test, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: test
+        run: docker exec "$C" npm test
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  coverage:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/ci-container
+        with: { name: coverage, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: coverage
+        run: docker exec "$C" npm run coverage
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  # Each shard boots its own nested shell, so none depends on another. The two state shards
+  # split the scenario matrix by theme and shoot the subset a11y scores; the third carries
+  # every other group, plus one scenario in both themes, because the check that a severity
+  # repaints per scheme only runs when a single invocation covers both.
+  e2e:
+    name: e2e (${{ matrix.shard }})
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: behaviour
+            args: --group=state --group=panel --group=hover --group=refresh --group=notify --group=lifecycle --scenario=critical --assert
+          - shard: state-dark
+            args: --group=state --dark-only --a11y
+          - shard: state-light
+            args: --group=state --light-only --a11y
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/ci-container
+        with: { name: "e2e-${{ matrix.shard }}", image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: e2e
+        env: { SHARD: "${{ matrix.shard }}", ARGS: "${{ matrix.args }}" }
+        run: |
+          docker exec -e SHARD -e ARGS "$C" bash -c '
+            set -o pipefail
+            mkdir -p ci-out
+            npm run e2e -- $ARGS 2>&1 | tee "ci-out/e2e-$SHARD.log"'
+      - name: collect
+        if: always()
+        run: |
+          mkdir -p artifact
+          docker cp "$C":/work/ci-out artifact/ci-out 2>/dev/null || true
+          docker cp "$C":/work/preview artifact/preview 2>/dev/null || true
+      - name: upload
+        if: always()
+        uses: forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        with:
+          name: e2e-${{ matrix.shard }}
+          path: artifact
+          retention-days: 7
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  a11y:
+    needs: [image, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e # v4
+        with:
+          pattern: e2e-state-*
+          merge-multiple: true
+          path: .
+      - uses: ./.github/actions/ci-container
+        with: { name: a11y, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: a11y
+        run: docker exec "$C" npm run a11y
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
+  # Keeps the status context this repository has always reported, so what a merge waits on
+  # does not change, and fails when any job did not succeed or any shard left no summary.
+  ci:
+    needs: [image, lint, test, coverage, e2e, a11y]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e # v4
+        continue-on-error: true
+        with:
+          pattern: e2e-*
+          path: reports
+      - name: report
+        env: { NEEDS: "${{ toJSON(needs) }}" }
+        run: node tools/ci-report.js --reports reports --needs "$NEEDS"
