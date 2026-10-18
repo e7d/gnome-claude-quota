@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.claude-quota" path="/org/gnome/shell/extensions/claude-quota/">
+    <key name="show-account" type="b">
+      <default>false</default>
+      <summary>Display active account</summary>
+      <description>Whether the menu names the account Claude Code is logged in with.</description>
+    </key>
     <key name="warning-percent" type="i">
       <range min="1" max="100"/>
       <default>75</default>

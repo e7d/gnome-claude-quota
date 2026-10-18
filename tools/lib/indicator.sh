@@ -185,7 +185,7 @@ render_state() {
         const ANCHOR = $(window_anchor);
         $QUOTA
         $FILLER?.destroy(); $FILLER = null;
-        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._accountEmail = 'jane.doe@example.org'; $(fixture_locales)
+        i._quotas = []; i._error = null; i._service = null; i._block = null; i._refreshing = false; i._fetchedAt = new Date(Date.now() - 360000); i._accountEmail = 'jane.doe@example.org'; i._prefs.set_boolean('show-account', true); $(fixture_locales)
         $(setup_for "$1")
         i.menu.open(false); i._render();
         $(squeeze_for "$1")

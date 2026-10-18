@@ -14,7 +14,7 @@ import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {thresholdsFrom} from './lib/notify.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
-import {KEYS, readSettings} from './lib/settings.js';
+import {ACCOUNT_KEY, KEYS, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult} from './lib/state.js';
 import {accountEmail, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
@@ -157,6 +157,8 @@ class Indicator extends PanelMenu.Button {
                 this._syncAlerts(new Date());
                 this._render();
             })));
+        this._prefsSignals.push(
+            this._prefs.connect(`changed::${ACCOUNT_KEY}`, () => this._render()));
     }
 
     // Guarded for the same reason _render is: it reaches the shell's own message tray, and
@@ -357,7 +359,7 @@ class Indicator extends PanelMenu.Button {
             fetchedAt: this._fetchedAt,
             refreshing: this._refreshing,
             lastRequestAt: this._lastRequestAt,
-            accountEmail: this._accountEmail,
+            accountEmail: settings.account ? this._accountEmail : null,
             quotaCount: quotaViews.length,
             menuQuotaCount: menuViews.length,
             locale: this._locale,

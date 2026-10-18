@@ -200,8 +200,11 @@ assert_account_row() {
     local prefix
     prefix="$(js_string "$(catalog_prefix 'Account: {email}')")"
     assert_eq "$1 the account row shows the connected account, or hides" 'true' \
-        "$(probe "$IND._popup._accountLabel.visible === ($IND._accountEmail !== null)
-            && ($IND._accountEmail === null || $IND._popup._accountLabel.text === $prefix + $IND._accountEmail)")"
+        "$(probe "(() => {
+            const shown = $IND._prefs.get_boolean('show-account') && $IND._accountEmail !== null;
+            const label = $IND._popup._accountLabel;
+            return label.visible === shown && (!shown || label.text === $prefix + $IND._accountEmail);
+        })()")"
     assert_eq "$1 the account row sits between the header and the quotas" 'true' \
         "$(probe "(() => {
             const kids = $IND._popup._bodyBox.get_children();
@@ -231,7 +234,23 @@ stage_account() {
 assert_no_account_hides_the_row() {
     render_state normal
     stage_account null
-    assert_account_row "$1"
+    assert_account_row "$1-no-email"
+}
+
+stage_account_setting() {
+    shell_eval "$IND._prefs.set_boolean('show-account', $1); 'ok'" >/dev/null
+}
+
+assert_account_setting_hides_the_row() {
+    render_state normal
+    stage_account_setting false
+    assert_account_row "$1-setting-off"
+    stage_account_setting true
+}
+
+assert_account_off_by_default() {
+    assert_eq "$1 the account row is off in the schema" 'false' \
+        "$(probe "$IND._prefs.get_default_value('show-account').unpack()")"
 }
 
 assert_state() {
@@ -381,6 +400,10 @@ prove_state() {
         "shell_eval \"$IND._popup._accountLabel.text = 'Account: nobody@example.org'; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_account_row_probe
+    prove 'the account setting hides the row' \
+        "shell_eval \"$IND._render = () => {}; $IND._prefs.set_boolean('show-account', false); 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._prefs.set_boolean('show-account', true); $IND._render(); 'ok'\" >/dev/null" \
+        assert_account_row_probe
     prove 'the account row sits between the header and the quotas' \
         "shell_eval \"$IND._popup._bodyBox.remove_child($IND._popup._accountLabel); $IND._popup._bodyBox.add_child($IND._popup._accountLabel); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._popup._bodyBox.remove_child($IND._popup._accountLabel); $IND._popup._bodyBox.insert_child_at_index($IND._popup._accountLabel, 1); 'ok'\" >/dev/null" \
@@ -514,6 +537,8 @@ group_state() {
         assert_issue_rides_healthy_quota "$theme"
         assert_operational_clears_the_issue "$theme"
         assert_no_account_hides_the_row "$theme"
+        assert_account_setting_hides_the_row "$theme"
+        assert_account_off_by_default "$theme"
     done
     set_animations true
     assert_theme_differs

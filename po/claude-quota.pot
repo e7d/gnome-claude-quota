@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-10-18 10:29+0200\n"
+"POT-Creation-Date: 2026-10-18 10:40+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -42,15 +42,23 @@ msgstr ""
 msgid "Restore the default"
 msgstr ""
 
+#: prefs.js:58
+msgid "Account"
+msgstr ""
+
 #: prefs.js:59
+msgid "Display active account"
+msgstr ""
+
+#: prefs.js:65
 msgid "Show in top bar"
 msgstr ""
 
-#: prefs.js:60
+#: prefs.js:66
 msgid "Show in menu"
 msgstr ""
 
-#: prefs.js:85
+#: prefs.js:92
 msgid "Thresholds"
 msgstr ""
 

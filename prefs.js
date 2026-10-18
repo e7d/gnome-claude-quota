@@ -4,7 +4,7 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import {SCOPES, THRESHOLDS} from './lib/settings.js';
+import {ACCOUNT_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
 
 const TITLES = {
     warning: () => _('High usage threshold'),
@@ -54,6 +54,12 @@ function visibilityRow(settings, {title, key}) {
     return row;
 }
 
+function accountGroup(settings) {
+    const group = new Adw.PreferencesGroup({title: _('Account')});
+    group.add(visibilityRow(settings, {title: _('Display active account'), key: ACCOUNT_KEY}));
+    return group;
+}
+
 function quotaGroup(settings, scope) {
     const group = new Adw.PreferencesGroup({title: _(scope.name)});
     group.add(visibilityRow(settings, {title: _('Show in top bar'), key: scope.barKey}));
@@ -82,6 +88,7 @@ export default class ClaudeQuotaPreferences extends ExtensionPreferences {
         window._settings = this.getSettings();
         const settings = window._settings;
         const page = new Adw.PreferencesPage();
+        page.add(accountGroup(settings));
         const thresholds = new Adw.PreferencesGroup({title: _('Thresholds')});
         const spins = THRESHOLDS.map(level => {
             const row = thresholdRow(settings, level);
