@@ -34,17 +34,24 @@ set_theme() {
 POINTER_DEVICE="globalThis._vd ||= global.stage.context.get_backend().get_default_seat()
     .create_virtual_device(imports.gi.Clutter.InputDeviceType.POINTER_DEVICE);"
 
-move_pointer() {
-    local target landed
-    target="$(shell_eval "$POINTER_DEVICE
+send_pointer() {
+    shell_eval "$POINTER_DEVICE
         const [x, y] = $1;
         globalThis._vd.notify_absolute_motion(imports.gi.GLib.get_monotonic_time(), x, y);
-        JSON.stringify([x, y])" | unwrap)"
+        JSON.stringify([x, y])" | unwrap
+}
+
+# In CI the first motion of a fresh shell landed with one axis clamped to 0, [720,0] in one
+# shard and [0,892] in another, so it is sent again until the pointer is where it was sent.
+move_pointer() {
+    local target landed
+    target="$(send_pointer "$1")"
     [ -n "$target" ] || die 'the pointer could not be moved: the Eval threw'
     for _ in $(seq 15); do
         landed="$(shell_eval "JSON.stringify(global.get_pointer().slice(0, 2))" | unwrap)"
         [ "$landed" = "$target" ] && { await_style; return 0; }
         sleep 0.2
+        send_pointer "$1" > /dev/null
     done
     die "the pointer landed at ${landed:-nowhere}, not at $target (stage, monitor: $(shell_eval \
         "JSON.stringify([global.stage.width, global.stage.height, Main.layoutManager.primaryMonitor.width, Main.layoutManager.primaryMonitor.height])" | unwrap))"
