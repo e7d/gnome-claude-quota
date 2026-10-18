@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-10-18 10:40+0200\n"
+"POT-Creation-Date: 2026-10-18 11:21+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -44,15 +44,19 @@ msgstr "Compte"
 msgid "Display active account"
 msgstr "Afficher le compte actif"
 
-#: prefs.js:65
+#: prefs.js:60
+msgid "Display plan"
+msgstr "Afficher le forfait"
+
+#: prefs.js:66
 msgid "Show in top bar"
 msgstr "Afficher dans la barre supérieure"
 
-#: prefs.js:66
+#: prefs.js:67
 msgid "Show in menu"
 msgstr "Afficher dans le menu"
 
-#: prefs.js:92
+#: prefs.js:93
 msgid "Thresholds"
 msgstr "Seuils"
 
@@ -86,19 +90,23 @@ msgstr "Mise à jour : {time}"
 msgid "Account: {email}"
 msgstr "Compte : {email}"
 
-#: lib/format.js:103
+#: lib/format.js:98
+msgid "Plan: {plan}"
+msgstr "Forfait : {plan}"
+
+#: lib/format.js:107
 msgid "retry at {time}"
 msgstr "prochain essai à {time}"
 
-#: lib/format.js:104
+#: lib/format.js:108
 msgid "retry {time}"
 msgstr "prochain essai {time}"
 
-#: lib/format.js:110
+#: lib/format.js:114
 msgid "until {time}"
 msgstr "jusqu'à {time}"
 
-#: lib/format.js:115 lib/usage.js:123
+#: lib/format.js:119 lib/usage.js:125
 msgid "Rate limited"
 msgstr "Quota de requêtes atteint"
 
@@ -156,19 +164,19 @@ msgstr "Lecture impossible de ~/.claude/.credentials.json"
 msgid "No Claude token in ~/.claude/.credentials.json"
 msgstr "Aucun jeton Claude dans ~/.claude/.credentials.json"
 
-#: lib/usage.js:97 lib/usage.js:120
+#: lib/usage.js:99 lib/usage.js:122
 msgid "Token expired, run Claude Code once"
 msgstr "Jeton expiré, relancez Claude Code"
 
-#: lib/usage.js:109
+#: lib/usage.js:111
 msgid "Cannot reach api.anthropic.com"
 msgstr "api.anthropic.com injoignable"
 
-#: lib/usage.js:130
+#: lib/usage.js:132
 msgid "Usage request failed (HTTP {status})"
 msgstr "Échec de la requête (HTTP {status})"
 
-#: lib/usage.js:137
+#: lib/usage.js:139
 msgid "Unexpected response from the usage endpoint"
 msgstr "Réponse inattendue du point d'accès"
 

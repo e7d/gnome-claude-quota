@@ -196,66 +196,85 @@ assert_incident_within_popup() {
             $IND._popup._issueItem.get_preferred_width(-1)[1] <= $IND._popup._body.get_preferred_width(-1)[1]")"
 }
 
-assert_account_row() {
+# A detail row is a grey line under the header, opt-in through its own switch: <name>,
+# the popup's label property, the indicator's state field, the schema key, and the msgid
+# whose catalog prefix its text must open with.
+assert_detail_row() {
     local prefix
-    prefix="$(js_string "$(catalog_prefix 'Account: {email}')")"
-    assert_eq "$1 the account row shows the connected account, or hides" 'true' \
+    prefix="$(js_string "$(catalog_prefix "$6")")"
+    assert_eq "$1 the $2 row shows its value, or hides" 'true' \
         "$(probe "(() => {
-            const shown = $IND._prefs.get_boolean('show-account') && $IND._accountEmail !== null;
-            const label = $IND._popup._accountLabel;
-            return label.visible === shown && (!shown || label.text === $prefix + $IND._accountEmail);
+            const shown = $IND._prefs.get_boolean('$5') && $IND.$4 !== null;
+            const label = $IND._popup.$3;
+            return label.visible === shown && (!shown || label.text === $prefix + $IND.$4);
         })()")"
-    assert_eq "$1 the account row sits between the header and the quotas" 'true' \
+}
+
+assert_account_row() { assert_detail_row "$1" account _accountLabel _accountEmail show-account 'Account: {email}'; }
+assert_plan_row() { assert_detail_row "$1" plan _planLabel _accountPlan show-plan 'Plan: {plan}'; }
+
+assert_detail_rows_in_order() {
+    assert_eq "$1 the detail rows sit between the header and the quotas, account above plan" 'true' \
         "$(probe "(() => {
             const kids = $IND._popup._bodyBox.get_children();
             const at = actor => kids.indexOf(actor);
             const account = at($IND._popup._accountLabel);
-            return account === at($IND._popup._metaBox) + 1 && account === at($IND._popup._blockBox) - 1;
+            const plan = at($IND._popup._planLabel);
+            return account === at($IND._popup._metaBox) + 1 && plan === account + 1
+                && plan === at($IND._popup._blockBox) - 1;
         })()")"
 }
 
-assert_account_within_popup() {
-    assert_eq "$1 the account row never widens the popup" 'true' \
+assert_details_within_popup() {
+    assert_eq "$1 the detail rows never widen the popup" 'true' \
         "$(probe "(() => {
-            const label = $IND._popup._accountLabel;
-            const shown = label.visible;
+            const labels = [$IND._popup._accountLabel, $IND._popup._planLabel];
+            const shown = labels.map(label => label.visible);
             const width = $IND.menu.box.get_preferred_width(-1)[1];
-            label.visible = false;
+            labels.forEach(label => { label.visible = false; });
             const without = $IND.menu.box.get_preferred_width(-1)[1];
-            label.visible = shown;
+            labels.forEach((label, n) => { label.visible = shown[n]; });
             return width === without;
         })()")"
 }
 
-stage_account() {
-    shell_eval "$IND._accountEmail = $1; $IND._render(); 'ok'" >/dev/null
+stage_details() {
+    shell_eval "$IND._accountEmail = $1; $IND._accountPlan = $2; $IND._render(); 'ok'" >/dev/null
 }
 
-assert_no_account_hides_the_row() {
+assert_no_detail_hides_its_row() {
     render_state normal
-    stage_account null
+    stage_details null null
     assert_account_row "$1-no-email"
+    assert_plan_row "$1-no-plan"
 }
 
-stage_account_setting() {
-    shell_eval "$IND._prefs.set_boolean('show-account', $1); 'ok'" >/dev/null
+stage_detail_setting() {
+    shell_eval "$IND._prefs.set_boolean('$1', $2); 'ok'" >/dev/null
 }
 
-assert_account_setting_hides_the_row() {
+assert_setting_hides_its_row() {
     render_state normal
-    stage_account_setting false
-    assert_account_row "$1-setting-off"
-    stage_account_setting true
+    stage_detail_setting show-account false
+    assert_account_row "$1-account-setting-off"
+    assert_plan_row "$1-account-setting-off"
+    stage_detail_setting show-account true
+    stage_detail_setting show-plan false
+    assert_plan_row "$1-plan-setting-off"
+    assert_account_row "$1-plan-setting-off"
+    stage_detail_setting show-plan true
 }
 
-assert_account_off_by_default() {
-    assert_eq "$1 the account row is off in the schema" 'false' \
-        "$(probe "$IND._prefs.get_default_value('show-account').unpack()")"
+assert_details_off_by_default() {
+    assert_eq "$1 the detail rows are off in the schema" 'true' \
+        "$(probe "['show-account', 'show-plan'].every(key => $IND._prefs.get_default_value(key).unpack() === false)")"
 }
 
 assert_state() {
     assert_account_row "$1"
-    assert_account_within_popup "$1"
+    assert_plan_row "$1"
+    assert_detail_rows_in_order "$1"
+    assert_details_within_popup "$1"
     assert_rows_filled "$1"
     assert_no_placeholders "$1"
     assert_block_count "$1"
@@ -378,7 +397,9 @@ assert_hidden_note_offers_settings() {
 }
 
 assert_account_row_probe() { assert_account_row control; }
-assert_account_within_popup_probe() { assert_account_within_popup control; }
+assert_plan_row_probe() { assert_plan_row control; }
+assert_detail_rows_in_order_probe() { assert_detail_rows_in_order control; }
+assert_details_within_popup_probe() { assert_details_within_popup control; }
 assert_rows_filled_probe() { assert_rows_filled control; }
 assert_no_placeholders_probe() { assert_no_placeholders control; }
 assert_block_count_probe() { assert_block_count control; }
@@ -404,14 +425,26 @@ prove_state() {
         "shell_eval \"$IND._render = () => {}; $IND._prefs.set_boolean('show-account', false); 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._prefs.set_boolean('show-account', true); $IND._render(); 'ok'\" >/dev/null" \
         assert_account_row_probe
-    prove 'the account row sits between the header and the quotas' \
+    prove 'the plan row shows the plan' \
+        "shell_eval \"$IND._popup._planLabel.text = 'Plan: Nothing'; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_plan_row_probe
+    prove 'the plan setting hides the row' \
+        "shell_eval \"$IND._render = () => {}; $IND._prefs.set_boolean('show-plan', false); 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._prefs.set_boolean('show-plan', true); $IND._render(); 'ok'\" >/dev/null" \
+        assert_plan_row_probe
+    prove 'the detail rows sit between the header and the quotas' \
         "shell_eval \"$IND._popup._bodyBox.remove_child($IND._popup._accountLabel); $IND._popup._bodyBox.add_child($IND._popup._accountLabel); 'ok'\" >/dev/null" \
         "shell_eval \"$IND._popup._bodyBox.remove_child($IND._popup._accountLabel); $IND._popup._bodyBox.insert_child_at_index($IND._popup._accountLabel, 1); 'ok'\" >/dev/null" \
-        assert_account_row_probe
+        assert_detail_rows_in_order_probe
     prove 'the account row stays inside the popup' \
         "shell_eval \"$IND._popup._accountLabel.set_style('max-width: 2000px'); $IND._popup._accountLabel.text = 'a'.repeat(200); $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._popup._accountLabel.set_style(null); $IND._render(); 'ok'\" >/dev/null" \
-        assert_account_within_popup_probe
+        assert_details_within_popup_probe
+    prove 'the plan row stays inside the popup' \
+        "shell_eval \"$IND._popup._planLabel.set_style('max-width: 2000px'); $IND._popup._planLabel.text = 'a'.repeat(200); $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._popup._planLabel.set_style(null); $IND._render(); 'ok'\" >/dev/null" \
+        assert_details_within_popup_probe
     prove 'rows filled' \
         "shell_eval \"$IND._popup._blocks[0]._caption.text = ''; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._render(); 'ok'\" >/dev/null" \
@@ -536,9 +569,9 @@ group_state() {
         assert_hidden_note_offers_settings "$theme"
         assert_issue_rides_healthy_quota "$theme"
         assert_operational_clears_the_issue "$theme"
-        assert_no_account_hides_the_row "$theme"
-        assert_account_setting_hides_the_row "$theme"
-        assert_account_off_by_default "$theme"
+        assert_no_detail_hides_its_row "$theme"
+        assert_setting_hides_its_row "$theme"
+        assert_details_off_by_default "$theme"
     done
     set_animations true
     assert_theme_differs

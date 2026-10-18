@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {fresherThan, parseAccountEmail, parseSharedUsage} from '../lib/shared-usage.js';
+import {fresherThan, parseAccountEmail, parseAccountPlan, parseSharedUsage} from '../lib/shared-usage.js';
 
 const ACCOUNT = '3e1c3aca-0000-4000-8000-000000000000';
 const LIMITS = [
@@ -92,6 +92,28 @@ test('any block beats holding nothing', () => {
 test('an unreadable block is never fresher than anything', () => {
     assert.equal(fresherThan(null, null), false);
     assert.equal(fresherThan(null, new Date('2026-08-13T09:00:00Z')), false);
+});
+
+test('the plan is read from the logged-in account', () => {
+    const text = JSON.stringify({oauthAccount: {
+        organizationType: 'claude_max', organizationRateLimitTier: 'default_claude_max_5x'}});
+    assert.equal(parseAccountPlan(text), 'Max 5x');
+});
+
+test('the plan is found even when the usage block is foreign', () => {
+    const text = JSON.stringify({
+        oauthAccount: {accountUuid: ACCOUNT, organizationType: 'claude_pro'},
+        cachedUsageUtilization: {accountUuid: 'someone-else'},
+    });
+    assert.equal(parseAccountPlan(text), 'Pro');
+    assert.equal(parseSharedUsage(text), null);
+});
+
+test('a file with no plan yields none', () => {
+    assert.equal(parseAccountPlan(JSON.stringify({oauthAccount: {}})), null);
+    assert.equal(parseAccountPlan(JSON.stringify({oauthAccount: {organizationType: null}})), null);
+    assert.equal(parseAccountPlan('{}'), null);
+    assert.equal(parseAccountPlan('not json'), null);
 });
 
 test('the account email is read from the logged-in account', () => {

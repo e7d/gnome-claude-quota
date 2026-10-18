@@ -6,6 +6,11 @@
       <summary>Display active account</summary>
       <description>Whether the menu names the account Claude Code is logged in with.</description>
     </key>
+    <key name="show-plan" type="b">
+      <default>false</default>
+      <summary>Display plan</summary>
+      <description>Whether the menu names the Claude plan of the logged-in account.</description>
+    </key>
     <key name="warning-percent" type="i">
       <range min="1" max="100"/>
       <default>75</default>

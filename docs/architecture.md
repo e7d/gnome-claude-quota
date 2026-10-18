@@ -45,8 +45,9 @@ is an e2e-breaking change, and `npm run e2e` is the only way to find out.
 | `lib/notify.js` | Threshold crossing and the withdraw/post plan for notifications | `lib/format.js`, `lib/i18n.js` | `test/notify.test.js` |
 | `lib/panel.js` | How many cells fit the panel's available width | — | `test/panel.test.js` |
 | `lib/policy.js` | Poll timing, rate-limit backoff, blocking, severity thresholds | `lib/i18n.js` | `test/policy.test.js` |
+| `lib/plan.js` | Turning the plan and rate-limit tier Claude Code stores into a display name | — | `test/plan.test.js` |
 | `lib/settings.js` | The gschema key list and reading it into a typed settings object | `lib/i18n.js` | `test/settings.test.js` |
-| `lib/shared-usage.js` | Reading Claude Code's own cached usage file | — | `test/shared-usage.test.js` |
+| `lib/shared-usage.js` | Reading Claude Code's own cached usage file, and the account email and plan beside it | `lib/plan.js` | `test/shared-usage.test.js` |
 | `lib/state.js` | The state/effects reducer: `applyResult`, `adoptShared` | `lib/model.js`, `lib/policy.js`, `lib/shared-usage.js` | `test/state.test.js` |
 | `lib/style.js` | CSS class names for a given severity/scheme | — | `test/style.test.js` |
 | `lib/theme.js` | Luminance → scheme, scheme → brand colour | — | `test/theme.test.js` |
@@ -56,7 +57,7 @@ is an e2e-breaking change, and `npm run e2e` is the only way to find out.
 | `ui/pace-bar.js` | The `BarLevel` subclass that draws the pace tick | `lib/bar.js` | e2e (`state`, `panel` groups) |
 | `ui/panel-fit.js` | `panelScheme()`; `PanelStrip`, which fits panel cells to available width and repaints on panel-geometry changes | `lib/panel.js`, `lib/theme.js` | e2e (`panel`, `hover` groups) |
 | `ui/poller.js` | Scheduling fetches, watching the credentials file, recording every attempt | `lib/attempts.js`, `lib/state.js`, `lib/usage.js` | e2e (`refresh` group) |
-| `ui/popup-body.js` | The popup menu's body: header, account, message, blocks, refresh button | `ui/quota-block.js` | e2e (`state`, `hover` groups) |
+| `ui/popup-body.js` | The popup menu's body: header, account, plan, message, blocks, refresh button | `ui/quota-block.js` | e2e (`state`, `hover` groups) |
 | `ui/quota-block.js` | One quota row in the popup, including its `PaceBar` | `lib/format.js`, `lib/style.js`, `ui/pace-bar.js` | e2e (`state` group) |
 | `ui/store.js` | Reading and writing `usage.json` and `attempts.jsonl` | `lib/attempts.js`, `lib/cache.js` | e2e (`refresh`, `lifecycle` groups) |
 | `extension.js` | The `Indicator` actor: state fields, `_render()`, wiring every `lib/` and `ui/` module together | all of the above | e2e (all groups) |

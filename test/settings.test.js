@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-import {ACCOUNT_KEY, KEYS, SCOPES, SCOPE_IDS, THRESHOLDS, readSettings, scopeForKind} from '../lib/settings.js';
+import {ACCOUNT_KEY, KEYS, PLAN_KEY, SCOPES, SCOPE_IDS, THRESHOLDS, readSettings, scopeForKind} from '../lib/settings.js';
 
 function schemaKeys() {
     const xml = readFileSync(new URL('../schemas/org.gnome.shell.extensions.claude-quota.gschema.xml',
@@ -17,7 +17,7 @@ function stub(overrides = {}) {
         'session-in-bar': true, 'session-in-menu': true,
         'weekly-in-bar': true, 'weekly-in-menu': true,
         'scoped-in-bar': true, 'scoped-in-menu': true,
-        'show-account': false,
+        'show-account': false, 'show-plan': false,
         ...overrides,
     };
     return {int: key => values[key], boolean: key => values[key]};
@@ -34,11 +34,12 @@ test('every key the table names exists in the committed schema', () => {
         assert.ok(keys.includes(scope.menuKey), `${scope.menuKey} missing from schema`);
     });
     assert.ok(keys.includes(ACCOUNT_KEY), `${ACCOUNT_KEY} missing from schema`);
+    assert.ok(keys.includes(PLAN_KEY), `${PLAN_KEY} missing from schema`);
 });
 
 test('the schema names no key the table does not', () => {
     const named = new Set(THRESHOLDS.flatMap(level => [level.percentKey, level.notifyKey])
-        .concat(SCOPES.flatMap(scope => [scope.barKey, scope.menuKey]), [ACCOUNT_KEY]));
+        .concat(SCOPES.flatMap(scope => [scope.barKey, scope.menuKey]), [ACCOUNT_KEY, PLAN_KEY]));
     schemaKeys().forEach(key => assert.ok(named.has(key), `${key} is in the schema and not in the table`));
 });
 
@@ -67,14 +68,22 @@ test('the account is off unless the key says otherwise', () => {
     assert.equal(readSettings(stub({'show-account': true})).account, true);
 });
 
-test('the account key is not among the keys that re-plan alerts', () => {
-    assert.ok(!KEYS.includes(ACCOUNT_KEY));
+test('the plan is off unless the key says otherwise', () => {
+    assert.equal(readSettings(stub()).plan, false);
+    assert.equal(readSettings(stub({'show-plan': true})).plan, true);
 });
 
-test('the account key is off in the committed schema', () => {
+test('the account and plan keys are not among the keys that re-plan alerts', () => {
+    assert.ok(!KEYS.includes(ACCOUNT_KEY));
+    assert.ok(!KEYS.includes(PLAN_KEY));
+});
+
+test('the account and plan keys are off in the committed schema', () => {
     const xml = readFileSync(new URL('../schemas/org.gnome.shell.extensions.claude-quota.gschema.xml',
         import.meta.url), 'utf8');
-    assert.match(xml, /<key name="show-account" type="b">\s*<default>false<\/default>/);
+    [ACCOUNT_KEY, PLAN_KEY].forEach(key => {
+        assert.match(xml, new RegExp(`<key name="${key}" type="b">\\s*<default>false</default>`));
+    });
 });
 
 test('readSettings returns a frozen object', () => {

@@ -10,6 +10,12 @@ import {CAPTION_OPACITY, QuotaBlock, displayItem} from './quota-block.js';
 const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
 
+function detailLabel() {
+    const label = new St.Label({style_class: 'cq-detail', opacity: CAPTION_OPACITY, x_expand: true});
+    label.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+    return label;
+}
+
 export class PopupBody {
     constructor({onRefresh, onOpenPrefs}) {
         this._onRefresh = onRefresh;
@@ -39,8 +45,8 @@ export class PopupBody {
         this._refreshButton.connect('clicked', () => this._onRefresh());
         this._metaBox.add_child(this._refreshLabel);
         this._metaBox.add_child(this._refreshButton);
-        this._accountLabel = new St.Label({style_class: 'cq-account', opacity: CAPTION_OPACITY, x_expand: true});
-        this._accountLabel.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+        this._accountLabel = detailLabel();
+        this._planLabel = detailLabel();
         this._buildMessage();
         this._buildBody();
         this._buildHiddenNote();
@@ -80,6 +86,7 @@ export class PopupBody {
         });
         this._bodyBox.add_child(this._metaBox);
         this._bodyBox.add_child(this._accountLabel);
+        this._bodyBox.add_child(this._planLabel);
         this._bodyBox.add_child(this._blockBox);
         this._body.add_child(this._bodyBox);
     }
@@ -170,6 +177,8 @@ export class PopupBody {
         this._refreshLabel.text = view.refreshText;
         this._accountLabel.text = view.accountText;
         this._accountLabel.visible = view.accountVisible;
+        this._planLabel.text = view.planText;
+        this._planLabel.visible = view.planVisible;
         this._issueItem.visible = view.issue !== null;
         this._renderIssue(view.issue);
         this._messageLabel.text = view.message;

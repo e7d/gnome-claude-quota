@@ -15,6 +15,7 @@ function base(overrides = {}) {
         refreshing: false,
         lastRequestAt: null,
         accountEmail: null,
+        accountPlan: null,
         quotaCount: 2,
         menuQuotaCount: 2,
         locale: 'en-US',
@@ -46,6 +47,19 @@ test('popupView hides the account row when no account is known', () => {
     const view = popupView(base());
     assert.equal(view.accountText, '');
     assert.equal(view.accountVisible, false);
+});
+
+test('popupView shows the plan on its own line', () => {
+    const view = popupView(base({accountPlan: 'Max 5x'}));
+    assert.equal(view.planText, 'Plan: Max 5x');
+    assert.equal(view.planVisible, true);
+    assert.equal(view.accountVisible, false);
+});
+
+test('popupView hides the plan row when no plan is known', () => {
+    const view = popupView(base());
+    assert.equal(view.planText, '');
+    assert.equal(view.planVisible, false);
 });
 
 test('popupView silences an error while the extension is rate-limited', () => {

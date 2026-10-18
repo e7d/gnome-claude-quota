@@ -14,9 +14,9 @@ import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {thresholdsFrom} from './lib/notify.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
-import {ACCOUNT_KEY, KEYS, readSettings} from './lib/settings.js';
+import {ACCOUNT_KEY, KEYS, PLAN_KEY, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult} from './lib/state.js';
-import {accountEmail, sharedUsage} from './lib/usage.js';
+import {accountDetails, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
 import {Alerts} from './ui/alerts.js';
 import {PanelStrip, panelScheme} from './ui/panel-fit.js';
@@ -43,6 +43,7 @@ class Indicator extends PanelMenu.Button {
         this._block = null;
         this._lastRequestAt = null;
         this._accountEmail = null;
+        this._accountPlan = null;
         this._rateLimitStreak = 0;
         this._limits = [];
         this._fired = {};
@@ -157,8 +158,8 @@ class Indicator extends PanelMenu.Button {
                 this._syncAlerts(new Date());
                 this._render();
             })));
-        this._prefsSignals.push(
-            this._prefs.connect(`changed::${ACCOUNT_KEY}`, () => this._render()));
+        [ACCOUNT_KEY, PLAN_KEY].forEach(key => this._prefsSignals.push(
+            this._prefs.connect(`changed::${key}`, () => this._render())));
     }
 
     // Guarded for the same reason _render is: it reaches the shell's own message tray, and
@@ -264,7 +265,9 @@ class Indicator extends PanelMenu.Button {
     // over. Withdrawing there is what keeps the tray agreeing with the popup.
     async _refresh(trigger) {
         const now = new Date();
-        this._accountEmail = accountEmail();
+        const details = accountDetails();
+        this._accountEmail = details.email;
+        this._accountPlan = details.plan;
         this._adoptShared(now);
         this._syncAlerts(now);
         const settled = pollDelay(this._fetchedAt, now, maxAgeFor(trigger));
@@ -360,6 +363,7 @@ class Indicator extends PanelMenu.Button {
             refreshing: this._refreshing,
             lastRequestAt: this._lastRequestAt,
             accountEmail: settings.account ? this._accountEmail : null,
+            accountPlan: settings.plan ? this._accountPlan : null,
             quotaCount: quotaViews.length,
             menuQuotaCount: menuViews.length,
             locale: this._locale,

@@ -47,6 +47,8 @@ The popup's first line carries `Last refresh: 10:48 AM` with a circular-arrow bu
 
 With `Display active account` switched on in the [Settings](#settings), a second grey line reads `Account: you@example.org` under it, the address Claude Code reports for the logged-in account. It is read from the same `~/.claude.json`, on every poll, and the line is hidden when the setting is off or no address can be read. Nothing else is shown on that row, and it never widens the popup: a long address is shortened in the middle.
 
+With `Display plan` switched on as well, a line of its own, `Plan: Max 5x`, follows it. The plan comes from the same `~/.claude.json`: `Pro`, `Max 5x`, `Max 20x`, `Team`, `Enterprise`, or, for a plan this extension has not met, its identifier made readable. Claude Code refreshes that profile itself, so a plan change shows after its next refresh and the extension's next poll.
+
 There is no `Up to date` state: the timestamp beside the button already says how fresh the numbers are.
 
 The button goes insensitive while a `429` is in force, and while the 2-minute floor between requests has not lifted — in both cases because clicking it could not send anything. Nothing in either response reports how much of the allowance is left, so the extension declines to be what spends it.
@@ -79,7 +81,7 @@ gnome-extensions prefs claude-quota@e7d.io
 
 Four groups:
 
-- **Account** — `Display active account`, off by default: whether the popup names the logged-in account. Most people use one account and know which it is, so the row stays out of the way until you ask for it.
+- **Account** — `Display active account` and `Display plan`, both off by default: whether the popup names the logged-in account and its Claude plan. Most people use one account and know which it is, so these rows stay out of the way until you ask for them.
 - **Thresholds** — the percentage at which a quota is shown as high usage and as critical, and whether crossing either posts a notification. `75%` and `90%` are this extension's own defaults, not Anthropic's, and the same two numbers decide both a quota's colour and whether it notifies — one setting, two effects. A reset button beside each restores the shipped default.
 - **Show in top bar** — which of the three quotas (session, weekly, model-specific) appear in the panel.
 - **Show in menu** — which of the three appear in the popup.

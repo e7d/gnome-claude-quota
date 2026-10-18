@@ -4,7 +4,7 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import {ACCOUNT_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
+import {ACCOUNT_KEY, PLAN_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
 
 const TITLES = {
     warning: () => _('High usage threshold'),
@@ -57,6 +57,7 @@ function visibilityRow(settings, {title, key}) {
 function accountGroup(settings) {
     const group = new Adw.PreferencesGroup({title: _('Account')});
     group.add(visibilityRow(settings, {title: _('Display active account'), key: ACCOUNT_KEY}));
+    group.add(visibilityRow(settings, {title: _('Display plan'), key: PLAN_KEY}));
     return group;
 }
 
