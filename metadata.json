@@ -3,7 +3,7 @@
   "description": "Claude session and weekly quota in the top bar, with reset times and window pace.",
   "uuid": "claude-quota@e7d.io",
   "gettext-domain": "claude-quota",
-  "shell-version": ["50"],
+  "shell-version": ["50", "51"],
   "settings-schema": "org.gnome.shell.extensions.claude-quota",
   "url": "https://github.com/e7d/gnome-claude-quota",
   "version": 1
