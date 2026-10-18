@@ -45,9 +45,9 @@ Whatever asks — the timer, the popup, the button — **no two requests go out 
 
 The popup's first line carries `Last refresh: 10:48 AM` with a circular-arrow button on the right. Clicking it polls and **leaves the popup open**, so the numbers land in front of you. The icon spins while the poll is in flight and the button is insensitive until it finishes, so a poll cannot be fired twice.
 
-With `Display active account` switched on in the [Settings](#settings), a second grey line reads `Account: you@example.org` under it, the address Claude Code reports for the logged-in account. It is read from the same `~/.claude.json`, on every poll, and the line is hidden when the setting is off or no address can be read. Nothing else is shown on that row, and it never widens the popup: a long address is shortened in the middle.
+With `Display active account` switched on in the [Settings](#settings), a row under it pairs a dimmed `Account` label with the address Claude Code reports for the logged-in account, in full text colour. It is read from the same `~/.claude.json`, on every poll, and the row is hidden when the setting is off or no address can be read. It never widens the popup: a long address is shortened in the middle.
 
-With `Display plan` switched on as well, a line of its own, `Plan: Max 5x`, follows it. The plan comes from the same `~/.claude.json`: `Pro`, `Max 5x`, `Max 20x`, `Team`, `Enterprise`, or, for a plan this extension has not met, its identifier made readable. Claude Code refreshes that profile itself, so a plan change shows after its next refresh and the extension's next poll.
+With `Display plan` switched on as well, a row of its own, `Plan` and `Max 5x`, follows it. The labels share one column and the values another, so there is no colon to separate them, and the block keeps the same margin below as the header has above it. The plan comes from the same `~/.claude.json`: `Pro`, `Max 5x`, `Max 20x`, `Team`, `Enterprise`, or, for a plan this extension has not met, its identifier made readable. Claude Code refreshes that profile itself, so a plan change shows after its next refresh and the extension's next poll.
 
 There is no `Up to date` state: the timestamp beside the button already says how fresh the numbers are.
 

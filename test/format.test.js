@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {WINDOW_LENGTH_MS, absoluteTime, accountLine, captionLine, numberLocale, percentLine, planLine, rateLimitLine, rateLimitMessage, refreshLine, remainingLine, serviceUntilLine, timeLocale, windowProgress} from '../lib/format.js';
+import {WINDOW_LENGTH_MS, absoluteTime, accountDetail, captionLine, numberLocale, percentLine, planDetail, rateLimitLine, rateLimitMessage, refreshLine, remainingLine, serviceUntilLine, timeLocale, windowProgress} from '../lib/format.js';
 import {resetTranslator, setTranslator} from '../lib/i18n.js';
 
 const now = new Date('2026-08-04T07:51:00Z');
@@ -129,20 +129,20 @@ test('refreshLine still reports before any fetch has landed', () => {
     assert.equal(refreshLine(null, now, 'en-GB'), 'Last refresh: -');
 });
 
-test('accountLine names the connected account', () => {
-    assert.equal(accountLine('jane.doe@example.org'), 'Account: jane.doe@example.org');
+test('accountDetail pairs the label with the connected account', () => {
+    assert.deepEqual(accountDetail('jane.doe@example.org'), {label: 'Account', value: 'jane.doe@example.org'});
 });
 
-test('accountLine is empty when no account is known', () => {
-    assert.equal(accountLine(null), '');
+test('accountDetail is none when no account is known', () => {
+    assert.equal(accountDetail(null), null);
 });
 
-test('planLine names the plan', () => {
-    assert.equal(planLine('Max 5x'), 'Plan: Max 5x');
+test('planDetail pairs the label with the plan', () => {
+    assert.deepEqual(planDetail('Max 5x'), {label: 'Plan', value: 'Max 5x'});
 });
 
-test('planLine is empty when no plan is known', () => {
-    assert.equal(planLine(null), '');
+test('planDetail is none when no plan is known', () => {
+    assert.equal(planDetail(null), null);
 });
 
 test('rateLimitLine names the time polling resumes', () => {
@@ -241,8 +241,8 @@ test('numberLocale reads LC_NUMERIC ahead of LANG', () => {
 test('the translated lines route through the catalog', () => {
     setTranslator({
         gettext: msgid => ({
-            'Account: {email}': 'Compte : {email}',
-            'Plan: {plan}': 'Forfait : {plan}',
+            Account: 'Compte',
+            Plan: 'Forfait',
             'Last refresh: {time}': 'Dernier relevé : {time}',
             'retry at {time}': 'réessai à {time}',
             'until {time}': "jusqu'à {time}",
@@ -252,8 +252,8 @@ test('the translated lines route through the catalog', () => {
         pgettext: (context, msgid) => msgid,
     });
     assert.equal(refreshLine(new Date('2026-08-04T07:30:00Z'), now, 'fr-FR'), 'Dernier relevé : 7:30');
-    assert.equal(accountLine('jane@example.org'), 'Compte : jane@example.org');
-    assert.equal(planLine('Max 5x'), 'Forfait : Max 5x');
+    assert.deepEqual(accountDetail('jane@example.org'), {label: 'Compte', value: 'jane@example.org'});
+    assert.deepEqual(planDetail('Max 5x'), {label: 'Forfait', value: 'Max 5x'});
     assert.equal(rateLimitLine(new Date('2026-08-04T08:05:00Z'), now, 'fr-FR'), 'réessai à 8:05');
     assert.equal(serviceUntilLine(new Date('2026-08-04T09:00:00Z'), now, 'fr-FR'), "jusqu'à 9:00");
     assert.ok(rateLimitMessage(new Date('2026-08-04T08:05:00Z'), now, 'fr-FR')

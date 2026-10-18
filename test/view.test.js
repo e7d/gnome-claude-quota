@@ -37,29 +37,23 @@ test('popupView hides the message entirely once quotas are on screen', () => {
     assert.equal(view.bodyVisible, true);
 });
 
-test('popupView shows the connected account under the refresh line', () => {
+test('popupView pairs the connected account with its label', () => {
     const view = popupView(base({accountEmail: 'jane.doe@example.org'}));
-    assert.equal(view.accountText, 'Account: jane.doe@example.org');
-    assert.equal(view.accountVisible, true);
+    assert.deepEqual(view.account, {label: 'Account', value: 'jane.doe@example.org'});
 });
 
-test('popupView hides the account row when no account is known', () => {
-    const view = popupView(base());
-    assert.equal(view.accountText, '');
-    assert.equal(view.accountVisible, false);
+test('popupView has no account row when no account is known', () => {
+    assert.equal(popupView(base()).account, null);
 });
 
-test('popupView shows the plan on its own line', () => {
+test('popupView pairs the plan with its label, independently of the account', () => {
     const view = popupView(base({accountPlan: 'Max 5x'}));
-    assert.equal(view.planText, 'Plan: Max 5x');
-    assert.equal(view.planVisible, true);
-    assert.equal(view.accountVisible, false);
+    assert.deepEqual(view.plan, {label: 'Plan', value: 'Max 5x'});
+    assert.equal(view.account, null);
 });
 
-test('popupView hides the plan row when no plan is known', () => {
-    const view = popupView(base());
-    assert.equal(view.planText, '');
-    assert.equal(view.planVisible, false);
+test('popupView has no plan row when no plan is known', () => {
+    assert.equal(popupView(base()).plan, null);
 });
 
 test('popupView silences an error while the extension is rate-limited', () => {

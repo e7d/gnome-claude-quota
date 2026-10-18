@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-10-18 11:21+0200\n"
+"POT-Creation-Date: 2026-10-18 11:48+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -42,7 +42,7 @@ msgstr ""
 msgid "Restore the default"
 msgstr ""
 
-#: prefs.js:58
+#: prefs.js:58 lib/format.js:94
 msgid "Account"
 msgstr ""
 
@@ -92,12 +92,8 @@ msgstr[1] ""
 msgid "Last refresh: {time}"
 msgstr ""
 
-#: lib/format.js:94
-msgid "Account: {email}"
-msgstr ""
-
 #: lib/format.js:98
-msgid "Plan: {plan}"
+msgid "Plan"
 msgstr ""
 
 #: lib/format.js:107

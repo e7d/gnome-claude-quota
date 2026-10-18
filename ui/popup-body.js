@@ -10,10 +10,22 @@ import {CAPTION_OPACITY, QuotaBlock, displayItem} from './quota-block.js';
 const STATUS_URL = 'https://status.claude.com/';
 const SPIN_DURATION_MS = 900;
 
-function detailLabel() {
-    const label = new St.Label({style_class: 'cq-detail', opacity: CAPTION_OPACITY, x_expand: true});
-    label.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
-    return label;
+function detailRow(layout, row) {
+    const name = new St.Label({style_class: 'cq-detail', opacity: CAPTION_OPACITY});
+    const value = new St.Label({style_class: 'cq-detail', x_expand: true});
+    value.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+    layout.attach(name, 0, row, 1, 1);
+    layout.attach(value, 1, row, 1, 1);
+    return {name, value};
+}
+
+function renderDetail(row, detail) {
+    row.name.visible = detail !== null;
+    row.value.visible = detail !== null;
+    if (detail === null)
+        return;
+    row.name.text = detail.label;
+    row.value.text = detail.value;
 }
 
 export class PopupBody {
@@ -45,8 +57,7 @@ export class PopupBody {
         this._refreshButton.connect('clicked', () => this._onRefresh());
         this._metaBox.add_child(this._refreshLabel);
         this._metaBox.add_child(this._refreshButton);
-        this._accountLabel = detailLabel();
-        this._planLabel = detailLabel();
+        this._buildDetails();
         this._buildMessage();
         this._buildBody();
         this._buildHiddenNote();
@@ -55,6 +66,13 @@ export class PopupBody {
         this._issueItem.label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         this._issueItem.connect('activate', () => Gio.AppInfo.launch_default_for_uri(STATUS_URL, null));
         this._messageSeparator = new PopupMenu.PopupSeparatorMenuItem();
+    }
+
+    _buildDetails() {
+        const layout = new Clutter.GridLayout({column_spacing: 12, row_spacing: 4});
+        this._details = new St.Widget({style_class: 'cq-details', layout_manager: layout, x_expand: true});
+        this._account = detailRow(layout, 0);
+        this._plan = detailRow(layout, 1);
     }
 
     _buildMessage() {
@@ -85,8 +103,7 @@ export class PopupBody {
             x_expand: true,
         });
         this._bodyBox.add_child(this._metaBox);
-        this._bodyBox.add_child(this._accountLabel);
-        this._bodyBox.add_child(this._planLabel);
+        this._bodyBox.add_child(this._details);
         this._bodyBox.add_child(this._blockBox);
         this._body.add_child(this._bodyBox);
     }
@@ -175,10 +192,9 @@ export class PopupBody {
 
     _renderMessage(view) {
         this._refreshLabel.text = view.refreshText;
-        this._accountLabel.text = view.accountText;
-        this._accountLabel.visible = view.accountVisible;
-        this._planLabel.text = view.planText;
-        this._planLabel.visible = view.planVisible;
+        renderDetail(this._account, view.account);
+        renderDetail(this._plan, view.plan);
+        this._details.visible = view.account !== null || view.plan !== null;
         this._issueItem.visible = view.issue !== null;
         this._renderIssue(view.issue);
         this._messageLabel.text = view.message;

@@ -50,9 +50,13 @@
     max-width: 260px;
 }
 
+.cq-details {
+    padding-bottom: 6px;
+    max-width: 260px;
+}
+
 .cq-detail {
     font-size: 0.9em;
-    max-width: 260px;
 }
 
 .cq-meta {
