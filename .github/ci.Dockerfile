@@ -2,7 +2,8 @@ FROM archlinux:base
 
 ARG GNOME_VERSION=unset
 
-RUN echo "building for gnome-shell ${GNOME_VERSION}" \
+RUN --mount=type=cache,target=/var/cache/pacman/pkg \
+    echo "building for gnome-shell ${GNOME_VERSION}" \
     && pacman -Syu --noconfirm --needed \
         adwaita-icon-theme \
         cantarell-fonts \
@@ -19,7 +20,7 @@ RUN echo "building for gnome-shell ${GNOME_VERSION}" \
         python-dbusmock \
         shellcheck \
         ttf-dejavu \
-    && pacman -Scc --noconfirm \
+    && rm -rf /var/lib/pacman/sync/* \
     && fc-cache -f \
     && useradd -m ci \
     && install -d -m 700 -o ci -g ci /run/user/1000 \
