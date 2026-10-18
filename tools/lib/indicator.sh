@@ -41,9 +41,13 @@ move_pointer() {
         globalThis._vd.notify_absolute_motion(imports.gi.GLib.get_monotonic_time(), x, y);
         JSON.stringify([x, y])" | unwrap)"
     [ -n "$target" ] || die 'the pointer could not be moved: the Eval threw'
-    await_style
-    landed="$(shell_eval "JSON.stringify(global.get_pointer().slice(0, 2))" | unwrap)"
-    [ "$landed" = "$target" ] || die "the pointer landed at ${landed:-nowhere}, not at $target"
+    for _ in $(seq 15); do
+        landed="$(shell_eval "JSON.stringify(global.get_pointer().slice(0, 2))" | unwrap)"
+        [ "$landed" = "$target" ] && { await_style; return 0; }
+        sleep 0.2
+    done
+    die "the pointer landed at ${landed:-nowhere}, not at $target (stage, monitor: $(shell_eval \
+        "JSON.stringify([global.stage.width, global.stage.height, Main.layoutManager.primaryMonitor.width, Main.layoutManager.primaryMonitor.height])" | unwrap))"
 }
 
 point_at_actor() {
