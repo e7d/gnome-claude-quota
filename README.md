@@ -181,7 +181,7 @@ npm run dev          # tools/preview.sh --windowed, Ctrl-C to stop
 npm run dev:watch    # same, restarted on every source edit
 ```
 
-This needs the extension installed as a symlink to *this* checkout, as in the second install recipe above; `preview.sh` refuses to start otherwise rather than silently running some other copy.
+Either tool runs from any checkout, including a git worktree: the nested session links the checkout it was started from, so nothing needs installing first and the copy under `~/.local/share/gnome-shell/extensions` is never involved.
 
 The nested session runs with a home directory of its own, holding no credentials, so **it never calls the usage endpoint** — scenarios are fabricated, and `--live` renders the values your own panel last cached. Nothing you run here spends a request or touches your real cache.
 

@@ -80,8 +80,7 @@ quota moving rather than as a window rolling over.
 Scenarios:
   ${SCENARIOS[*]}
 
-Needs gnome-shell with this checkout symlinked at
-$INSTALLED
+Needs gnome-shell.
 USAGE
 }
 

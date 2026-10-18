@@ -2,7 +2,6 @@
 
 UUID='claude-quota@e7d.io'
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-INSTALLED="$HOME/.local/share/gnome-shell/extensions/$UUID"
 # A fixed name under a world-writable /tmp is a path any other user on the host can create
 # first, and what goes in it is a lock and a sandbox home. Without a runtime directory to
 # put it in, the fallback is at least scoped to this uid.
@@ -215,9 +214,6 @@ require_install() {
     if [ "$DEVKIT_HEADLESS" -eq 0 ] && [ ! -x "$DEVKIT_VIEWER" ]; then
         echo "$DEVKIT_NAME: $DEVKIT_VIEWER missing, install mutter-devkit for a window" >&2
     fi
-    [ -e "$INSTALLED" ] || die "not installed; run: ln -s '$ROOT' '$INSTALLED'"
-    [ "$(readlink -f "$INSTALLED")" = "$ROOT" ] ||
-        die "$INSTALLED points at $(readlink -f "$INSTALLED"), not this checkout"
 }
 
 isolate_dconf() {
