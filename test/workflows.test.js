@@ -26,12 +26,12 @@ test('the comparison can fail: one extra step on the Forgejo side is a differenc
 });
 
 test('the Forgejo workflow uses the Forgejo forks and no official artifact action', () => {
-    assert.equal(FORGEJO.match(FORK).length, 3);
+    assert.equal(FORGEJO.match(FORK).length, 4);
     assert.equal(FORGEJO.match(OFFICIAL), null);
 });
 
 test('the GitHub workflow uses the official artifact actions and no fork', () => {
-    assert.equal(GITHUB.match(OFFICIAL).length, 3);
+    assert.equal(GITHUB.match(OFFICIAL).length, 4);
     assert.equal(GITHUB.match(FORK), null);
 });
 

@@ -77,10 +77,9 @@ jobs:
         if: always()
         run: docker rm -f "$C" 2>/dev/null || true
 
-  # Each shard boots its own nested shell, so none depends on another. The two state shards
-  # split the scenario matrix by theme and shoot the subset a11y scores; the third carries
-  # every other group, plus one scenario in both themes, because the check that a severity
-  # repaints per scheme only runs when a single invocation covers both.
+  # Each e2e job boots its own nested shell, so none depends on another. The two state shards
+  # split the scenario matrix by theme and shoot the subset a11y scores, which is all a11y
+  # waits for.
   e2e:
     name: e2e (${{ matrix.shard }})
     needs: image
@@ -90,8 +89,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - shard: behaviour
-            args: --group=state --group=panel --group=hover --group=refresh --group=notify --group=lifecycle --scenario=critical --assert
           - shard: state-dark
             args: --group=state --dark-only --a11y
           - shard: state-light
@@ -125,6 +122,41 @@ jobs:
         if: always()
         run: docker rm -f "$C" 2>/dev/null || true
 
+  # Every other group, plus one scenario in both themes, because the check that a severity
+  # repaints per scheme only runs when a single invocation covers both. It shoots nothing, so
+  # a11y has no reason to wait for it.
+  behaviour:
+    name: e2e (behaviour)
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/ci-container
+        with: { name: e2e-behaviour, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: e2e
+        run: |
+          docker exec "$C" bash -c '
+            set -o pipefail
+            mkdir -p ci-out
+            npm run e2e -- --group=state --group=panel --group=hover --group=refresh --group=notify --group=lifecycle --scenario=critical --assert 2>&1 | tee ci-out/e2e-behaviour.log'
+      - name: collect
+        if: always()
+        run: |
+          mkdir -p artifact
+          docker cp "$C":/work/ci-out artifact/ci-out 2>/dev/null || true
+      - name: upload
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-behaviour
+          path: artifact
+          retention-days: 7
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
   a11y:
     needs: [image, e2e]
     runs-on: ubuntu-latest
@@ -148,7 +180,7 @@ jobs:
   # Keeps the status context this repository has always reported, so what a merge waits on
   # does not change, and fails when any job did not succeed or any shard left no summary.
   ci:
-    needs: [image, lint, test, coverage, e2e, a11y]
+    needs: [image, lint, test, coverage, e2e, behaviour, a11y]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
