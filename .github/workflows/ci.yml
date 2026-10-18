@@ -6,9 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -94,9 +91,13 @@ jobs:
           mkdir -p artifact
           docker cp "$C":/work/ci-out artifact/ci-out 2>/dev/null || true
           docker cp "$C":/work/preview artifact/preview 2>/dev/null || true
+      # @actions/artifact refuses any server that is not github.com, and Forgejo, whose artifact
+      # API is the same, reports its own URL. The variable is set to https://github.com on
+      # Forgejo only; elsewhere it is empty and the real server URL is used.
       - name: upload
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        env: { GITHUB_SERVER_URL: "${{ vars.ARTIFACT_SERVER_URL || github.server_url }}" }
         with:
           name: e2e-${{ matrix.shard }}
           path: artifact
@@ -112,6 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        env: { GITHUB_SERVER_URL: "${{ vars.ARTIFACT_SERVER_URL || github.server_url }}" }
         with:
           pattern: e2e-state-*
           merge-multiple: true
@@ -135,6 +137,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         continue-on-error: true
+        env: { GITHUB_SERVER_URL: "${{ vars.ARTIFACT_SERVER_URL || github.server_url }}" }
         with:
           pattern: e2e-*
           path: reports
