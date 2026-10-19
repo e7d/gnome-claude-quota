@@ -9,16 +9,18 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {attemptRecord} from './lib/attempts.js';
 import {credentialsRenewed} from './lib/credentials.js';
-import {_, resetTranslator, setTranslator} from './lib/i18n.js';
+import {_, resetTranslator} from './lib/i18n.js';
+import {installLanguage} from './lib/language.js';
 import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {thresholdsFrom} from './lib/notify.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
-import {ACCOUNT_KEY, KEYS, PLAN_KEY, readSettings} from './lib/settings.js';
+import {ACCOUNT_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult} from './lib/state.js';
 import {accountDetails, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
 import {Alerts} from './ui/alerts.js';
+import {catalogFiles} from './ui/catalog-files.js';
 import {PanelStrip, panelScheme} from './ui/panel-fit.js';
 import {Poller} from './ui/poller.js';
 import {PopupBody} from './ui/popup-body.js';
@@ -26,11 +28,12 @@ import {Store} from './ui/store.js';
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
-    _init({iconPath, prefs, openPrefs}) {
+    _init({iconPath, prefs, openPrefs, applyLanguage}) {
         super._init(0.5, _('Claude Quota'));
         this._iconPath = iconPath;
         this._prefs = prefs;
         this._openPrefs = openPrefs;
+        this._applyLanguage = applyLanguage;
         this._prefsSignals = [];
         this._store = new Store();
         this._settings = St.Settings.get();
@@ -160,6 +163,14 @@ class Indicator extends PanelMenu.Button {
             })));
         [ACCOUNT_KEY, PLAN_KEY].forEach(key => this._prefsSignals.push(
             this._prefs.connect(`changed::${key}`, () => this._render())));
+        this._prefsSignals.push(this._prefs.connect(`changed::${LANGUAGE_KEY}`, () => this._relanguage()));
+    }
+
+    _relanguage() {
+        this._applyLanguage();
+        this.accessible_name = _('Claude Quota');
+        this._quotas = quotas({limits: this._limits}, new Date());
+        this._render();
     }
 
     // Guarded for the same reason _render is: it reaches the shell's own message tray, and
@@ -396,17 +407,26 @@ class Indicator extends PanelMenu.Button {
 
 export default class ClaudeQuotaExtension extends Extension {
     enable() {
-        setTranslator({
+        const prefs = this.getSettings();
+        const applyLanguage = this._languageInstaller(prefs);
+        applyLanguage();
+        this._indicator = new Indicator({
+            iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
+            prefs,
+            openPrefs: () => this.openPreferences(),
+            applyLanguage,
+        });
+        Main.panel.addToStatusArea(this.uuid, this._indicator);
+    }
+
+    _languageInstaller(prefs) {
+        const catalogs = catalogFiles(this.dir, this.metadata['gettext-domain']);
+        const system = {
             gettext: this.gettext.bind(this),
             ngettext: this.ngettext.bind(this),
             pgettext: this.pgettext.bind(this),
-        });
-        this._indicator = new Indicator({
-            iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
-            prefs: this.getSettings(),
-            openPrefs: () => this.openPreferences(),
-        });
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        };
+        return () => installLanguage({language: prefs.get_string(LANGUAGE_KEY), catalogs, system});
     }
 
     disable() {

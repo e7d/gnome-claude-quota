@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-10-19 15:07+0200\n"
+"POT-Creation-Date: 2026-10-19 16:29+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -12,59 +12,67 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: extension.js:30 ui/alerts.js:32
+#: extension.js:32 extension.js:171 ui/alerts.js:32
 msgid "Claude Quota"
 msgstr "Quota Claude"
 
-#: prefs.js:10
+#: prefs.js:13
 msgid "High usage threshold"
 msgstr "Seuil d'usage élevé"
 
-#: prefs.js:11
+#: prefs.js:14
 msgid "Critical usage threshold"
 msgstr "Seuil d'usage critique"
 
-#: prefs.js:15
+#: prefs.js:18
 msgid "Notify at high usage"
 msgstr "Notifier à l'usage élevé"
 
-#: prefs.js:16
+#: prefs.js:19
 msgid "Notify at critical usage"
 msgstr "Notifier à l'usage critique"
 
-#: prefs.js:22
+#: prefs.js:25
 msgid "Restore the default"
 msgstr "Rétablir la valeur par défaut"
 
-#: prefs.js:58 lib/format.js:94
+#: prefs.js:63
+msgid "Language"
+msgstr "Langue"
+
+#: prefs.js:64
+msgid "Automatic"
+msgstr "Automatique"
+
+#: prefs.js:86 lib/format.js:94
 msgid "Account"
 msgstr "Compte"
 
-#: prefs.js:59
+#: prefs.js:87
 msgid "Display active account"
 msgstr "Afficher le compte actif"
 
-#: prefs.js:60
+#: prefs.js:88
 msgid "Display plan"
 msgstr "Afficher le forfait"
 
-#: prefs.js:66
+#: prefs.js:94
 msgid "Show in top bar"
 msgstr "Afficher dans la barre supérieure"
 
-#: prefs.js:67
+#: prefs.js:95
 msgid "Show in menu"
 msgstr "Afficher dans le menu"
 
-#: prefs.js:85
+#: prefs.js:113
 msgid "Thresholds"
 msgstr "Seuils"
 
-#: prefs.js:97
+#: prefs.js:125
 msgid "General"
 msgstr "Général"
 
-#: prefs.js:103
+#: prefs.js:132
 msgid "Quotas"
 msgstr "Quotas"
 

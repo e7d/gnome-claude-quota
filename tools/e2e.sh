@@ -351,6 +351,46 @@ assert_details_off_by_default() {
         "$(probe "['show-account', 'show-plan'].every(key => $IND._prefs.get_default_value(key).unpack() === false)")"
 }
 
+LANGUAGE_LIMITS="[{kind: 'session', group: 'session', percent: 7}, {kind: 'weekly_all', group: 'weekly', percent: 12}]"
+BLOCK_NAMES="$IND._popup._blocks.map(b => b._name.text).join('|')"
+
+po_msgstr() {
+    awk -v id="msgid \"$1\"" '$0 == id { getline; sub(/^msgstr "/, ""); sub(/"$/, ""); print; exit }' "$ROOT/po/$2.po"
+}
+
+block_names_in() {
+    shell_eval "$IND._limits = $LANGUAGE_LIMITS; $IND._prefs.set_string('language', '$1'); 'ok'" >/dev/null
+    shell_eval "$BLOCK_NAMES" | unwrap
+}
+
+reset_language() {
+    shell_eval "$IND._prefs.set_string('language', ''); $IND._limits = []; 'ok'" >/dev/null
+    render_state normal
+}
+
+assert_language_forces_catalog() {
+    assert_eq "$1 a forced French renames the quotas live" \
+        "$(po_msgstr 'Session (5h)' fr)|$(po_msgstr Weekly fr)" "$(block_names_in fr)"
+    reset_language
+}
+
+assert_language_forces_english() {
+    assert_eq "$1 a forced English ignores the session language" 'Session (5h)|Weekly' "$(block_names_in en)"
+    reset_language
+}
+
+assert_language_automatic() {
+    block_names_in fr >/dev/null
+    assert_eq "$1 Automatic returns to the session language" \
+        "$(catalog_msg 'Session (5h)')|$(catalog_msg Weekly)" "$(block_names_in '')"
+    reset_language
+}
+
+assert_language_forces_either_probe() {
+    assert_language_forces_catalog control
+    assert_language_forces_english control
+}
+
 assert_state() {
     assert_account_row "$1"
     assert_plan_row "$1"
@@ -624,6 +664,10 @@ prove_state() {
         "shell_eval \"$IND._popup._hiddenNoteButton.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_hidden_note_offers_settings_probe
+    prove 'a forced language reaches the popup' \
+        "shell_eval \"$IND._keptApply = $IND._applyLanguage; $IND._applyLanguage = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._applyLanguage = $IND._keptApply; delete $IND._keptApply; 'ok'\" >/dev/null" \
+        assert_language_forces_either_probe
 }
 
 subset_kind() {
@@ -684,6 +728,9 @@ group_state() {
         assert_details_off_by_default "$theme"
     done
     assert_account_fit_ignores_scale state
+    assert_language_forces_catalog state
+    assert_language_forces_english state
+    assert_language_automatic state
     set_animations true
     assert_theme_differs
     [ "${#SHOTS[@]}" -eq 0 ] || { normalize; overview; }

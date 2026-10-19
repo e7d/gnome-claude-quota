@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-import {ACCOUNT_KEY, KEYS, PLAN_KEY, SCOPES, SCOPE_IDS, THRESHOLDS, readSettings, scopeForKind} from '../lib/settings.js';
+import {ACCOUNT_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, SCOPES, SCOPE_IDS, THRESHOLDS, readSettings, scopeForKind} from '../lib/settings.js';
 
 function schemaKeys() {
     const xml = readFileSync(new URL('../schemas/org.gnome.shell.extensions.claude-quota.gschema.xml',
@@ -35,11 +35,12 @@ test('every key the table names exists in the committed schema', () => {
     });
     assert.ok(keys.includes(ACCOUNT_KEY), `${ACCOUNT_KEY} missing from schema`);
     assert.ok(keys.includes(PLAN_KEY), `${PLAN_KEY} missing from schema`);
+    assert.ok(keys.includes(LANGUAGE_KEY), `${LANGUAGE_KEY} missing from schema`);
 });
 
 test('the schema names no key the table does not', () => {
     const named = new Set(THRESHOLDS.flatMap(level => [level.percentKey, level.notifyKey])
-        .concat(SCOPES.flatMap(scope => [scope.barKey, scope.menuKey]), [ACCOUNT_KEY, PLAN_KEY]));
+        .concat(SCOPES.flatMap(scope => [scope.barKey, scope.menuKey]), [ACCOUNT_KEY, PLAN_KEY, LANGUAGE_KEY]));
     schemaKeys().forEach(key => assert.ok(named.has(key), `${key} is in the schema and not in the table`));
 });
 
@@ -76,6 +77,16 @@ test('the plan is off unless the key says otherwise', () => {
 test('the account and plan keys are not among the keys that re-plan alerts', () => {
     assert.ok(!KEYS.includes(ACCOUNT_KEY));
     assert.ok(!KEYS.includes(PLAN_KEY));
+});
+
+test('the language key is not among the keys that re-plan alerts', () => {
+    assert.ok(!KEYS.includes(LANGUAGE_KEY));
+});
+
+test('the language follows the system unless the key says otherwise', () => {
+    const xml = readFileSync(new URL('../schemas/org.gnome.shell.extensions.claude-quota.gschema.xml',
+        import.meta.url), 'utf8');
+    assert.match(xml, new RegExp(`<key name="${LANGUAGE_KEY}" type="s">\\s*<default>''</default>`));
 });
 
 test('the account and plan keys are off in the committed schema', () => {

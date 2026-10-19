@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-10-19 15:07+0200\n"
+"POT-Creation-Date: 2026-10-19 16:29+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,59 +18,67 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: extension.js:30 ui/alerts.js:32
+#: extension.js:32 extension.js:171 ui/alerts.js:32
 msgid "Claude Quota"
 msgstr ""
 
-#: prefs.js:10
+#: prefs.js:13
 msgid "High usage threshold"
 msgstr ""
 
-#: prefs.js:11
+#: prefs.js:14
 msgid "Critical usage threshold"
 msgstr ""
 
-#: prefs.js:15
+#: prefs.js:18
 msgid "Notify at high usage"
 msgstr ""
 
-#: prefs.js:16
+#: prefs.js:19
 msgid "Notify at critical usage"
 msgstr ""
 
-#: prefs.js:22
+#: prefs.js:25
 msgid "Restore the default"
 msgstr ""
 
-#: prefs.js:58 lib/format.js:94
+#: prefs.js:63
+msgid "Language"
+msgstr ""
+
+#: prefs.js:64
+msgid "Automatic"
+msgstr ""
+
+#: prefs.js:86 lib/format.js:94
 msgid "Account"
 msgstr ""
 
-#: prefs.js:59
+#: prefs.js:87
 msgid "Display active account"
 msgstr ""
 
-#: prefs.js:60
+#: prefs.js:88
 msgid "Display plan"
 msgstr ""
 
-#: prefs.js:66
+#: prefs.js:94
 msgid "Show in top bar"
 msgstr ""
 
-#: prefs.js:67
+#: prefs.js:95
 msgid "Show in menu"
 msgstr ""
 
-#: prefs.js:85
+#: prefs.js:113
 msgid "Thresholds"
 msgstr ""
 
-#: prefs.js:97
+#: prefs.js:125
 msgid "General"
 msgstr ""
 
-#: prefs.js:103
+#: prefs.js:132
 msgid "Quotas"
 msgstr ""
 

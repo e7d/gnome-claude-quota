@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.claude-quota" path="/org/gnome/shell/extensions/claude-quota/">
+    <key name="language" type="s">
+      <default>''</default>
+      <summary>Language</summary>
+      <description>Language of the extension's words, as the name of a shipped catalog, or empty to follow the system.</description>
+    </key>
     <key name="show-account" type="b">
       <default>false</default>
       <summary>Display active account</summary>

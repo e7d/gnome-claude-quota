@@ -2,9 +2,12 @@ import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 
-import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import {ACCOUNT_KEY, PLAN_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
+import {_} from './lib/i18n.js';
+import {choiceAt, choiceIndex, installLanguage, languageChoices} from './lib/language.js';
+import {ACCOUNT_KEY, LANGUAGE_KEY, PLAN_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
+import {catalogFiles} from './ui/catalog-files.js';
 
 const TITLES = {
     warning: () => _('High usage threshold'),
@@ -54,6 +57,31 @@ function visibilityRow(settings, {title, key}) {
     return row;
 }
 
+function languageRow(settings, catalogs) {
+    const choices = languageChoices(catalogs.tags);
+    const row = new Adw.ComboRow({
+        title: _('Language'),
+        model: Gtk.StringList.new([_('Automatic'), ...choices.map(choice => choice.name)]),
+    });
+    const selected = () => choiceIndex(choices, settings.get_string(LANGUAGE_KEY));
+    const sync = () => {
+        row.selected = selected();
+    };
+    sync();
+    row.connect('notify::selected', () => {
+        if (row.selected !== selected())
+            settings.set_string(LANGUAGE_KEY, choiceAt(choices, row.selected));
+    });
+    settings.connect(`changed::${LANGUAGE_KEY}`, sync);
+    return row;
+}
+
+function languageGroup(settings, catalogs) {
+    const group = new Adw.PreferencesGroup();
+    group.add(languageRow(settings, catalogs));
+    return group;
+}
+
 function accountGroup(settings) {
     const group = new Adw.PreferencesGroup({title: _('Account')});
     group.add(visibilityRow(settings, {title: _('Display active account'), key: ACCOUNT_KEY}));
@@ -93,8 +121,9 @@ function thresholdsGroup(settings) {
     return group;
 }
 
-function generalPage(settings) {
+function generalPage(settings, catalogs) {
     const page = new Adw.PreferencesPage({title: _('General'), icon_name: 'preferences-system-symbolic'});
+    page.add(languageGroup(settings, catalogs));
     page.add(accountGroup(settings));
     return page;
 }
@@ -112,8 +141,18 @@ export default class ClaudeQuotaPreferences extends ExtensionPreferences {
     // stops following the key it is bound to. The window outlives them and holds it instead.
     fillPreferencesWindow(window) {
         window._settings = this.getSettings();
+        const catalogs = catalogFiles(this.dir, this.metadata['gettext-domain']);
+        installLanguage({
+            language: window._settings.get_string(LANGUAGE_KEY),
+            catalogs,
+            system: {
+                gettext: this.gettext.bind(this),
+                ngettext: this.ngettext.bind(this),
+                pgettext: this.pgettext.bind(this),
+            },
+        });
         Gtk.IconTheme.get_for_display(window.get_display()).add_search_path(`${this.path}/icons`);
-        window.add(generalPage(window._settings));
+        window.add(generalPage(window._settings, catalogs));
         window.add(quotasPage(window._settings));
         window.set_default_size(640, 820);
     }

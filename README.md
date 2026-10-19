@@ -79,8 +79,9 @@ status.claude.com is unauthenticated, on its own host, and shares nothing with t
 gnome-extensions prefs claude-quota@e7d.io
 ```
 
-Four groups:
+Five groups:
 
+- **Language** — `Automatic` by default, which follows the session's language and falls back to English when no catalog ships for it. Otherwise one entry per shipped catalog, each named in its own language and sorted by that name, which forces the extension's words to that language whatever the session uses. Times and numbers keep following the system locale. The panel and popup switch at once; the settings window itself switches the next time it opens.
 - **Account** — `Display active account` and `Display plan`, both off by default: whether the popup names the logged-in account and its Claude plan. Most people use one account and know which it is, so these rows stay out of the way until you ask for them.
 - **Thresholds** — the percentage at which a quota is shown as high usage and as critical, and whether crossing either posts a notification. `75%` and `90%` are this extension's own defaults, not Anthropic's, and the same two numbers decide both a quota's colour and whether it notifies — one setting, two effects. A reset button beside each restores the shipped default.
 - **Show in top bar** — which of the three quotas (session, weekly, model-specific) appear in the panel.
@@ -137,7 +138,7 @@ npm run coverage       # same suite, gated on coverage of lib/** plus a module c
 
 ## Translations
 
-The extension speaks the language of the session it runs in, through GNOME's own gettext. English is the source; French ships as a catalog.
+The extension speaks the language of the session it runs in, through GNOME's own gettext, unless the [Language](#settings) setting names a catalog — then `lib/catalog.js` reads that `.mo` file itself, because the shell's gettext follows the locale of the whole `gnome-shell` process and cannot be pointed at another language for one extension. English is the source; French ships as a catalog.
 
 ```bash
 npm run i18n           # extract po/claude-quota.pot, merge po/*.po, compile locale/**.mo
@@ -171,6 +172,8 @@ msginit --locale=de --input=po/claude-quota.pot --output=po/de.po
 # add de to LANGS in tools/i18n.sh, translate po/de.po, then:
 npm run i18n
 ```
+
+The Language setting lists every catalog under `locale/` on its own, so a new one appears there with no code change.
 
 ## Development
 
