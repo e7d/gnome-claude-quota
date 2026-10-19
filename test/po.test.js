@@ -4,8 +4,8 @@ import {test} from 'node:test';
 
 function entries(source) {
     return source.split(/\n\n+/).map(block => {
-        const read = field => [...block.matchAll(new RegExp(`^${field}(?:\\[\\d\\])? "(.*)"$`, 'gm'))]
-            .map(match => match[1]);
+        const read = field => [...block.matchAll(new RegExp(`^${field}(?:\\[\\d\\])? "(.*)"((?:\\n".*")*)$`, 'gm'))]
+            .map(([, head, rest]) => head + rest.split('\n').map(line => line.slice(1, -1)).join(''));
         return {
             id: read('msgid')[0],
             context: read('msgctxt')[0],
@@ -62,6 +62,11 @@ function markedIn(source) {
     return CALLS.flatMap(({pattern, entry}) =>
         [...source.matchAll(pattern)].map(match => key(entry(match))));
 }
+
+test('a msgstr msgmerge wrapped onto continuation lines reads as its full text', () => {
+    const [entry] = entries('msgid "a"\nmsgstr ""\n"Une ligne "\n"puis une autre."\n');
+    assert.deepEqual(entry.translations, ['Une ligne puis une autre.']);
+});
 
 test('the template carries every msgid the code marks', () => {
     const marked = new Set(shippedSources().flatMap(markedIn));

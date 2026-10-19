@@ -4,12 +4,14 @@ import GLib from 'gi://GLib';
 import {attemptRecord, outcomeFor} from '../lib/attempts.js';
 import {STATUS_POLL_SECONDS} from '../lib/policy.js';
 import {UNKNOWN_SERVICE} from '../lib/state.js';
-import {StatusClient, UsageClient, credentialExpiry, credentialsExist, credentialsPath} from '../lib/usage.js';
+import {credentialsFile} from '../lib/config-dir.js';
+import {StatusClient, UsageClient, credentialExpiry, credentialsExist} from '../lib/usage.js';
 
 const CREDENTIALS_SETTLE_SECONDS = 2;
 
 export class Poller {
-    constructor({store, onResult, onServiceStatus, onCredentials, onDue, onSent}) {
+    constructor({dir, store, onResult, onServiceStatus, onCredentials, onDue, onSent}) {
+        this._dir = dir;
         this._store = store;
         this._onResult = onResult;
         this._onServiceStatus = onServiceStatus;
@@ -43,10 +45,21 @@ export class Poller {
         });
     }
 
+    // A refresh still in flight was sent with the previous directory's token, so its
+    // answer describes the other account and must not land on this one.
+    useDir(dir) {
+        this._dir = dir;
+        this._cancellable?.cancel();
+        this._unwatchCredentials();
+        this._watchCredentials();
+        if (!this._statusTimerId)
+            this._pollStatus();
+    }
+
     // Claude Code replaces the file rather than editing it in place, and a monitor
     // on the file itself stops following at the first replace.
     _watchCredentials() {
-        const file = Gio.File.new_for_path(credentialsPath());
+        const file = Gio.File.new_for_path(credentialsFile(this._dir));
         try {
             this._credentialsMonitor = file.get_parent()
                 .monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null);
@@ -74,7 +87,7 @@ export class Poller {
     }
 
     credentialExpiry() {
-        return credentialExpiry();
+        return credentialExpiry(this._dir);
     }
 
     _onCredentialsWritten() {
@@ -85,7 +98,7 @@ export class Poller {
 
     async _fetchResult(cancellable, trigger) {
         try {
-            const {payload, status, headers, body, durationMs, expiresAt} = await this._client.fetch(cancellable);
+            const {payload, status, headers, body, durationMs, expiresAt} = await this._client.fetch(cancellable, this._dir);
             return this._recordAttempt({
                 payload,
                 error: null,
@@ -167,7 +180,7 @@ export class Poller {
     // tooling runs are exactly that — so this is also what keeps a dev shell off the
     // network, the same way a missing token already refuses the usage fetch.
     _pollStatus() {
-        if (!credentialsExist() || this._statusPolling)
+        if (!credentialsExist(this._dir) || this._statusPolling)
             return;
         const cancellable = new Gio.Cancellable();
         this._statusCancellable?.cancel();
@@ -202,12 +215,7 @@ export class Poller {
             });
     }
 
-    destroy() {
-        this._destroyed = true;
-        if (this._timerId) {
-            GLib.Source.remove(this._timerId);
-            this._timerId = null;
-        }
+    _unwatchCredentials() {
         if (this._credentialsSettleId) {
             GLib.Source.remove(this._credentialsSettleId);
             this._credentialsSettleId = 0;
@@ -217,6 +225,15 @@ export class Poller {
             this._credentialsMonitor.cancel();
             this._credentialsMonitor = null;
         }
+    }
+
+    destroy() {
+        this._destroyed = true;
+        if (this._timerId) {
+            GLib.Source.remove(this._timerId);
+            this._timerId = null;
+        }
+        this._unwatchCredentials();
         if (this._statusTimerId) {
             GLib.Source.remove(this._statusTimerId);
             this._statusTimerId = 0;

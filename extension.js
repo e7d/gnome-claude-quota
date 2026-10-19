@@ -8,6 +8,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {attemptRecord} from './lib/attempts.js';
+import {configDir} from './lib/config-dir.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {_, resetTranslator} from './lib/i18n.js';
 import {installLanguage} from './lib/language.js';
@@ -15,7 +16,7 @@ import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {thresholdsFrom} from './lib/notify.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
-import {ACCOUNT_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, readSettings} from './lib/settings.js';
+import {ACCOUNT_KEY, CONFIG_DIR_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult} from './lib/state.js';
 import {accountDetails, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
@@ -35,7 +36,9 @@ class Indicator extends PanelMenu.Button {
         this._openPrefs = openPrefs;
         this._applyLanguage = applyLanguage;
         this._prefsSignals = [];
-        this._store = new Store();
+        this._dir = this._configDir();
+        this._parkedBlocks = new Map();
+        this._store = new Store({dir: this._dir});
         this._settings = St.Settings.get();
         this._destroyed = false;
         this._quotas = [];
@@ -61,6 +64,7 @@ class Indicator extends PanelMenu.Button {
             LANG: GLib.getenv('LANG'),
         });
         this._poller = new Poller({
+            dir: this._dir,
             store: this._store,
             onResult: result => this._handleResult(result),
             onServiceStatus: service => this._handleServiceStatus(service),
@@ -148,6 +152,41 @@ class Indicator extends PanelMenu.Button {
         this._refresh('credentials');
     }
 
+    _configDir() {
+        return configDir(this._prefs.get_string(CONFIG_DIR_KEY), GLib.get_home_dir());
+    }
+
+    // A block belongs to the token that earned it, so it is set aside with its directory
+    // rather than dropped: switching back must not spend a request the server will refuse.
+    _switchConfigDir() {
+        const dir = this._configDir();
+        if (dir === this._dir)
+            return;
+        this._parkedBlocks.set(this._dir, {block: this._block, rateLimitStreak: this._rateLimitStreak});
+        this._dir = dir;
+        this._store.useDir(dir);
+        this._poller.useDir(dir);
+        this._alerts.withdrawAll();
+        this._forgetAccount(this._parkedBlocks.get(dir) ?? {block: null, rateLimitStreak: 0});
+        this._loadCache();
+        this._refresh('config-dir');
+    }
+
+    _forgetAccount({block, rateLimitStreak}) {
+        this._block = block;
+        this._rateLimitStreak = rateLimitStreak;
+        this._limits = [];
+        this._quotas = [];
+        this._fetchedAt = null;
+        this._fired = {};
+        this._error = null;
+        this._refreshing = false;
+        this._lastRequestAt = null;
+        this._accountEmail = null;
+        this._accountPlan = null;
+        this._seenExpiry = this._poller.credentialExpiry();
+    }
+
     _settingsValues() {
         return readSettings({
             int: key => this._prefs.get_int(key),
@@ -164,6 +203,7 @@ class Indicator extends PanelMenu.Button {
         [ACCOUNT_KEY, PLAN_KEY].forEach(key => this._prefsSignals.push(
             this._prefs.connect(`changed::${key}`, () => this._render())));
         this._prefsSignals.push(this._prefs.connect(`changed::${LANGUAGE_KEY}`, () => this._relanguage()));
+        this._prefsSignals.push(this._prefs.connect(`changed::${CONFIG_DIR_KEY}`, () => this._switchConfigDir()));
     }
 
     _relanguage() {
@@ -209,7 +249,7 @@ class Indicator extends PanelMenu.Button {
     }
 
     _sharedUsage() {
-        return sharedUsage();
+        return sharedUsage(this._dir);
     }
 
     _snapshot() {
@@ -276,7 +316,7 @@ class Indicator extends PanelMenu.Button {
     // over. Withdrawing there is what keeps the tray agreeing with the popup.
     async _refresh(trigger) {
         const now = new Date();
-        const details = accountDetails();
+        const details = accountDetails(this._dir);
         this._accountEmail = details.email;
         this._accountPlan = details.plan;
         this._adoptShared(now);

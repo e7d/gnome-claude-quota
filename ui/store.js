@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 
 import {appendRecord, recordLine} from '../lib/attempts.js';
 import {deserialize, serialize} from '../lib/cache.js';
+import {cacheName} from '../lib/config-dir.js';
 
 // Appending costs one open and one write whatever the log already holds, where rewriting it
 // whole cost a read, a split and a write of every record on the compositor's own thread.
@@ -12,12 +13,22 @@ import {deserialize, serialize} from '../lib/cache.js';
 const COMPACT_EVERY = 200;
 
 export class Store {
-    constructor() {
+    constructor({dir}) {
         this._sinceCompaction = COMPACT_EVERY;
+        this._dir = dir;
+    }
+
+    useDir(dir) {
+        this._dir = dir;
     }
 
     _cachePath() {
-        return GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-quota', 'usage.json']);
+        const name = cacheName({
+            dir: this._dir,
+            home: GLib.get_home_dir(),
+            digest: path => GLib.compute_checksum_for_string(GLib.ChecksumType.SHA256, path, -1),
+        });
+        return GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-quota', name]);
     }
 
     attemptsPath() {

@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-10-19 21:24+0200\n"
+"POT-Creation-Date: 2026-10-19 22:38+0200\n"
 "PO-Revision-Date: 2026-08-13 17:45+0200\n"
 "Last-Translator: e7d <michael@e7d.io>\n"
 "Language-Team: French\n"
@@ -12,73 +12,86 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: extension.js:32 extension.js:171 ui/alerts.js:32
+#: extension.js:33 extension.js:211 ui/alerts.js:32
 msgid "Claude Quota"
 msgstr "Quota Claude"
 
-#: prefs.js:15
+#: prefs.js:18
 msgid "High usage threshold"
 msgstr "Seuil d'usage élevé"
 
-#: prefs.js:16
+#: prefs.js:19
 msgid "Critical usage threshold"
 msgstr "Seuil d'usage critique"
 
-#: prefs.js:20
+#: prefs.js:23
 msgid "Notify at high usage"
 msgstr "Notifier à l'usage élevé"
 
-#: prefs.js:21
+#: prefs.js:24
 msgid "Notify at critical usage"
 msgstr "Notifier à l'usage critique"
 
-#: prefs.js:27
+#: prefs.js:30
 msgid "Restore the default"
 msgstr "Rétablir la valeur par défaut"
 
-#: prefs.js:65
+#: prefs.js:68
 msgid "Language"
 msgstr "Langue"
 
-#: prefs.js:66
+#: prefs.js:69
 msgid "Automatic"
 msgstr "Automatique"
 
-#: prefs.js:88 lib/format.js:94
+#: prefs.js:117
+msgid "Choose folder…"
+msgstr "Choisir un dossier…"
+
+#: prefs.js:123 prefs.js:168
+msgid "Claude directory"
+msgstr "Répertoire Claude"
+
+#: prefs.js:146
+msgid "No Claude login in {path}"
+msgstr "Aucune connexion Claude dans {path}"
+
+#: prefs.js:191 lib/format.js:94
 msgid "Account"
 msgstr "Compte"
 
-#: prefs.js:89
+#: prefs.js:192
 msgid "Display active account"
 msgstr "Afficher le compte actif"
 
-#: prefs.js:90
+#: prefs.js:193
 msgid "Display plan"
 msgstr "Afficher le forfait"
 
-#: prefs.js:96
+#: prefs.js:199
 msgid "Show in top bar"
 msgstr "Afficher dans la barre supérieure"
 
-#: prefs.js:97
+#: prefs.js:200
 msgid "Show in menu"
 msgstr "Afficher dans le menu"
 
-#: prefs.js:115
+#: prefs.js:218
 msgid "Thresholds"
 msgstr "Seuils"
 
-#: prefs.js:127
+#: prefs.js:230
 msgid "General"
 msgstr "Général"
 
-#: prefs.js:134
+#: prefs.js:237
 msgid "Quotas"
 msgstr "Quotas"
 
 #: lib/errors.js:3
 msgid "No active Claude login, run Claude Code to sign in."
-msgstr "Aucune connexion Claude active, lancez Claude Code pour vous connecter."
+msgstr ""
+"Aucune connexion Claude active, lancez Claude Code pour vous connecter."
 
 #: lib/format.js:29
 msgid "{d}d {h}h left"
@@ -122,7 +135,7 @@ msgstr "prochain essai {time}"
 msgid "until {time}"
 msgstr "jusqu'à {time}"
 
-#: lib/format.js:119 lib/usage.js:127
+#: lib/format.js:119 lib/usage.js:128
 msgid "Rate limited"
 msgstr "Quota de requêtes atteint"
 
@@ -172,27 +185,27 @@ msgstr "Hebdomadaire"
 msgid "Model-specific"
 msgstr "Par modèle"
 
-#: lib/usage.js:32
-msgid "Cannot read ~/.claude/.credentials.json"
-msgstr "Lecture impossible de ~/.claude/.credentials.json"
+#: lib/usage.js:29
+msgid "Cannot read {path}"
+msgstr "Lecture impossible de {path}"
 
-#: lib/usage.js:36
-msgid "No Claude token in ~/.claude/.credentials.json"
-msgstr "Aucun jeton Claude dans ~/.claude/.credentials.json"
+#: lib/usage.js:33
+msgid "No Claude token in {path}"
+msgstr "Aucun jeton Claude dans {path}"
 
-#: lib/usage.js:101 lib/usage.js:124
+#: lib/usage.js:102 lib/usage.js:125
 msgid "Token expired, run Claude Code once"
 msgstr "Jeton expiré, relancez Claude Code"
 
-#: lib/usage.js:113
+#: lib/usage.js:114
 msgid "Cannot reach api.anthropic.com"
 msgstr "api.anthropic.com injoignable"
 
-#: lib/usage.js:134
+#: lib/usage.js:135
 msgid "Usage request failed (HTTP {status})"
 msgstr "Échec de la requête (HTTP {status})"
 
-#: lib/usage.js:141
+#: lib/usage.js:142
 msgid "Unexpected response from the usage endpoint"
 msgstr "Réponse inattendue du point d'accès"
 
@@ -207,6 +220,12 @@ msgstr "Ouvrir les réglages"
 #: lib/view.js:38
 msgid "Loading…"
 msgstr "Chargement…"
+
+#~ msgid "Cannot read ~/.claude/.credentials.json"
+#~ msgstr "Lecture impossible de ~/.claude/.credentials.json"
+
+#~ msgid "No Claude token in ~/.claude/.credentials.json"
+#~ msgstr "Aucun jeton Claude dans ~/.claude/.credentials.json"
 
 #~ msgid "Every quota is hidden — see the extension settings"
 #~ msgstr "Tous les quotas sont masqués — voir les réglages de l'extension"

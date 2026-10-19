@@ -79,8 +79,9 @@ status.claude.com is unauthenticated, on its own host, and shares nothing with t
 gnome-extensions prefs claude-quota@e7d.io
 ```
 
-Five groups:
+Six groups:
 
+- **Claude directory** — which Claude Code configuration directory to read the login from, `~/.claude` by default. The list offers every `~/.claude*` directory that holds a `.credentials.json`, each labelled with the account it is signed in to, so someone running two accounts side by side with `CLAUDE_CONFIG_DIR` (say `~/.claude` for work and `~/.claude-perso` for personal use) can switch between them. The folder button picks a directory anywhere else, and refuses one that holds no login; the reset button goes back to `~/.claude`. Switching drops the previous account's numbers at once and fetches the new one's; each directory keeps its own cache, so switching back shows its last numbers without a request.
 - **Language** — `Automatic` by default, which follows the session's language and falls back to English when no catalog ships for it. Otherwise one entry per shipped catalog, each named in its own language and sorted by that name, which forces the extension's words to that language whatever the session uses. Times and numbers keep following the system locale. The panel, the popup and the settings window all switch at once.
 - **Account** — `Display active account` and `Display plan`, both off by default: whether the popup names the logged-in account and its Claude plan. Most people use one account and know which it is, so these rows stay out of the way until you ask for them.
 - **Thresholds** — the percentage at which a quota is shown as high usage and as critical, and whether crossing either posts a notification. `75%` and `90%` are this extension's own defaults, not Anthropic's, and the same two numbers decide both a quota's colour and whether it notifies — one setting, two effects. A reset button beside each restores the shipped default.
@@ -92,7 +93,7 @@ Five groups:
 - **GNOME Shell 50**
 - **Claude Code** signed in via OAuth
 
-The extension reads your OAuth token from `~/.claude/.credentials.json` (read-only). It never writes to this file and never refreshes the token. If your token expires, the popup will show `Token expired, run Claude Code once` to refresh it.
+The extension reads your OAuth token from `~/.claude/.credentials.json`, or from `.credentials.json` in the directory chosen under **Claude directory** (read-only). It never writes to this file and never refreshes the token. If your token expires, the popup will show `Token expired, run Claude Code once` to refresh it.
 
 ## Install
 

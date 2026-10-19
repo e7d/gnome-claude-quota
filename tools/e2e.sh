@@ -1422,6 +1422,42 @@ prove_credentials_recovery() {
         assert_credentials_wake
 }
 
+# The switch runs the real refresh, which the empty directory refuses before a socket
+# opens — that refusal is what puts the no-login message on screen.
+switch_to_empty_dir() {
+    mkdir -p "$SANDBOX_HOME/.claude-other"
+    render_state normal
+    shell_eval "delete $IND._refresh;
+        $IND._prefs.set_string('claude-config-dir', '$SANDBOX_HOME/.claude-other'); 'ok'" >/dev/null
+    sleep 1
+}
+
+leave_other_dir() {
+    shell_eval "$IND._refresh = () => {}; $IND._prefs.set_string('claude-config-dir', ''); 'ok'" >/dev/null
+}
+
+assert_switch_forgets_account() {
+    switch_to_empty_dir
+    local message
+    message="$(js_string "$(catalog_msg "$NO_LOGIN")")"
+    assert_eq "$1 the watcher follows the selected directory" 'true' \
+        "$(probe "$IND._poller._dir === '$SANDBOX_HOME/.claude-other'")"
+    assert_eq "$1 the previous account's quotas are dropped" '0' "$(probe "$IND._quotas.length")"
+    assert_eq "$1 the popup says the selected directory holds no login" 'true' \
+        "$(probe "$IND._popup._messageLabel.text === $message && $IND._popup._message.visible")"
+    assert_eq "$1 the switch spent no request" 'true' "$(probe "$IND._lastRequestAt === null")"
+    leave_other_dir
+}
+
+assert_switch_forgets_account_probe() { assert_switch_forgets_account control; }
+
+prove_config_dir_switch() {
+    prove 'selecting another directory forgets the previous account' \
+        "shell_eval \"$IND._switchConfigDir = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._switchConfigDir; 'ok'\" >/dev/null" \
+        assert_switch_forgets_account_probe
+}
+
 restore_credentials_stubs() {
     shell_eval "delete $IND._poller.credentialExpiry;
         delete globalThis._wokeWith;
@@ -1487,6 +1523,8 @@ group_refresh() {
     assert_credentials_wake
     restore_credentials_stubs
     restore_attempt_log
+    prove_config_dir_switch
+    assert_switch_forgets_account config-dir
 }
 
 LIVE_ALERTS="[...$IND._alerts._live.keys()].sort()"

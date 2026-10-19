@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.claude-quota" path="/org/gnome/shell/extensions/claude-quota/">
+    <key name="claude-config-dir" type="s">
+      <default>''</default>
+      <summary>Claude directory</summary>
+      <description>Claude Code configuration directory holding the login to read, as an absolute path, or empty for ~/.claude.</description>
+    </key>
     <key name="language" type="s">
       <default>''</default>
       <summary>Language</summary>

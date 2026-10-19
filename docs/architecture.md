@@ -38,6 +38,7 @@ is an e2e-breaking change, and `npm run e2e` is the only way to find out.
 | `lib/bar.js` | Pace-bar tick geometry | — | `test/bar.test.js` |
 | `lib/cache.js` | `usage.json` (de)serialization | — | `test/cache.test.js` |
 | `lib/catalog.js` | Reading a compiled `.mo` catalog and its `Plural-Forms` rule into a translator | — | `test/catalog.test.js` |
+| `lib/config-dir.js` | Which Claude Code directory is read: its credentials and config paths, its cache file name, and the choices the preferences offer | — | `test/config-dir.test.js` |
 | `lib/credentials.js` | Parsing `.credentials.json`, expiry and renewal checks | — | `test/credentials.test.js` |
 | `lib/ellipsis.js` | Shortening an email address to a width, keeping its domain | — | `test/ellipsis.test.js` |
 | `lib/errors.js` | Turning a fetch error into a displayable description | `lib/i18n.js` | `test/errors.test.js` |
@@ -54,18 +55,18 @@ is an e2e-breaking change, and `npm run e2e` is the only way to find out.
 | `lib/state.js` | The state/effects reducer: `applyResult`, `adoptShared` | `lib/model.js`, `lib/policy.js`, `lib/shared-usage.js` | `test/state.test.js` |
 | `lib/style.js` | CSS class names for a given severity/scheme | — | `test/style.test.js` |
 | `lib/theme.js` | Luminance → scheme, scheme → brand colour | — | `test/theme.test.js` |
-| `lib/usage.js` | The HTTP client and credentials/shared-usage file paths | `lib/credentials.js`, `lib/errors.js`, `lib/model.js`, `lib/shared-usage.js`, `gi://` | none (exempt, see above) |
+| `lib/usage.js` | The HTTP client and reading the selected directory's credentials and config files | `lib/config-dir.js`, `lib/credentials.js`, `lib/errors.js`, `lib/model.js`, `lib/shared-usage.js`, `gi://` | none (exempt, see above) |
 | `lib/view.js` | Deriving the popup and panel view models from state | `lib/errors.js`, `lib/format.js`, `lib/i18n.js`, `lib/policy.js`, `lib/style.js` | `test/view.test.js` |
 | `ui/alerts.js` | The notification lifecycle: posting, updating and withdrawing via `MessageTray` | `lib/i18n.js`, `lib/notify.js` | e2e (`notify` group) |
 | `ui/catalog-files.js` | Listing the shipped catalogs and reading one; runs in the preferences process too | `gi://` | e2e (`language` group) |
 | `ui/pace-bar.js` | The `BarLevel` subclass that draws the pace tick | `lib/bar.js` | e2e (`state`, `panel` groups) |
 | `ui/panel-fit.js` | `panelScheme()`; `PanelStrip`, which fits panel cells to available width and repaints on panel-geometry changes | `lib/panel.js`, `lib/theme.js` | e2e (`panel`, `hover` groups) |
-| `ui/poller.js` | Scheduling fetches, watching the credentials file, recording every attempt | `lib/attempts.js`, `lib/state.js`, `lib/usage.js` | e2e (`refresh` group) |
+| `ui/poller.js` | Scheduling fetches, watching the selected directory's credentials file, recording every attempt | `lib/attempts.js`, `lib/config-dir.js`, `lib/state.js`, `lib/usage.js` | e2e (`refresh` group) |
 | `ui/popup-body.js` | The popup menu's body: header, account, plan, message, blocks, refresh button | `ui/quota-block.js` | e2e (`state`, `hover` groups) |
 | `ui/quota-block.js` | One quota row in the popup, including its `PaceBar` | `lib/format.js`, `lib/style.js`, `ui/pace-bar.js` | e2e (`state` group) |
-| `ui/store.js` | Reading and writing `usage.json` and `attempts.jsonl` | `lib/attempts.js`, `lib/cache.js` | e2e (`refresh`, `lifecycle` groups) |
+| `ui/store.js` | Reading and writing the selected directory's `usage*.json` and `attempts.jsonl` | `lib/attempts.js`, `lib/cache.js`, `lib/config-dir.js` | e2e (`refresh`, `lifecycle` groups) |
 | `extension.js` | The `Indicator` actor: state fields, `_render()`, wiring every `lib/` and `ui/` module together | all of the above | e2e (all groups) |
-| `prefs.js` | The preferences window | `lib/i18n.js`, `lib/language.js`, `lib/settings.js`, `ui/catalog-files.js` | e2e (`state` group: the live language switch; `preview.sh --prefs`) |
+| `prefs.js` | The preferences window | `lib/config-dir.js`, `lib/i18n.js`, `lib/language.js`, `lib/settings.js`, `lib/shared-usage.js`, `lib/usage.js`, `ui/catalog-files.js` | e2e (`state` group: the live language switch; `preview.sh --prefs`) |
 
 `tools/` and `tools/lib/*` are a separate, dev-only layer — entrypoints and their shared
 libraries, covered by `test/devkit.test.js`, `test/assert.test.js`, `test/attribution.test.js`,

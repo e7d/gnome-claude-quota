@@ -6,9 +6,12 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import {_} from './lib/i18n.js';
+import {choiceLabel, configDir, directoryChoices, displayPath, isCandidateName, settingFor} from './lib/config-dir.js';
+import {_, format} from './lib/i18n.js';
 import {choiceAt, choiceIndex, installLanguage, languageChoices} from './lib/language.js';
-import {ACCOUNT_KEY, LANGUAGE_KEY, PLAN_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
+import {ACCOUNT_KEY, CONFIG_DIR_KEY, LANGUAGE_KEY, PLAN_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
+import {parseAccountEmail} from './lib/shared-usage.js';
+import {credentialsExist, readClaudeConfig} from './lib/usage.js';
 import {catalogFiles} from './ui/catalog-files.js';
 
 const TITLES = {
@@ -29,7 +32,7 @@ function resetButton(settings, key) {
         has_frame: false,
     });
     const sync = () => {
-        button.sensitive = settings.get_int(key) !== settings.get_default_value(key).get_int32();
+        button.sensitive = !settings.get_value(key).equal(settings.get_default_value(key));
     };
     button.connect('clicked', () => settings.reset(key));
     settings.connect(`changed::${key}`, sync);
@@ -78,8 +81,108 @@ function languageRow(settings, catalogs) {
     return row;
 }
 
+function homeDirectoryNames(home) {
+    const names = [];
+    try {
+        const entries = Gio.File.new_for_path(home).enumerate_children(
+            'standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
+        let info;
+        while ((info = entries.next_file(null)) !== null) {
+            if (info.get_file_type() === Gio.FileType.DIRECTORY)
+                names.push(info.get_name());
+        }
+        entries.close(null);
+    } catch (error) {
+        logError(error);
+    }
+    return names;
+}
+
+function accountEmail(dir) {
+    const text = readClaudeConfig(dir);
+    return text === null ? null : parseAccountEmail(text);
+}
+
+function foundConfigDirs(home) {
+    return homeDirectoryNames(home)
+        .filter(isCandidateName)
+        .map(name => GLib.build_filenamev([home, name]))
+        .filter(dir => credentialsExist(dir))
+        .map(path => ({path, email: accountEmail(path)}));
+}
+
+function chooseFolderButton(settings, home) {
+    const button = new Gtk.Button({
+        icon_name: 'folder-open-symbolic',
+        tooltip_text: _('Choose folder…'),
+        valign: Gtk.Align.CENTER,
+        has_frame: false,
+    });
+    button.connect('clicked', () => {
+        const window = button.get_root();
+        const dialog = new Gtk.FileDialog({title: _('Claude directory'), initial_folder: Gio.File.new_for_path(home)});
+        dialog.select_folder(window, null, (source, result) => {
+            const path = pickedFolder(source, result);
+            if (path !== null)
+                adoptFolder({settings, home, window, path});
+        });
+    });
+    return button;
+}
+
+function pickedFolder(dialog, result) {
+    try {
+        return dialog.select_folder_finish(result).get_path();
+    } catch {
+        return null;
+    }
+}
+
+function adoptFolder({settings, home, window, path}) {
+    if (credentialsExist(path)) {
+        settings.set_string(CONFIG_DIR_KEY, settingFor(path, home));
+        return;
+    }
+    window.add_toast(new Adw.Toast({title: format(_('No Claude login in {path}'), {path: displayPath(path, home)})}));
+}
+
+// A pick from the list writes the key while the dropdown's popover is still alive, and
+// replacing the model under it kills the preferences process. So the list only grows,
+// and the model is replaced only when it does, which only the folder picker can cause.
+function syncDirectoryRow(row, state, current) {
+    const choices = directoryChoices({found: state.choices, current, home: state.home});
+    state.syncing = true;
+    if (choices.length !== state.choices.length) {
+        state.choices = choices;
+        row.model = Gtk.StringList.new(choices.map(choice => choiceLabel(choice, state.home)));
+    }
+    const index = choices.findIndex(choice => choice.path === current);
+    if (row.selected !== index)
+        row.selected = index;
+    state.syncing = false;
+}
+
+function configDirRow(settings) {
+    const home = GLib.get_home_dir();
+    const current = () => configDir(settings.get_string(CONFIG_DIR_KEY), home);
+    const row = new Adw.ComboRow({title: _('Claude directory'), use_subtitle: true});
+    const state = {home, choices: foundConfigDirs(home), syncing: false};
+    state.choices = directoryChoices({found: state.choices, current: current(), home});
+    row.model = Gtk.StringList.new(state.choices.map(choice => choiceLabel(choice, home)));
+    syncDirectoryRow(row, state, current());
+    row.connect('notify::selected', () => {
+        if (!state.syncing)
+            settings.set_string(CONFIG_DIR_KEY, settingFor(state.choices[row.selected].path, home));
+    });
+    settings.connect(`changed::${CONFIG_DIR_KEY}`, () => syncDirectoryRow(row, state, current()));
+    row.add_suffix(chooseFolderButton(settings, home));
+    row.add_suffix(resetButton(settings, CONFIG_DIR_KEY));
+    return row;
+}
+
 function languageGroup(settings, catalogs) {
     const group = new Adw.PreferencesGroup();
+    group.add(configDirRow(settings));
     group.add(languageRow(settings, catalogs));
     return group;
 }

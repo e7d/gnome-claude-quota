@@ -63,6 +63,10 @@ export class Alerts {
         notification.destroy(MessageTray.NotificationDestroyedReason.EXPIRED);
     }
 
+    withdrawAll() {
+        [...this._live.keys()].forEach(key => this._withdrawAlert(key));
+    }
+
     sync({quotas, fired, thresholds, now, locale, percentLocale}) {
         const plan = alertPlan({quotas, fired, thresholds, now, locale, percentLocale});
         plan.withdraw.forEach(key => this._withdrawAlert(key));
