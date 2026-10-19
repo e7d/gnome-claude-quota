@@ -1,7 +1,7 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
-import {describe} from '../lib/errors.js';
+import {NO_LOGIN, describe} from '../lib/errors.js';
 import {panelView, popupView} from '../lib/view.js';
 
 const NOW = new Date('2026-08-14T12:00:00Z');
@@ -155,6 +155,21 @@ test('panelView falls back to a dash once a fetch has failed', () => {
         quotas: [], hasAnyQuota: false, service: null, error: 'boom',
         scheme: 'dark', percentLocale: 'en-US'});
     assert.equal(cells[0].text, '-');
+});
+
+test('panelView leaves only the icon when no Claude login exists', () => {
+    const {cells} = panelView({
+        quotas: [], hasAnyQuota: false, service: null, error: describe(NO_LOGIN),
+        scheme: 'dark', percentLocale: 'en-US'});
+    assert.equal(cells.length, 0);
+});
+
+test('panelView still shows quotas fetched before the login went away', () => {
+    const {cells} = panelView({
+        quotas: [{short: 'S', percent: 40, severity: 'normal'}], hasAnyQuota: true,
+        service: null, error: describe(NO_LOGIN), scheme: 'dark', percentLocale: 'en-US'});
+    assert.equal(cells.length, 1);
+    assert.equal(cells[0].text, 'S 40%');
 });
 
 test('panelView shows no fallback when the user hid every bar quota', () => {

@@ -480,6 +480,19 @@ assert_bar_all_hidden_shows_icon_only() {
     assert_eq "$1 hiding every quota from the bar leaves only the icon" 'false' "$mapped"
 }
 
+assert_no_login_shows_icon_only() {
+    render_state no-account
+    assert_eq "$1 no Claude login leaves only the icon" 'false' "$(probe "$IND._panel._box.mapped")"
+}
+
+assert_no_login_says_so() {
+    render_state no-account
+    local message
+    message="$(js_string "$(catalog_msg 'No active Claude login, run Claude Code to sign in.')")"
+    assert_eq "$1 the popup says no Claude login is active" 'true' \
+        "$(probe "$IND._popup._messageLabel.text === $message && $IND._popup._message.visible")"
+}
+
 # The note reading as attached to whatever sits beside it is a packing-order bug,
 # so the proof is geometry: a row of its own sits below the meta line, while a
 # label merely sharing _body's own row sits beside it at roughly the same height.
@@ -543,6 +556,8 @@ assert_scope_leaves_the_menu_probe() { assert_scope_leaves_the_menu control; }
 assert_all_hidden_says_so_probe() { assert_all_hidden_says_so control; }
 assert_bar_all_hidden_shows_icon_only_probe() { assert_bar_all_hidden_shows_icon_only control; }
 assert_hidden_note_own_line_probe() { assert_hidden_note_own_line control; }
+assert_no_login_shows_icon_only_probe() { assert_no_login_shows_icon_only control; }
+assert_no_login_says_so_probe() { assert_no_login_says_so control; }
 assert_hidden_note_offers_settings_probe() { assert_hidden_note_offers_settings control; }
 
 prove_state() {
@@ -668,6 +683,14 @@ prove_state() {
         "shell_eval \"$IND._keptApply = $IND._applyLanguage; $IND._applyLanguage = () => {}; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._applyLanguage = $IND._keptApply; delete $IND._keptApply; 'ok'\" >/dev/null" \
         assert_language_forces_either_probe
+    prove 'no Claude login leaves only the icon' \
+        "shell_eval \"$IND._panel._box.visible = true; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_no_login_shows_icon_only_probe
+    prove 'the popup says no Claude login is active' \
+        "shell_eval \"$IND._popup._message.visible = false; $IND._render = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
+        assert_no_login_says_so_probe
 }
 
 subset_kind() {
@@ -726,6 +749,8 @@ group_state() {
         assert_no_detail_hides_its_row "$theme"
         assert_setting_hides_its_row "$theme"
         assert_details_off_by_default "$theme"
+        assert_no_login_shows_icon_only "$theme"
+        assert_no_login_says_so "$theme"
     done
     assert_account_fit_ignores_scale state
     assert_language_forces_catalog state

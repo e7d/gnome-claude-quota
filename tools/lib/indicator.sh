@@ -2,7 +2,7 @@
 
 SCENARIOS=(normal over-pace warning critical full zero expired model-scoped no-reset
            long-name account-normal account-long-user account-long-domain account-long-both plan-long
-           locale rate-limited rate-limited-day error token-expired loading refreshing fresh no-data
+           locale rate-limited rate-limited-day error token-expired loading refreshing fresh no-data no-account
            model-scoped-issue narrow-two narrow-one narrow-icon narrow-issue
            service-degraded service-partial service-major service-maintenance
            service-maintenance-until service-maintenance-day service-error service-quota-ok)
@@ -181,6 +181,7 @@ setup_for() {
         refreshing) echo "$(setup_quotas) i._refreshing = true;" ;;
         fresh) echo "$(setup_quotas) i._fetchedAt = new Date();" ;;
         no-data) echo "i._fetchedAt = null; i._error = {msgid: 'Cannot reach api.anthropic.com', values: {}};" ;;
+        no-account) echo "i._fetchedAt = null; i._accountEmail = null; i._accountPlan = null; i._error = {msgid: 'No active Claude login, run Claude Code to sign in.', values: {}};" ;;
         model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = {msgid: 'Usage request failed (HTTP {status})', values: {status: 503}}; i._service = {status: 'partial_outage', until: null};" ;;
         narrow-*) setup_for model-scoped ;;
         service-quota-ok) echo "$(setup_quotas) i._service = {status: 'partial_outage', until: null};" ;;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {describe, errorText} from '../lib/errors.js';
+import {NO_LOGIN, describe, errorText, signedOut} from '../lib/errors.js';
 import {resetTranslator, setTranslator} from '../lib/i18n.js';
 
 test('describe keeps an English message for the log', () => {
@@ -30,4 +30,10 @@ test('errorText translates and then interpolates', () => {
 
 test('errorText renders nothing for no error', () => {
     assert.equal(errorText(null), '');
+});
+
+test('signedOut recognises only the missing-login error', () => {
+    assert.equal(signedOut(describe(NO_LOGIN)), true);
+    assert.equal(signedOut(describe('Cannot reach api.anthropic.com')), false);
+    assert.equal(signedOut(null), false);
 });
