@@ -1,4 +1,6 @@
 import Adw from 'gi://Adw';
+import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 
@@ -122,14 +124,14 @@ function thresholdsGroup(settings) {
 }
 
 function generalPage(settings, catalogs) {
-    const page = new Adw.PreferencesPage({title: _('General'), icon_name: 'preferences-system-symbolic'});
+    const page = new Adw.PreferencesPage({name: 'general', title: _('General'), icon_name: 'preferences-system-symbolic'});
     page.add(languageGroup(settings, catalogs));
     page.add(accountGroup(settings));
     return page;
 }
 
 function quotasPage(settings) {
-    const page = new Adw.PreferencesPage({title: _('Quotas'), icon_name: 'claude-quota-usage-symbolic'});
+    const page = new Adw.PreferencesPage({name: 'quotas', title: _('Quotas'), icon_name: 'claude-quota-usage-symbolic'});
     page.add(thresholdsGroup(settings));
     SCOPES.forEach(scope => page.add(quotaGroup(settings, scope)));
     return page;
@@ -141,9 +143,35 @@ export default class ClaudeQuotaPreferences extends ExtensionPreferences {
     // stops following the key it is bound to. The window outlives them and holds it instead.
     fillPreferencesWindow(window) {
         window._settings = this.getSettings();
+        window._pages = [];
         const catalogs = catalogFiles(this.dir, this.metadata['gettext-domain']);
+        Gtk.IconTheme.get_for_display(window.get_display()).add_search_path(`${this.path}/icons`);
+        this._fill(window, catalogs);
+        window._settings.connect(`changed::${LANGUAGE_KEY}`, () => GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._fill(window, catalogs);
+            return GLib.SOURCE_REMOVE;
+        }));
+        window.set_default_size(640, 820);
+    }
+
+    // Every string is read once, as its widget is built, so a new language means new pages.
+    // Each build gets a settings object of its own, so the old rows' handlers go with them.
+    _fill(window, catalogs) {
+        this._installLanguage(window._settings, catalogs);
+        const visible = window.visible_page_name;
+        window._pages.forEach(page => window.remove(page));
+        if (window._pageSettings)
+            GObject.signal_handlers_destroy(window._pageSettings);
+        window._pageSettings = this.getSettings();
+        window._pages = [generalPage(window._pageSettings, catalogs), quotasPage(window._pageSettings)];
+        window._pages.forEach(page => window.add(page));
+        if (visible)
+            window.visible_page_name = visible;
+    }
+
+    _installLanguage(settings, catalogs) {
         installLanguage({
-            language: window._settings.get_string(LANGUAGE_KEY),
+            language: settings.get_string(LANGUAGE_KEY),
             catalogs,
             system: {
                 gettext: this.gettext.bind(this),
@@ -151,9 +179,5 @@ export default class ClaudeQuotaPreferences extends ExtensionPreferences {
                 pgettext: this.pgettext.bind(this),
             },
         });
-        Gtk.IconTheme.get_for_display(window.get_display()).add_search_path(`${this.path}/icons`);
-        window.add(generalPage(window._settings, catalogs));
-        window.add(quotasPage(window._settings));
-        window.set_default_size(640, 820);
     }
 }

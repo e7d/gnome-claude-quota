@@ -65,7 +65,7 @@ is an e2e-breaking change, and `npm run e2e` is the only way to find out.
 | `ui/quota-block.js` | One quota row in the popup, including its `PaceBar` | `lib/format.js`, `lib/style.js`, `ui/pace-bar.js` | e2e (`state` group) |
 | `ui/store.js` | Reading and writing `usage.json` and `attempts.jsonl` | `lib/attempts.js`, `lib/cache.js` | e2e (`refresh`, `lifecycle` groups) |
 | `extension.js` | The `Indicator` actor: state fields, `_render()`, wiring every `lib/` and `ui/` module together | all of the above | e2e (all groups) |
-| `prefs.js` | The preferences window | `lib/i18n.js`, `lib/language.js`, `lib/settings.js`, `ui/catalog-files.js` | e2e (`preview.sh --prefs`; no dedicated e2e group) |
+| `prefs.js` | The preferences window | `lib/i18n.js`, `lib/language.js`, `lib/settings.js`, `ui/catalog-files.js` | e2e (`state` group: the live language switch; `preview.sh --prefs`) |
 
 `tools/` and `tools/lib/*` are a separate, dev-only layer — entrypoints and their shared
 libraries, covered by `test/devkit.test.js`, `test/assert.test.js`, `test/attribution.test.js`,

@@ -81,7 +81,7 @@ gnome-extensions prefs claude-quota@e7d.io
 
 Five groups:
 
-- **Language** — `Automatic` by default, which follows the session's language and falls back to English when no catalog ships for it. Otherwise one entry per shipped catalog, each named in its own language and sorted by that name, which forces the extension's words to that language whatever the session uses. Times and numbers keep following the system locale. The panel and popup switch at once; the settings window itself switches the next time it opens.
+- **Language** — `Automatic` by default, which follows the session's language and falls back to English when no catalog ships for it. Otherwise one entry per shipped catalog, each named in its own language and sorted by that name, which forces the extension's words to that language whatever the session uses. Times and numbers keep following the system locale. The panel, the popup and the settings window all switch at once.
 - **Account** — `Display active account` and `Display plan`, both off by default: whether the popup names the logged-in account and its Claude plan. Most people use one account and know which it is, so these rows stay out of the way until you ask for them.
 - **Thresholds** — the percentage at which a quota is shown as high usage and as critical, and whether crossing either posts a notification. `75%` and `90%` are this extension's own defaults, not Anthropic's, and the same two numbers decide both a quota's colour and whether it notifies — one setting, two effects. A reset button beside each restores the shipped default.
 - **Show in top bar** — which of the three quotas (session, weekly, model-specific) appear in the panel.

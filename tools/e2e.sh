@@ -417,6 +417,90 @@ assert_language_automatic() {
     reset_language
 }
 
+PREFS_WINDOW="global.get_window_actors().find(a => a.meta_window.get_gtk_application_id() !== null)"
+
+bus_call() {
+    gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method "org.freedesktop.DBus.$1" org.gnome.Shell.Extensions 2>/dev/null
+}
+
+prefs_app_pid() {
+    bus_call GetConnectionUnixProcessID | grep -oE '[0-9]+' | tail -1
+}
+
+# The preferences app outlives its window and hands the same one back when asked again, so
+# a window that has to be built afresh needs the process gone too — by pid, never by name.
+# Gone means off the bus: in CI nothing reaps it, and kill -0 answers for a zombie.
+close_prefs() {
+    local pid _
+    pid="$(prefs_app_pid)"
+    shell_eval "$PREFS_WINDOW?.meta_window.delete(global.get_current_time()); 'ok'" >/dev/null
+    for _ in $(seq 50); do
+        [ "$(probe "$PREFS_WINDOW === undefined")" = true ] && break
+        sleep 0.1
+    done
+    [ -n "$pid" ] || die 'the preferences app has no process on the session bus'
+    kill "$pid"
+    for _ in $(seq 50); do
+        [ "$(bus_call NameHasOwner)" = '(false,)' ] && return 0
+        sleep 0.1
+    done
+    die 'the preferences app never exited'
+}
+
+shoot_prefs_once() {
+    local rect
+    read -r -a rect <<<"$(prefs_box)"
+    rm -f "$1"
+    shoot "$1" "${rect[@]}"
+    [ -s "$1" ] || die "no preferences shot at $1"
+}
+
+# A rebuilt window can be caught between frames, a glyph short or a stale one left behind,
+# and a slow runner catches it there; two shots in a row agreeing is what settled means.
+shoot_prefs() {
+    local _
+    shoot_prefs_once "$1"
+    for _ in $(seq 20); do
+        sleep 0.1
+        shoot_prefs_once "$1.next"
+        [ "$(pixels_differing "$1" "$1.next")" = 0 ] && { rm -f "$1.next"; return 0; }
+        mv "$1.next" "$1"
+    done
+    die "the preferences window never settled for $1"
+}
+
+pixels_differing() {
+    magick compare -metric AE "$1" "$2" null: 2>&1 | cut -d' ' -f1
+}
+
+# A window rebuilt in place has to look like one opened fresh in the new language. Not pixel
+# for pixel: CI's software renderer draws a handful of glyph pixels differently after a
+# rebuild. Ten times closer to the fresh window than to the old language is the bar.
+assert_prefs_follow_language() {
+    local dir
+    dir="$(out_dir)/prefs-language"
+    mkdir -p "$dir"
+    prefs_window
+    await_style
+    shoot_prefs "$dir/before.png"
+    shell_eval "$IND._prefs.set_string('language', 'fr'); 'ok'" >/dev/null
+    await_prefs
+    await_style
+    shoot_prefs "$dir/live.png"
+    close_prefs
+    prefs_window
+    await_style
+    shoot_prefs "$dir/fresh.png"
+    close_prefs
+    reset_language
+    assert_ne "$1 the preferences window changes with the language" '0' "$(pixels_differing "$dir/before.png" "$dir/fresh.png")"
+    assert_eq "$1 the preferences window switches language without reopening" 'true' \
+        "$(awk -v fresh="$(pixels_differing "$dir/live.png" "$dir/fresh.png")" \
+            -v old="$(pixels_differing "$dir/live.png" "$dir/before.png")" \
+            'BEGIN { print (fresh * 10 < old) ? "true" : "false" }')"
+}
+
 assert_language_forces_either_probe() {
     assert_language_forces_catalog control
     assert_language_forces_english control
@@ -793,6 +877,7 @@ group_state() {
     assert_language_forces_catalog state
     assert_language_forces_english state
     assert_language_automatic state
+    assert_prefs_follow_language state
     set_animations true
     assert_theme_differs
     [ "${#SHOTS[@]}" -eq 0 ] || { normalize; overview; }
