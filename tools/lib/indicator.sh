@@ -181,7 +181,7 @@ setup_for() {
         refreshing) echo "$(setup_quotas) i._refreshing = true;" ;;
         fresh) echo "$(setup_quotas) i._fetchedAt = new Date();" ;;
         no-data) echo "i._fetchedAt = null; i._error = {msgid: 'Cannot reach api.anthropic.com', values: {}};" ;;
-        no-account) echo "i._fetchedAt = null; i._accountEmail = null; i._accountPlan = null; i._error = {msgid: 'No active Claude login, run Claude Code to sign in.', values: {}};" ;;
+        no-account) echo "i._fetchedAt = null; i._error = {msgid: 'No active Claude login, run Claude Code to sign in.', values: {}};" ;;
         model-scoped-issue|narrow-issue) echo "$(setup_for model-scoped) i._error = {msgid: 'Usage request failed (HTTP {status})', values: {status: 503}}; i._service = {status: 'partial_outage', until: null};" ;;
         narrow-*) setup_for model-scoped ;;
         service-quota-ok) echo "$(setup_quotas) i._service = {status: 'partial_outage', until: null};" ;;

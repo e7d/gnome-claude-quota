@@ -56,6 +56,20 @@ test('popupView has no plan row when no plan is known', () => {
     assert.equal(popupView(base()).plan, null);
 });
 
+test('popupView names no account or plan once the login is gone', () => {
+    const view = popupView(base({
+        accountEmail: 'jane.doe@example.org', accountPlan: 'Max 5x', error: describe(NO_LOGIN)}));
+    assert.equal(view.account, null);
+    assert.equal(view.plan, null);
+});
+
+test('popupView keeps the account and plan through any other error', () => {
+    const view = popupView(base({
+        accountEmail: 'jane.doe@example.org', accountPlan: 'Max 5x', error: describe('HTTP {status}', {status: 500})}));
+    assert.deepEqual(view.account, {label: 'Account', value: 'jane.doe@example.org'});
+    assert.deepEqual(view.plan, {label: 'Plan', value: 'Max 5x'});
+});
+
 test('popupView silences an error while the extension is rate-limited', () => {
     const view = popupView(base({
         block: {until: new Date('2026-08-14T12:30:00Z'), reason: 'rate-limit'},

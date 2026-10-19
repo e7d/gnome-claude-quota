@@ -198,12 +198,15 @@ assert_incident_within_popup() {
 # A detail row is a dimmed label beside its value under the header, opt-in through its
 # own switch: <name>, the popup's row property, the indicator's state field, the schema
 # key, and the msgid its label must carry.
+NO_LOGIN='No active Claude login, run Claude Code to sign in.'
+
 assert_detail_row() {
     local label
     label="$(js_string "$(catalog_msg "$6")")"
     assert_eq "$1 the $2 row pairs its label with its value, or hides" 'true' \
         "$(probe "(() => {
-            const shown = $IND._prefs.get_boolean('$5') && $IND.$4 !== null;
+            const shown = $IND._prefs.get_boolean('$5') && $IND.$4 !== null
+                && $IND._error?.msgid !== $(js_string "$NO_LOGIN");
             const row = $IND._popup.$3;
             const text = row.value.text;
             const cut = text.indexOf('…');
@@ -245,6 +248,7 @@ account_text_at() {
 # The label column is measured in half pixels there, which can cost the cut one character.
 assert_account_fit_ignores_scale() {
     local long_flat fitting_scaled long_scaled
+    render_state normal
     long_flat="$(account_text_at 1.0 1 "$LONG_EMAIL")"
     fitting_scaled="$(account_text_at 1.5 2 "$FITTING_EMAIL")"
     long_scaled="$(account_text_at 1.5 2 "$LONG_EMAIL")"
@@ -603,7 +607,7 @@ assert_no_login_shows_icon_only() {
 assert_no_login_says_so() {
     render_state no-account
     local message
-    message="$(js_string "$(catalog_msg 'No active Claude login, run Claude Code to sign in.')")"
+    message="$(js_string "$(catalog_msg "$NO_LOGIN")")"
     assert_eq "$1 the popup says no Claude login is active" 'true' \
         "$(probe "$IND._popup._messageLabel.text === $message && $IND._popup._message.visible")"
 }
