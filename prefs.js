@@ -100,7 +100,7 @@ function generalPage(settings) {
 }
 
 function quotasPage(settings) {
-    const page = new Adw.PreferencesPage({title: _('Quotas'), icon_name: 'battery-level-50-symbolic'});
+    const page = new Adw.PreferencesPage({title: _('Quotas'), icon_name: 'claude-quota-usage-symbolic'});
     page.add(thresholdsGroup(settings));
     SCOPES.forEach(scope => page.add(quotaGroup(settings, scope)));
     return page;
@@ -112,6 +112,7 @@ export default class ClaudeQuotaPreferences extends ExtensionPreferences {
     // stops following the key it is bound to. The window outlives them and holds it instead.
     fillPreferencesWindow(window) {
         window._settings = this.getSettings();
+        Gtk.IconTheme.get_for_display(window.get_display()).add_search_path(`${this.path}/icons`);
         window.add(generalPage(window._settings));
         window.add(quotasPage(window._settings));
         window.set_default_size(640, 820);
