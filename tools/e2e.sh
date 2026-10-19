@@ -257,6 +257,37 @@ assert_account_fit_ignores_scale() {
         "$([ "$long_flat" != "$LONG_EMAIL" ] && [ $((${#long_flat} - ${#long_scaled})) -le 1 ] && echo true || echo false)"
 }
 
+await_popup_unmapped() {
+    local _
+    for _ in $(seq 50); do
+        [ "$(probe "$IND._popup._details.mapped")" = false ] && return 0
+        sleep 0.1
+    done
+    die 'the popup stayed mapped after closing'
+}
+
+# St restyles a label only once it is mapped, and the fit runs before the popup is: at a
+# login the labels still hold Clutter's default font. Labels handed a foreign font and
+# marked for restyling while the popup is closed stand in for that state; a mapped label
+# would restyle on the spot, to the theme node it already had, and keep the foreign font.
+account_text_unmapped() {
+    close_menu
+    await_popup_unmapped
+    shell_eval "const i = $IND;
+        i._popup._details.get_children().forEach(label => {
+            label.clutter_text.font_name = 'Sans 30';
+            label.style_changed();
+        });
+        i._accountEmail = $(js_string "$FITTING_EMAIL"); i._render(); 'ok'" >/dev/null
+    shell_eval "$IND._popup._account.value.text" | unwrap
+}
+
+assert_account_fit_unmapped() {
+    assert_eq "$1 an address that fits keeps every character before the popup is shown" \
+        "$FITTING_EMAIL" "$(account_text_unmapped)"
+    render_state normal
+}
+
 assert_account_row() { assert_detail_row "$1" account _account _accountEmail show-account 'Account'; }
 assert_plan_row() { assert_detail_row "$1" plan _plan _accountPlan show-plan 'Plan'; }
 
@@ -540,6 +571,7 @@ assert_detail_rows_in_order_probe() { assert_detail_rows_in_order control; }
 assert_detail_values_aligned_probe() { assert_detail_values_aligned control; }
 assert_account_fits_its_column_probe() { assert_account_fits_its_column control; }
 assert_account_fit_ignores_scale_probe() { assert_account_fit_ignores_scale control; }
+assert_account_fit_unmapped_probe() { assert_account_fit_unmapped control; }
 assert_detail_margins_match_header_probe() { assert_detail_margins_match_header control; }
 assert_hidden_details_take_no_space_probe() { assert_hidden_details_take_no_space control; }
 assert_details_within_popup_probe() { assert_details_within_popup control; }
@@ -590,6 +622,10 @@ prove_state() {
         "shell_eval \"const p = $IND._popup; const w = p._valueWidth.bind(p); p._valueWidth = () => w() / p._account.value.get_resource_scale(); 'ok'\" >/dev/null" \
         "shell_eval \"delete $IND._popup._valueWidth; 'ok'\" >/dev/null" \
         assert_account_fit_ignores_scale_probe
+    prove 'the account value is fitted in the theme font before the popup is shown' \
+        "shell_eval \"$IND._popup._styleLabels = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $IND._popup._styleLabels; 'ok'\" >/dev/null" \
+        assert_account_fit_unmapped_probe
     prove 'the detail values share a column' \
         "shell_eval \"$IND._popup._plan.value.translation_x = 20; 'ok'\" >/dev/null" \
         "shell_eval \"$IND._popup._plan.value.translation_x = 0; 'ok'\" >/dev/null" \
@@ -753,6 +789,7 @@ group_state() {
         assert_no_login_says_so "$theme"
     done
     assert_account_fit_ignores_scale state
+    assert_account_fit_unmapped state
     assert_language_forces_catalog state
     assert_language_forces_english state
     assert_language_automatic state

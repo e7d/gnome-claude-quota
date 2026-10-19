@@ -97,6 +97,7 @@ export class PopupBody {
     _fitAccount(detail) {
         if (detail === null)
             return;
+        this._styleLabels();
         const width = this._valueWidth();
         const label = this._account.value.clutter_text;
         // Not get_layout(): that one is drawn at the resource scale, 2 at any fractional scale.
@@ -108,6 +109,17 @@ export class PopupBody {
             return layout.get_pixel_size()[0] <= width;
         };
         this._account.value.text = shortenEmail(detail.value, fits);
+    }
+
+    // St restyles a widget when it is mapped, and the menu announces itself open before it
+    // is: until then a label measures in whatever font it last had, Clutter's own at login.
+    _styleLabels() {
+        if (this._details.get_stage() === null)
+            return;
+        [this._account, this._plan].forEach(row => {
+            row.name.ensure_style();
+            row.value.ensure_style();
+        });
     }
 
     _valueWidth() {
