@@ -81,26 +81,39 @@ function clampToEachOther(settings, rows) {
     sync();
 }
 
+function thresholdsGroup(settings) {
+    const group = new Adw.PreferencesGroup({title: _('Thresholds')});
+    const spins = THRESHOLDS.map(level => {
+        const row = thresholdRow(settings, level);
+        group.add(row);
+        group.add(notifyRow(settings, level));
+        return row;
+    });
+    clampToEachOther(settings, spins);
+    return group;
+}
+
+function generalPage(settings) {
+    const page = new Adw.PreferencesPage({title: _('General'), icon_name: 'preferences-system-symbolic'});
+    page.add(accountGroup(settings));
+    return page;
+}
+
+function quotasPage(settings) {
+    const page = new Adw.PreferencesPage({title: _('Quotas'), icon_name: 'battery-level-50-symbolic'});
+    page.add(thresholdsGroup(settings));
+    SCOPES.forEach(scope => page.add(quotaGroup(settings, scope)));
+    return page;
+}
+
 export default class ClaudeQuotaPreferences extends ExtensionPreferences {
     // The bindings and handlers below are the settings object's only referrers, and it owns
     // their closures in turn — a cycle GJS is free to collect, after which every row quietly
     // stops following the key it is bound to. The window outlives them and holds it instead.
     fillPreferencesWindow(window) {
         window._settings = this.getSettings();
-        const settings = window._settings;
-        const page = new Adw.PreferencesPage();
-        page.add(accountGroup(settings));
-        const thresholds = new Adw.PreferencesGroup({title: _('Thresholds')});
-        const spins = THRESHOLDS.map(level => {
-            const row = thresholdRow(settings, level);
-            thresholds.add(row);
-            thresholds.add(notifyRow(settings, level));
-            return row;
-        });
-        clampToEachOther(settings, spins);
-        page.add(thresholds);
-        SCOPES.forEach(scope => page.add(quotaGroup(settings, scope)));
-        window.add(page);
+        window.add(generalPage(window._settings));
+        window.add(quotasPage(window._settings));
         window.set_default_size(640, 820);
     }
 }
