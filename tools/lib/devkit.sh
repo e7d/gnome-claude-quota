@@ -365,6 +365,28 @@ set_animations() {
     await_paint
 }
 
+display_config() {
+    gdbus call --session --dest org.gnome.Mutter.DisplayConfig --object-path /org/gnome/Mutter/DisplayConfig \
+        --method "org.gnome.Mutter.DisplayConfig.$1" "${@:2}"
+}
+
+# On the host's bus this would rescale the user's real screens. A nested --headless
+# shell has exactly one monitor, Mutter's virtual one, which a real screen never is.
+set_monitor_scale() {
+    local state monitor connector mode serial
+    state="$(display_config GetCurrentState)"
+    monitor="$(grep -oE "\(\('[^']*', '[^']*', '[^']*', '[^']*'\), \[" <<< "$state" || true)"
+    [ "$(grep -c . <<< "$monitor")" -eq 1 ] && [[ "$monitor" == *"'MetaVirtualMonitor'"* ]] \
+        || die 'refusing to rescale: this bus does not belong to a nested headless shell'
+    connector="$(sed -E "s/^\(\('([^']*)'.*/\1/" <<< "$monitor")"
+    mode="$(grep -oE "\('[^']+'(, [0-9.]+){4}, \[[^]]*\], \{'is-current': <true>" <<< "$state" \
+        | sed -E "s/^\('([^']+)'.*/\1/" || true)"
+    serial="$(grep -oE '^\(uint32 [0-9]+' <<< "$state" | grep -oE '[0-9]+$' || true)"
+    [ -n "$mode" ] && [ -n "$serial" ] || die 'could not read the current mode of the virtual monitor'
+    display_config ApplyMonitorsConfig "$serial" 1 \
+        "[(0, 0, $1, uint32 0, true, [('$connector', '$mode', @a{sv} {})])]" '@a{sv} {}' >/dev/null
+}
+
 set_quota_pref() {
     XDG_CONFIG_HOME="$CFG" GSETTINGS_SCHEMA_DIR="$ROOT/schemas" \
         gsettings set org.gnome.shell.extensions.claude-quota "$1" "$2"

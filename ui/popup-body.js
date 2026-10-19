@@ -98,9 +98,11 @@ export class PopupBody {
         if (detail === null)
             return;
         const width = this._valueWidth();
-        const layout = this._account.value.clutter_text.get_layout().copy();
-        layout.set_width(-1);
-        layout.set_ellipsize(Pango.EllipsizeMode.NONE);
+        const label = this._account.value.clutter_text;
+        // Not get_layout(): that one is drawn at the resource scale, 2 at any fractional scale.
+        // Not get_font_description(): GJS frees the description ClutterText still owns.
+        const layout = label.create_pango_layout(null);
+        layout.set_font_description(Pango.FontDescription.from_string(label.font_name));
         const fits = text => {
             layout.set_text(text, -1);
             return layout.get_pixel_size()[0] <= width;
