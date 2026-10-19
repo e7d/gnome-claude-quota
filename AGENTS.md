@@ -92,6 +92,8 @@ Suppressing a shell behaviour to satisfy a measurement is the wrong trade in bot
 
 **GNOME caches extension modules for the life of a shell process.** Disabling and re-enabling the extension re-runs the *old* code. Watch mode restarts the whole nested shell for this reason; never replace that with a disable/enable cycle.
 
+**The preferences process outlives its window, and caches modules the same way.** `org.gnome.Shell.Extensions` is a separate GJS process that stays alive after its window closes, so the next window it opens runs the `prefs.js` and `lib/` it imported before your edit. A prefs window that keeps the old behaviour after a change is this, not a failed fix: end that process by pid, after checking its `HOME` in `/proc/<pid>/environ` is the session's sandbox, then reopen.
+
 **Never touch the host GNOME session.** Every dconf write belongs inside the private `dbus-run-session` that `tools/lib/devkit.sh` sets up — `XDG_CONFIG_HOME` alone does not sandbox dconf, and a write issued outside that session lands in the live database and has already wiped the user's extension list twice. After anything that starts a shell, confirm the host is intact: `sha256sum ~/.config/dconf/user` and the length of `gsettings get org.gnome.shell enabled-extensions`.
 
 **Kill nested shells by pid only.** The host session's process is also called `gnome-shell`; matching by name kills the user's desktop. `tools/lib/devkit.sh` `stop_shell` does it correctly. Also beware `pgrep -f` matching the very command that runs it, which makes a dead session look alive.
