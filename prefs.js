@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
+import Pango from 'gi://Pango';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
@@ -13,6 +14,8 @@ import {ACCOUNT_KEY, CONFIG_DIR_KEY, LANGUAGE_KEY, PLAN_KEY, SCOPES, THRESHOLDS}
 import {parseAccountEmail} from './lib/shared-usage.js';
 import {credentialsExist, readClaudeConfig} from './lib/usage.js';
 import {catalogFiles} from './ui/catalog-files.js';
+
+const DIRECTORY_LABEL_CHARS = 48;
 
 const TITLES = {
     warning: () => _('High usage threshold'),
@@ -146,6 +149,40 @@ function adoptFolder({settings, home, window, path}) {
     window.add_toast(new Adw.Toast({title: format(_('No Claude login in {path}'), {path: displayPath(path, home)})}));
 }
 
+// libadwaita's own popover items cap their label at 20 characters, which cuts every
+// address short; this is the same label and checkmark with room for a path and an email.
+function directoryItem() {
+    const box = new Gtk.Box();
+    box.append(new Gtk.Label({
+        xalign: 0, ellipsize: Pango.EllipsizeMode.END, max_width_chars: DIRECTORY_LABEL_CHARS,
+        width_chars: 1, valign: Gtk.Align.CENTER,
+    }));
+    box.append(new Gtk.Image({icon_name: 'object-select-symbolic', accessible_role: Gtk.AccessibleRole.PRESENTATION}));
+    return box;
+}
+
+function bindDirectoryItem(row, listItem, handlers) {
+    const box = listItem.get_child();
+    box.get_first_child().label = listItem.get_item().string;
+    const check = () => {
+        box.get_last_child().opacity = row.selected_item === listItem.get_item() ? 1 : 0;
+    };
+    check();
+    handlers.set(listItem, row.connect('notify::selected-item', check));
+}
+
+function directoryListFactory(row) {
+    const handlers = new Map();
+    const factory = new Gtk.SignalListItemFactory();
+    factory.connect('setup', (source, listItem) => listItem.set_child(directoryItem()));
+    factory.connect('bind', (source, listItem) => bindDirectoryItem(row, listItem, handlers));
+    factory.connect('unbind', (source, listItem) => {
+        row.disconnect(handlers.get(listItem));
+        handlers.delete(listItem);
+    });
+    return factory;
+}
+
 // A pick from the list writes the key while the dropdown's popover is still alive, and
 // replacing the model under it kills the preferences process. So the list only grows,
 // and the model is replaced only when it does, which only the folder picker can cause.
@@ -166,6 +203,7 @@ function configDirRow(settings) {
     const home = GLib.get_home_dir();
     const current = () => configDir(settings.get_string(CONFIG_DIR_KEY), home);
     const row = new Adw.ComboRow({title: _('Claude directory'), use_subtitle: true});
+    row.list_factory = directoryListFactory(row);
     const state = {home, choices: foundConfigDirs(home), syncing: false};
     state.choices = directoryChoices({found: state.choices, current: current(), home});
     row.model = Gtk.StringList.new(state.choices.map(choice => choiceLabel(choice, home)));
