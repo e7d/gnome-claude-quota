@@ -32,6 +32,14 @@ test('use_session puts every path under the named session', () => {
     assert.equal(state, join(root, 'shots', 'state'));
 });
 
+test('each session gets a Wayland display of its own', () => {
+    const root = runtimeRoot();
+    const {stdout} = run('use_session preview\necho "$SESSION_DISPLAY"\nuse_session e2e\necho "$SESSION_DISPLAY"', root);
+    const [preview, e2e] = stdout.trim().split('\n');
+    assert.equal(preview, 'claude-quota-preview');
+    assert.equal(e2e, 'claude-quota-e2e');
+});
+
 test('a session with no pid file is not live', () => {
     const root = runtimeRoot();
     const {status} = run('use_session ghost\nsession_live', root);

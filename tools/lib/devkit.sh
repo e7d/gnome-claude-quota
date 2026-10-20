@@ -99,6 +99,7 @@ accept_locale() {
 
 use_session() {
     RUN="$RUNTIME_ROOT/$1"
+    SESSION_DISPLAY="claude-quota-$1"
     CFG="$RUN/config"
     SANDBOX_HOME="$RUN/home"
     BUS_FILE="$RUN/bus"
@@ -292,7 +293,7 @@ start_shell() {
         dconf reset /org/gnome/desktop/interface/accent-color
         eval "$4"
         exec gnome-shell --wayland-display="$5" "${@:6}" --unsafe-mode
-    ' _ "$BUS_FILE" "$PID_FILE" "$UUID" "$DEVKIT_SETUP" "$DEVKIT_NAME" "${backend[@]}" >"$LOG" 2>&1 &
+    ' _ "$BUS_FILE" "$PID_FILE" "$UUID" "$DEVKIT_SETUP" "$SESSION_DISPLAY" "${backend[@]}" >"$LOG" 2>&1 &
     for _ in $(seq 300); do
         [ -s "$BUS_FILE" ] && break
         sleep 0.2
@@ -425,7 +426,7 @@ wait_for_indicator() {
 # (0,0,0,0) for the first frames.
 prefs_window() {
     env -u LC_ALL HOME="$SANDBOX_HOME" XDG_CONFIG_HOME="$CFG" \
-        WAYLAND_DISPLAY="$DEVKIT_NAME" GDK_BACKEND=wayland \
+        WAYLAND_DISPLAY="$SESSION_DISPLAY" GDK_BACKEND=wayland \
         LC_MESSAGES="$DEVKIT_LANGUAGE" LC_TIME="$DEVKIT_LOCALE" LC_NUMERIC="$DEVKIT_LOCALE" \
         gnome-extensions prefs "$UUID" >>"$LOG" 2>&1 &
     for _ in $(seq 100); do
