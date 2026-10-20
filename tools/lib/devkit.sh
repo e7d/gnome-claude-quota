@@ -307,8 +307,42 @@ start_shell() {
 # run with status 1 and no text, which is how a CI job sat silent for two minutes and died.
 stall_evidence() {
     echo "devkit: load $(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || echo unknown)" >&2
+    shell_activity >&2
     [ -s "$LOG" ] && { echo "devkit: shell log tail" >&2; tail -15 "$LOG" >&2; }
     return 0
+}
+
+# The comm field may hold spaces, so fields are counted after its closing parenthesis.
+process_ticks() {
+    sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{print $12 + $13}'
+}
+
+thread_state() {
+    printf '%s wchan=%s (%s)\n' "$(sed 's/.*) //' "$1/stat" | cut -d' ' -f1)" \
+        "$(cat "$1/wchan" 2>/dev/null)" "$(cat "$1/comm" 2>/dev/null)"
+}
+
+other_threads() {
+    local task
+    for task in /proc/"$1"/task/*; do
+        [ "${task##*/}" = "$1" ] || thread_state "$task"
+    done | sort | uniq -c | sed 's/^ */devkit: thread x/'
+}
+
+# Ptrace is out of reach in CI (no gdb, no CAP_SYS_PTRACE, the shell is not our child),
+# so /proc is the only witness of whether a frozen shell is spinning or waiting.
+shell_activity() {
+    local pid seconds before after
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    [ -n "$pid" ] || return 0
+    [ -r "/proc/$pid/stat" ] || { echo "devkit: shell process $pid is gone"; return 0; }
+    seconds="${STALL_SAMPLE_SECONDS:-2}"
+    before="$(process_ticks "$pid")"
+    sleep "$seconds"
+    after="$(process_ticks "$pid")"
+    echo "devkit: shell cpu $(( (after - before) * 100 / ($(getconf CLK_TCK) * seconds) ))% of one core over ${seconds}s"
+    echo "devkit: main thread state $(thread_state "/proc/$pid/task/$pid")"
+    other_threads "$pid"
 }
 
 shell_eval() {

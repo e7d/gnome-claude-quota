@@ -273,3 +273,28 @@ test('stall_evidence prints the load and the end of the shell log', () => {
     assert.match(stdout, /\n30\n$/);
     assert.doesNotMatch(stdout, /\n15\n/);
 });
+
+function shellActivity(command) {
+    const script = `use_session shots\nmkdir -p "$RUN"\n${command} & echo $! > "$PID_FILE"\n`
+        + 'STALL_SAMPLE_SECONDS=1 stall_evidence 2>&1\nkill "$(cat "$PID_FILE")"';
+    return run(script, runtimeRoot()).stdout;
+}
+
+function cpuPercent(stdout) {
+    return Number(stdout.match(/devkit: shell cpu (\d+)% of one core/)[1]);
+}
+
+test('stall_evidence tells a busy shell from a blocked one', () => {
+    const busy = shellActivity('yes > /dev/null');
+    const blocked = shellActivity('sleep 30');
+    assert.ok(cpuPercent(busy) >= 50, busy);
+    assert.ok(cpuPercent(blocked) <= 5, blocked);
+    assert.match(busy, /devkit: main thread state R /);
+    assert.match(blocked, /devkit: main thread state S /);
+});
+
+test('stall_evidence says so when the shell process is gone', () => {
+    const script = 'use_session shots\nmkdir -p "$RUN"\necho 999999999 > "$PID_FILE"\nstall_evidence 2>&1';
+    const {stdout} = run(script, runtimeRoot());
+    assert.match(stdout, /devkit: shell process 999999999 is gone/);
+});
