@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {fresherThan, parseAccountEmail, parseAccountPlan, parseSharedUsage} from '../lib/shared-usage.js';
+import {fresherThan, loggedInConfig, parseAccountEmail, parseAccountPlan, parseSharedUsage} from '../lib/shared-usage.js';
 
 const ACCOUNT = '3e1c3aca-0000-4000-8000-000000000000';
 const LIMITS = [
@@ -148,4 +148,23 @@ test('anything that is not a single address yields no email', () => {
     ];
     cases.forEach(data => assert.equal(parseAccountEmail(JSON.stringify(data)), null, JSON.stringify(data)));
     assert.equal(parseAccountEmail('not json'), null);
+});
+
+const STUB = JSON.stringify({firstStartTime: '2026-10-20T10:30:13.973Z', machineID: 'm'});
+const LOGIN = JSON.stringify({oauthAccount: {emailAddress: 'jane.doe@example.org'}});
+
+test('a config holding no login is passed over for the next one that does', () => {
+    assert.equal(loggedInConfig([STUB, LOGIN]), LOGIN);
+    assert.equal(parseAccountEmail(loggedInConfig([STUB, LOGIN])), 'jane.doe@example.org');
+});
+
+test('the first config holding a login wins when several do', () => {
+    const other = JSON.stringify({oauthAccount: {emailAddress: 'john@example.org'}});
+    assert.equal(loggedInConfig([LOGIN, other]), LOGIN);
+});
+
+test('missing, unreadable and login-less configs yield none', () => {
+    const noAccount = JSON.stringify({oauthAccount: null});
+    assert.equal(loggedInConfig([null, 'not json', STUB, noAccount]), null);
+    assert.equal(loggedInConfig([]), null);
 });
