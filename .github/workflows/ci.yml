@@ -47,6 +47,21 @@ jobs:
         if: always()
         run: docker rm -f "$C" 2>/dev/null || true
 
+  i18n:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/ci-container
+        with: { name: i18n, image: "${{ needs.image.outputs.image }}", token: "${{ secrets.REGISTRY_TOKEN }}" }
+      - name: i18n
+        run: docker exec "$C" npm run i18n:check
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$C" 2>/dev/null || true
+
   test:
     needs: image
     runs-on: ubuntu-latest
@@ -180,7 +195,7 @@ jobs:
   # Gathers every job and every e2e log into one table, and fails when any job did not succeed
   # or any e2e job left no summary line.
   report:
-    needs: [image, lint, test, coverage, e2e, behaviour, a11y]
+    needs: [image, lint, i18n, test, coverage, e2e, behaviour, a11y]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
