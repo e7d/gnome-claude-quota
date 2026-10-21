@@ -505,6 +505,31 @@ assert_prefs_follow_language() {
             'BEGIN { print (fresh * 10 < old) ? "true" : "false" }')"
 }
 
+OWN_PREFS_WINDOW="global.get_window_actors().map(a => a.meta_window).find(w => w.get_wm_class() === 'org.gnome.Shell.Extensions' && w.get_title() === Main.extensionManager.lookup('$UUID').metadata.name)"
+PREFS_RAISED="(() => { const w = $OWN_PREFS_WINDOW; return !!w && global.display.focus_window === w; })()"
+
+assert_prefs_button_raises_open_window() {
+    local _
+    shell_eval "global.display.unset_input_focus(global.get_current_time()); 'ok'" >/dev/null
+    reopen_menu
+    shell_eval "$IND._popup._prefsButton.emit('clicked', 1); 'ok'" >/dev/null
+    for _ in $(seq 20); do
+        is_true "$(probe "$PREFS_RAISED")" && break
+        sleep 0.1
+    done
+    assert_eq 'settings button raises the preferences window already open' 'true' "$(probe "$PREFS_RAISED")"
+}
+
+prove_prefs_raise() {
+    prefs_window
+    prove 'settings button raises the open preferences window' \
+        "shell_eval \"globalThis._origOpenPrefs = $IND._openPrefs; $IND._openPrefs = () => Main.extensionManager.lookup('$UUID').stateObj.openPreferences(); 'ok'\" >/dev/null" \
+        "shell_eval \"$IND._openPrefs = globalThis._origOpenPrefs; 'ok'\" >/dev/null" \
+        assert_prefs_button_raises_open_window
+    assert_prefs_button_raises_open_window
+    close_prefs
+}
+
 assert_language_forces_either_probe() {
     assert_language_forces_catalog control
     assert_language_forces_english control
@@ -882,6 +907,7 @@ group_state() {
     assert_language_forces_english state
     assert_language_automatic state
     assert_prefs_follow_language state
+    prove_prefs_raise
     set_animations true
     assert_theme_differs
     [ "${#SHOTS[@]}" -eq 0 ] || { normalize; overview; }

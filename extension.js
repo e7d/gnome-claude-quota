@@ -15,6 +15,7 @@ import {installLanguage} from './lib/language.js';
 import {numberLocale, timeLocale} from './lib/format.js';
 import {quotas} from './lib/model.js';
 import {thresholdsFrom} from './lib/notify.js';
+import {isOwnPrefsWindow} from './lib/prefs-window.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
 import {ACCOUNT_KEY, CONFIG_DIR_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult} from './lib/state.js';
@@ -453,10 +454,20 @@ export default class ClaudeQuotaExtension extends Extension {
         this._indicator = new Indicator({
             iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
             prefs,
-            openPrefs: () => this.openPreferences(),
+            openPrefs: () => this._raiseOrOpenPrefs(),
             applyLanguage,
         });
         Main.panel.addToStatusArea(this.uuid, this._indicator);
+    }
+
+    // The preferences service refuses a second open while a window is up and raises nothing.
+    _raiseOrOpenPrefs() {
+        const open = global.get_window_actors().map(actor => actor.meta_window).find(window =>
+            isOwnPrefsWindow({appId: window.get_wm_class(), title: window.get_title()}, this.metadata.name));
+        if (open)
+            Main.activateWindow(open);
+        else
+            this.openPreferences();
     }
 
     _languageInstaller(prefs) {
