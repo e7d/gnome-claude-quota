@@ -9,6 +9,7 @@ RUN --mount=type=cache,target=/var/cache/pacman/pkg \
         cantarell-fonts \
         dbus \
         dconf \
+        diffutils \
         gnome-backgrounds \
         gnome-shell \
         imagemagick \

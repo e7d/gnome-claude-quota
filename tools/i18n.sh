@@ -9,6 +9,15 @@ LANGS=(fr)
 KEYWORDS=('--keyword=_' '--keyword=N_' '--keyword=n_:1,2' '--keyword=p_:1c,2'
     '--keyword=describe:1' '--keyword=fail:1')
 
+# A comparison tool that is absent fails like a comparison that differs, and would
+# report a current catalog as stale.
+require_tools() {
+    local tool
+    for tool in "$@"; do
+        command -v "$tool" >/dev/null || { echo "i18n.sh needs $tool, which is not installed" >&2; exit 127; }
+    done
+}
+
 extract() {
     (cd "$ROOT" && xgettext --language=JavaScript --from-code=UTF-8 \
         "${KEYWORDS[@]}" \
@@ -58,7 +67,7 @@ check() {
 }
 
 case "${1:---all}" in
-    --check) check ;;
-    --all) extract "$POT"; merge "$POT"; compile ;;
+    --check) require_tools xgettext msgfmt diff cmp; check ;;
+    --all) require_tools xgettext msgmerge msgfmt; extract "$POT"; merge "$POT"; compile ;;
     *) echo "usage: i18n.sh [--all|--check]" >&2; exit 2 ;;
 esac
