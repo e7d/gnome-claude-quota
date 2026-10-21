@@ -421,8 +421,6 @@ assert_language_automatic() {
     reset_language
 }
 
-PREFS_WINDOW="global.get_window_actors().find(a => a.meta_window.get_gtk_application_id() !== null)"
-
 bus_call() {
     gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
         --method "org.freedesktop.DBus.$1" org.gnome.Shell.Extensions 2>/dev/null
