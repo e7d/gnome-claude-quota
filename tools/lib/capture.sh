@@ -2,6 +2,9 @@
 
 SHOTS=()
 
+# The Wayland app_id lands in wm_class; get_gtk_application_id() stays null for this window.
+PREFS_WINDOW="global.get_window_actors().find(a => a.meta_window.get_wm_class() === 'org.gnome.Shell.Extensions')"
+
 out_dir() {
     local sub
     sub="$(locale_subdir)"
@@ -138,9 +141,7 @@ capture_notify() {
 }
 
 prefs_box() {
-    shell_eval "const a = global.get_window_actors()
-        .find(a => a.meta_window.get_gtk_application_id() !== null) ?? global.get_window_actors()[0];
-        const r = a.meta_window.get_frame_rect();
+    shell_eval "const r = $PREFS_WINDOW.meta_window.get_frame_rect();
         [r.x, r.y, r.width, r.height].join(' ')" | unwrap
 }
 
