@@ -11,6 +11,7 @@ function entries(source) {
             context: read('msgctxt')[0],
             plural: read('msgid_plural')[0],
             translations: read('msgstr'),
+            fuzzy: /^#,.*\bfuzzy\b/m.test(block),
         };
     }).filter(entry => entry.id !== undefined && entry.id !== '');
 }
@@ -81,6 +82,12 @@ test('every msgid in the template is translated in French', () => {
         .filter(entry => !translated.get(key(entry))?.translations.every(text => text !== ''))
         .map(key);
     assert.deepEqual(missing, []);
+});
+
+// msgfmt leaves a fuzzy entry out of the compiled catalog, so its msgstr reads as a
+// translation here while the user is shown English.
+test('no French entry is left fuzzy', () => {
+    assert.deepEqual(entries(po).filter(entry => entry.fuzzy).map(key), []);
 });
 
 test('every French plural entry carries the number of forms its header declares', () => {
