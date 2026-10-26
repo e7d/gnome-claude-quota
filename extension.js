@@ -8,7 +8,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {attemptRecord} from './lib/attempts.js';
-import {configDir} from './lib/config-dir.js';
+import {accountDirs, configDir, defaultDir, displayPath, shownDirs} from './lib/config-dir.js';
 import {credentialsRenewed} from './lib/credentials.js';
 import {_, resetTranslator} from './lib/i18n.js';
 import {installLanguage} from './lib/language.js';
@@ -17,41 +17,43 @@ import {quotas} from './lib/model.js';
 import {thresholdsFrom} from './lib/notify.js';
 import {isOwnPrefsWindow} from './lib/prefs-window.js';
 import {isBlocked, markExpired, markSeverity, maxAgeFor, minIntervalWait, nextPollSeconds, pollDelay, shouldFetchOnOpen} from './lib/policy.js';
-import {ACCOUNT_KEY, CONFIG_DIR_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, readSettings} from './lib/settings.js';
+import {ACCOUNT_DIRS_KEY, ACCOUNT_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, SHOWN_DIRS_KEY, migrateConfigDir, readSettings} from './lib/settings.js';
 import {adoptShared, applyResult} from './lib/state.js';
-import {accountDetails, sharedUsage} from './lib/usage.js';
+import {accountDetails, hasToken, sharedUsage} from './lib/usage.js';
 import {panelView, popupView} from './lib/view.js';
 import {Alerts} from './ui/alerts.js';
 import {catalogFiles} from './ui/catalog-files.js';
+import {EmptyIndicator} from './ui/empty-indicator.js';
 import {PanelStrip, panelScheme} from './ui/panel-fit.js';
 import {Poller} from './ui/poller.js';
 import {PopupBody} from './ui/popup-body.js';
+import {ServiceStatus} from './ui/service-status.js';
 import {Store} from './ui/store.js';
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
-    _init({iconPath, prefs, openPrefs, applyLanguage}) {
+    _init({dir, parked, service, iconPath, prefs, openPrefs, onCredentialsWritten, panelPeers}) {
         super._init(0.5, _('Claude Quota'));
         this._iconPath = iconPath;
         this._prefs = prefs;
         this._openPrefs = openPrefs;
-        this._applyLanguage = applyLanguage;
+        this._onCredentialsWritten = onCredentialsWritten;
         this._prefsSignals = [];
-        this._dir = this._configDir();
-        this._parkedBlocks = new Map();
+        this._dir = dir;
+        this._shared = false;
         this._store = new Store({dir: this._dir});
         this._settings = St.Settings.get();
         this._destroyed = false;
         this._quotas = [];
         this._error = null;
-        this._service = null;
+        this._service = service;
         this._refreshing = false;
         this._fetchedAt = null;
-        this._block = null;
+        this._block = parked.block;
         this._lastRequestAt = null;
         this._accountEmail = null;
         this._accountPlan = null;
-        this._rateLimitStreak = 0;
+        this._rateLimitStreak = parked.rateLimitStreak;
         this._limits = [];
         this._fired = {};
         this._locale = timeLocale({
@@ -68,7 +70,6 @@ class Indicator extends PanelMenu.Button {
             dir: this._dir,
             store: this._store,
             onResult: result => this._handleResult(result),
-            onServiceStatus: service => this._handleServiceStatus(service),
             onCredentials: expiry => this._handleCredentials(expiry),
             onDue: () => this._refresh('timer'),
             onSent: () => this._handleSent(),
@@ -76,6 +77,7 @@ class Indicator extends PanelMenu.Button {
         this._seenExpiry = this._poller.credentialExpiry();
         this._alerts = new Alerts({
             iconPath: this._iconPath,
+            title: () => this._title(),
             onActivate: () => this.menu.open(true),
             onTick: () => this._syncAlerts(new Date()),
         });
@@ -96,7 +98,12 @@ class Indicator extends PanelMenu.Button {
             },
         });
         this._popup.items.forEach(item => this.menu.addMenuItem(item));
-        this._panel = new PanelStrip({container: this.container, box: this._panelQuotas, icon: this._icon});
+        this._panel = new PanelStrip({
+            container: this.container,
+            box: this._panelQuotas,
+            icon: this._icon,
+            peers: () => panelPeers().map(indicator => indicator._panel),
+        });
         this._schemeId = this._settings.connect('notify::color-scheme', () => this._render());
         this.menu.connect('open-state-changed', (menu, open) => {
             if (!open)
@@ -126,8 +133,14 @@ class Indicator extends PanelMenu.Button {
         }
     }
 
+    _signedIn() {
+        return hasToken(this._dir);
+    }
+
+    // A cache kept for a folder that has since lost its login holds numbers nothing can
+    // refresh, so it waits on disk for the next sign-in instead of reaching the screen.
     _adoptCache(cached) {
-        if (cached === null)
+        if (cached === null || !this._signedIn())
             return;
         this._limits = cached.limits;
         this._quotas = quotas({limits: cached.limits}, new Date());
@@ -145,47 +158,35 @@ class Indicator extends PanelMenu.Button {
     }
 
     _handleCredentials(expiry) {
-        if (!credentialsRenewed(this._seenExpiry, expiry))
+        this._onCredentialsWritten();
+        if (!credentialsRenewed(this._seenExpiry, expiry)) {
+            if (!this._signedIn())
+                this._refresh('credentials');
             return;
+        }
         this._seenExpiry = expiry;
         this._block = null;
         this._rateLimitStreak = 0;
         this._refresh('credentials');
     }
 
-    _configDir() {
-        return configDir(this._prefs.get_string(CONFIG_DIR_KEY), GLib.get_home_dir());
+    // A block belongs to the token that earned it, so it outlives the indicator: turning
+    // the account off and on again must not spend a request the server will refuse.
+    parked() {
+        return {block: this._block, rateLimitStreak: this._rateLimitStreak};
     }
 
-    // A block belongs to the token that earned it, so it is set aside with its directory
-    // rather than dropped: switching back must not spend a request the server will refuse.
-    _switchConfigDir() {
-        const dir = this._configDir();
-        if (dir === this._dir)
-            return;
-        this._parkedBlocks.set(this._dir, {block: this._block, rateLimitStreak: this._rateLimitStreak});
-        this._dir = dir;
-        this._store.useDir(dir);
-        this._poller.useDir(dir);
-        this._alerts.withdrawAll();
-        this._forgetAccount(this._parkedBlocks.get(dir) ?? {block: null, rateLimitStreak: 0});
-        this._loadCache();
-        this._refresh('config-dir');
+    // With one account the extension's name says enough; beside others, a notification has
+    // to say whose quota it is, and the address is the name the user knows the account by.
+    setShared(shared) {
+        this._shared = shared;
+        this.accessible_name = this._title();
     }
 
-    _forgetAccount({block, rateLimitStreak}) {
-        this._block = block;
-        this._rateLimitStreak = rateLimitStreak;
-        this._limits = [];
-        this._quotas = [];
-        this._fetchedAt = null;
-        this._fired = {};
-        this._error = null;
-        this._refreshing = false;
-        this._lastRequestAt = null;
-        this._accountEmail = null;
-        this._accountPlan = null;
-        this._seenExpiry = this._poller.credentialExpiry();
+    _title() {
+        if (!this._shared)
+            return _('Claude Quota');
+        return `${_('Claude Quota')} · ${this._accountEmail ?? displayPath(this._dir, GLib.get_home_dir())}`;
     }
 
     _settingsValues() {
@@ -203,13 +204,10 @@ class Indicator extends PanelMenu.Button {
             })));
         [ACCOUNT_KEY, PLAN_KEY].forEach(key => this._prefsSignals.push(
             this._prefs.connect(`changed::${key}`, () => this._render())));
-        this._prefsSignals.push(this._prefs.connect(`changed::${LANGUAGE_KEY}`, () => this._relanguage()));
-        this._prefsSignals.push(this._prefs.connect(`changed::${CONFIG_DIR_KEY}`, () => this._switchConfigDir()));
     }
 
-    _relanguage() {
-        this._applyLanguage();
-        this.accessible_name = _('Claude Quota');
+    relanguage() {
+        this.accessible_name = this._title();
         this._quotas = quotas({limits: this._limits}, new Date());
         this._render();
     }
@@ -320,25 +318,12 @@ class Indicator extends PanelMenu.Button {
         const details = accountDetails(this._dir);
         this._accountEmail = details.email;
         this._accountPlan = details.plan;
-        this._adoptShared(now);
+        const signedIn = this._signedIn();
+        if (signedIn)
+            this._adoptShared(now);
         this._syncAlerts(now);
-        const settled = pollDelay(this._fetchedAt, now, maxAgeFor(trigger));
-        if (settled > 0) {
-            this._poller.schedule(settled);
-            this._renderSafely();
+        if (signedIn && this._heldBack(trigger, now))
             return;
-        }
-        if (isBlocked(this._block?.until, now)) {
-            this._poller.schedule(nextPollSeconds((this._block.until - now) / 1000));
-            this._render();
-            return;
-        }
-        const wait = minIntervalWait(this._lastRequestAt, now);
-        if (wait > 0) {
-            this._poller.schedule(wait);
-            this._render();
-            return;
-        }
         this._refreshing = true;
         this._renderSafely();
         const outcome = await this._settle(trigger);
@@ -346,6 +331,29 @@ class Indicator extends PanelMenu.Button {
             return;
         this._refreshing = false;
         this._renderSafely();
+    }
+
+    // Each of these saves a request, and a folder with no login spends none: it goes
+    // straight to the read that finds it signed out, which is what clears its numbers.
+    _heldBack(trigger, now) {
+        const settled = pollDelay(this._fetchedAt, now, maxAgeFor(trigger));
+        if (settled > 0) {
+            this._poller.schedule(settled);
+            this._renderSafely();
+            return true;
+        }
+        if (isBlocked(this._block?.until, now)) {
+            this._poller.schedule(nextPollSeconds((this._block.until - now) / 1000));
+            this._render();
+            return true;
+        }
+        const wait = minIntervalWait(this._lastRequestAt, now);
+        if (wait > 0) {
+            this._poller.schedule(wait);
+            this._render();
+            return true;
+        }
+        return false;
     }
 
     // Everything past the request runs against the shell itself — the tray, the actors —
@@ -370,7 +378,7 @@ class Indicator extends PanelMenu.Button {
         this._renderSafely();
     }
 
-    _handleServiceStatus(service) {
+    setService(service) {
         this._service = service;
         this._renderSafely();
     }
@@ -448,16 +456,123 @@ class Indicator extends PanelMenu.Button {
 
 export default class ClaudeQuotaExtension extends Extension {
     enable() {
-        const prefs = this.getSettings();
-        const applyLanguage = this._languageInstaller(prefs);
-        applyLanguage();
-        this._indicator = new Indicator({
-            iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
-            prefs,
-            openPrefs: () => this._raiseOrOpenPrefs(),
-            applyLanguage,
+        this._prefs = this.getSettings();
+        migrateConfigDir({
+            string: key => this._prefs.get_string(key),
+            strv: key => this._prefs.get_strv(key),
+            setStrv: (key, value) => this._prefs.set_strv(key, value),
+            reset: key => this._prefs.reset(key),
         });
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        this._applyLanguage = this._languageInstaller(this._prefs);
+        this._applyLanguage();
+        this._indicators = new Map();
+        this._parked = new Map();
+        this._placeholder = null;
+        this._service = null;
+        this._status = new ServiceStatus({
+            store: new Store({dir: defaultDir(GLib.get_home_dir())}),
+            canPoll: () => [...this._indicators.keys()].some(dir => hasToken(dir)),
+            onStatus: service => this._spreadService(service),
+        });
+        this._prefsSignals = [
+            this._prefs.connect(`changed::${ACCOUNT_DIRS_KEY}`, () => this._syncIndicators()),
+            this._prefs.connect(`changed::${SHOWN_DIRS_KEY}`, () => this._syncIndicators()),
+            this._prefs.connect(`changed::${LANGUAGE_KEY}`, () => this._relanguage()),
+        ];
+        this._syncIndicators();
+    }
+
+    _accountDirs() {
+        return accountDirs(this._prefs.get_strv(ACCOUNT_DIRS_KEY), GLib.get_home_dir());
+    }
+
+    _shownSetting() {
+        return this._prefs.get_strv(SHOWN_DIRS_KEY).map(setting => configDir(setting, GLib.get_home_dir()));
+    }
+
+    _shownDirs() {
+        return shownDirs({accounts: this._accountDirs(), shown: this._shownSetting()});
+    }
+
+    // Indicators that stay shown are kept rather than rebuilt: each one holds a live
+    // request, a timer and posted notifications that a rebuild would cut off or repost.
+    _syncIndicators() {
+        const dirs = this._shownDirs();
+        [...this._indicators.keys()].filter(dir => !dirs.includes(dir)).forEach(dir => this._removeIndicator(dir));
+        this._syncPlaceholder(dirs);
+        dirs.filter(dir => !this._indicators.has(dir)).forEach(dir => this._addIndicator(dir));
+        dirs.forEach(dir => this._indicators.get(dir).setShared(dirs.length > 1));
+        this._orderIndicators(dirs);
+        this._status.pollUnlessArmed();
+    }
+
+    _syncPlaceholder(dirs) {
+        if (dirs.length > 0) {
+            this._placeholder?.destroy();
+            this._placeholder = null;
+            return;
+        }
+        const reason = this._accountDirs().length === 0 ? 'no-account' : 'none-shown';
+        if (this._placeholder) {
+            this._placeholder.setReason(reason);
+            return;
+        }
+        this._placeholder = new EmptyIndicator({
+            iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
+            reason,
+            onOpenPrefs: () => this._raiseOrOpenPrefs(),
+        });
+        Main.panel.addToStatusArea(this.uuid, this._placeholder);
+        this._placeholder.render();
+    }
+
+    _orderedIndicators() {
+        return this._shownDirs().map(dir => this._indicators.get(dir)).filter(Boolean);
+    }
+
+    _addIndicator(dir) {
+        const indicator = new Indicator({
+            dir,
+            parked: this._parked.get(dir) ?? {block: null, rateLimitStreak: 0},
+            service: this._service,
+            iconPath: `${this.path}/icons/claude-quota-symbolic.svg`,
+            prefs: this._prefs,
+            openPrefs: () => this._raiseOrOpenPrefs(),
+            onCredentialsWritten: () => this._status.pollUnlessArmed(),
+            panelPeers: () => this._orderedIndicators(),
+        });
+        this._indicators.set(dir, indicator);
+        Main.panel.addToStatusArea(this._roleFor(dir), indicator);
+    }
+
+    _removeIndicator(dir) {
+        const indicator = this._indicators.get(dir);
+        this._parked.set(dir, indicator.parked());
+        this._indicators.delete(dir);
+        indicator.destroy();
+    }
+
+    // The first indicator answers to the bare uuid, which is the role every release before
+    // this one registered and the one the tooling reaches the indicator through.
+    _roleFor(dir) {
+        return Main.panel.statusArea[this.uuid] ? `${this.uuid}:${dir}` : this.uuid;
+    }
+
+    _orderIndicators(dirs) {
+        const indicators = dirs.map(dir => this._indicators.get(dir));
+        indicators.slice(1).forEach((indicator, index) =>
+            indicator.container.get_parent()?.set_child_above_sibling(indicator.container, indicators[index].container));
+        indicators.forEach(indicator => indicator._panel.fit());
+    }
+
+    _spreadService(service) {
+        this._service = service;
+        this._indicators.forEach(indicator => indicator.setService(service));
+    }
+
+    _relanguage() {
+        this._applyLanguage();
+        this._indicators.forEach(indicator => indicator.relanguage());
     }
 
     // The preferences service refuses a second open while a window is up and raises nothing.
@@ -481,8 +596,16 @@ export default class ClaudeQuotaExtension extends Extension {
     }
 
     disable() {
-        this._indicator?.destroy();
-        this._indicator = null;
+        this._prefsSignals.forEach(id => this._prefs.disconnect(id));
+        this._prefsSignals = [];
+        this._status.destroy();
+        this._status = null;
+        this._placeholder?.destroy();
+        this._placeholder = null;
+        this._indicators.forEach(indicator => indicator.destroy());
+        this._indicators = null;
+        this._parked = null;
+        this._prefs = null;
         resetTranslator();
     }
 }

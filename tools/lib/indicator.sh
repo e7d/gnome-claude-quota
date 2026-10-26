@@ -156,7 +156,7 @@ squeeze_for() {
 
 setup_for() {
     case "$1" in
-        live) echo "i._loadCache(); i._poller._pollStatus();" ;;
+        live) echo "i._loadCache(); Main.extensionManager.lookup('$UUID').stateObj._status.poll();" ;;
         normal) echo "i._quotas = [q('S','Session (5h)',7,270,SESSION), q('W','Weekly',12,9000,WEEK)];" ;;
         over-pace) echo "i._quotas = [q('S','Session (5h)',68,240,SESSION), q('W','Weekly',20,2000,WEEK)];" ;;
         warning) echo "i._quotas = [q('S','Session (5h)',78,90,SESSION), q('W','Weekly',80,2000,WEEK)];" ;;

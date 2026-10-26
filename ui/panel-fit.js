@@ -5,7 +5,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {availableWidth, fittingCount} from '../lib/panel.js';
+import {availableWidth, fittingCount, peersWidth} from '../lib/panel.js';
 import {brandColor, schemeForForeground} from '../lib/theme.js';
 
 const SEPARATOR_OPACITY = 120;
@@ -18,10 +18,13 @@ export function panelScheme() {
 }
 
 export class PanelStrip {
-    constructor({container, box, icon}) {
+    constructor({container, box, icon, peers}) {
         this._container = container;
         this._box = box;
         this._icon = icon;
+        this._peers = peers;
+        this._iconWidth = 0;
+        this._showsAll = true;
         this._cells = [];
         this._issueLast = false;
         this._fitLaterId = 0;
@@ -57,7 +60,19 @@ export class PanelStrip {
         this._box.destroy_all_children();
         this._issueLast = issueLast;
         this._cells = cells.map(cell => this._cellActor(cell));
-        this.fit();
+        const strips = this._strips();
+        strips.slice(strips.indexOf(this)).forEach(strip => strip.fit());
+    }
+
+    // A strip not yet registered with its peers (the first render runs before the
+    // indicator is added) is measured alone, which is also the single-account case.
+    _strips() {
+        const peers = this._peers();
+        return peers.includes(this) ? peers : [this];
+    }
+
+    _width() {
+        return this._container.get_preferred_width(-1)[1];
     }
 
     // An incident emoji is kept ahead of every value on purpose: it reports
@@ -108,12 +123,16 @@ export class PanelStrip {
             return null;
         const [, centerWidth] = center.get_preferred_width(-1);
         const [, rightWidth] = right.get_preferred_width(-1);
-        const [, ownWidth] = this._container.get_preferred_width(-1);
+        const strips = this._strips();
         return availableWidth({
             panelWidth: Main.panel.width,
             centerWidth,
             centerOffset: this._centerOffset(),
-            othersWidth: Math.max(0, rightWidth - ownWidth),
+            othersWidth: peersWidth({
+                rightWidth,
+                strips: strips.map(strip => ({width: strip._width(), iconWidth: strip._iconWidth})),
+                index: strips.indexOf(this),
+            }),
         });
     }
 
@@ -123,18 +142,27 @@ export class PanelStrip {
     fit() {
         if (this._container.get_stage() === null)
             return;
+        this._iconWidth = this._naturalWidth(0);
         const cells = this._cells.length;
-        if (!cells) {
-            this._showCells(0);
-            return;
-        }
+        const count = this._yielding() ? 0 : this._fittingCount(cells);
+        this._showCells(count);
+        this._showsAll = count === cells;
+    }
+
+    // Shorter text on the right could otherwise fit a cell that the strip left of it
+    // just gave up, and the bar would stop giving way from the right.
+    _yielding() {
+        const strips = this._strips();
+        return strips.slice(0, strips.indexOf(this)).some(strip => !strip._showsAll);
+    }
+
+    _fittingCount(cells) {
+        if (!cells)
+            return 0;
         const available = this._budget();
-        if (available === null) {
-            this._showCells(cells);
-            return;
-        }
-        this._showCells(fittingCount(
-            cells, available, count => this._naturalWidth(count)));
+        if (available === null)
+            return cells;
+        return fittingCount(cells, available, count => this._naturalWidth(count));
     }
 
     _queueFit() {
@@ -142,7 +170,7 @@ export class PanelStrip {
             return;
         this._fitLaterId = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
             this._fitLaterId = 0;
-            this.fit();
+            this._strips().forEach(strip => strip.fit());
             return GLib.SOURCE_REMOVE;
         });
     }

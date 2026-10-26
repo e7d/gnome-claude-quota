@@ -18,10 +18,6 @@ export class Store {
         this._dir = dir;
     }
 
-    useDir(dir) {
-        this._dir = dir;
-    }
-
     _cachePath() {
         const name = cacheName({
             dir: this._dir,

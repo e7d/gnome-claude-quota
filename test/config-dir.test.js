@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
 import {
-    cacheName, choiceLabel, configDir, configFiles, credentialsFile, defaultDir, directoryChoices,
-    displayPath, isCandidateName, settingFor,
+    accountDirs, accountRows, cacheName, configDir, configFiles, credentialsFile, defaultDir,
+    addableDirs, dirState, displayPath, isCandidateName, isUsable, markerPaths, movedDir, sameSettings, settingFor, settingsFor, shownDirs, steppedDir,
 } from '../lib/config-dir.js';
 
 const HOME = '/home/ada';
@@ -63,38 +63,128 @@ test('paths under home are shown with a tilde, others as they are', () => {
     assert.equal(displayPath('/srv/claude', HOME), '/srv/claude');
 });
 
-test('a label names the account when the directory says which one it is', () => {
-    assert.equal(choiceLabel({path: '/home/ada/.claude', email: 'ada@example.com'}, HOME), '~/.claude · ada@example.com');
-    assert.equal(choiceLabel({path: '/home/ada/.claude', email: null}, HOME), '~/.claude');
+test('the account setting names directories in its own order, the empty string standing for the default', () => {
+    assert.deepEqual(accountDirs(['/home/ada/.claude-perso/', ''], HOME), ['/home/ada/.claude-perso', '/home/ada/.claude']);
 });
 
-test('the default directory is always offered, even with no login in it', () => {
-    const choices = directoryChoices({found: [], current: defaultDir(HOME), home: HOME});
-    assert.deepEqual(choices, [{path: '/home/ada/.claude', email: null}]);
+test('a directory listed twice is listed once, where it first appears', () => {
+    assert.deepEqual(accountDirs(['/srv/b', '/srv/a', '/srv/b/'], HOME), ['/srv/b', '/srv/a']);
 });
 
-test('found directories are listed in path order, carrying their account', () => {
-    const choices = directoryChoices({
-        found: [
-            {path: '/home/ada/.claude-perso', email: 'ada@perso.example'},
-            {path: '/home/ada/.claude', email: 'ada@work.example'},
-        ],
-        current: defaultDir(HOME),
-        home: HOME,
-    });
-    assert.deepEqual(choices.map(choice => choice.email), ['ada@work.example', 'ada@perso.example']);
+test('an empty account list stays empty', () => {
+    assert.deepEqual(accountDirs([], HOME), []);
 });
 
-test('a folder picked by hand is listed even though the scan never finds it', () => {
-    const choices = directoryChoices({found: [], current: '/srv/claude', home: HOME});
-    assert.deepEqual(choices.map(choice => choice.path), ['/home/ada/.claude', '/srv/claude']);
+test('the top bar takes the shown accounts in the account list order, whatever order they were shown in', () => {
+    assert.deepEqual(shownDirs({accounts: ['/a', '/b', '/c'], shown: ['/c', '/a']}), ['/a', '/c']);
 });
 
-test('a found directory that is also the current one is listed once', () => {
-    const choices = directoryChoices({
-        found: [{path: '/home/ada/.claude-perso', email: 'ada@perso.example'}],
-        current: '/home/ada/.claude-perso',
-        home: HOME,
-    });
-    assert.equal(choices.length, 2);
+test('a shown directory missing from the account list is not shown', () => {
+    assert.deepEqual(shownDirs({accounts: ['/a', '/b'], shown: ['/b', '/x']}), ['/b']);
+});
+
+test('nothing shown means no account in the top bar', () => {
+    assert.deepEqual(shownDirs({accounts: ['/a', '/b'], shown: []}), []);
+});
+
+test('directories are stored as settings, in their order and once each', () => {
+    assert.deepEqual(settingsFor(['/srv/b', '/home/ada/.claude', '/srv/b'], HOME), ['/srv/b', '']);
+});
+
+test('a directory dropped onto a later one takes its place, the rest closing up', () => {
+    assert.deepEqual(movedDir(['/a', '/b', '/c'], {dir: '/a', onto: '/c'}), ['/b', '/c', '/a']);
+});
+
+test('a directory dropped onto an earlier one goes before it', () => {
+    assert.deepEqual(movedDir(['/a', '/b', '/c'], {dir: '/c', onto: '/a'}), ['/c', '/a', '/b']);
+});
+
+test('a drop onto itself, or naming a directory not shown, changes nothing', () => {
+    assert.deepEqual(movedDir(['/a', '/b'], {dir: '/a', onto: '/a'}), ['/a', '/b']);
+    assert.deepEqual(movedDir(['/a', '/b'], {dir: '/x', onto: '/a'}), ['/a', '/b']);
+    assert.deepEqual(movedDir(['/a', '/b'], {dir: '/a', onto: '/x'}), ['/a', '/b']);
+});
+
+test('a step moves a directory one place, and a step past either end changes nothing', () => {
+    assert.deepEqual(steppedDir(['/a', '/b', '/c'], {dir: '/b', step: -1}), ['/b', '/a', '/c']);
+    assert.deepEqual(steppedDir(['/a', '/b', '/c'], {dir: '/b', step: 1}), ['/a', '/c', '/b']);
+    assert.deepEqual(steppedDir(['/a', '/b'], {dir: '/a', step: -1}), ['/a', '/b']);
+    assert.deepEqual(steppedDir(['/a', '/b'], {dir: '/b', step: 1}), ['/a', '/b']);
+});
+
+test('the add menu offers found directories not listed yet, in path order', () => {
+    const found = ['/home/ada/.claude-z', '/home/ada/.claude', '/home/ada/.claude-b'];
+    assert.deepEqual(addableDirs({found, accounts: ['/home/ada/.claude'], home: HOME}),
+        ['/home/ada/.claude-b', '/home/ada/.claude-z']);
+});
+
+test('the add menu offers the default directory once removed, even with no login in it', () => {
+    assert.deepEqual(addableDirs({found: [], accounts: ['/srv/a'], home: HOME}), ['/home/ada/.claude']);
+});
+
+test('rows follow the account list and say which are shown, first and last', () => {
+    assert.deepEqual(accountRows({accounts: ['/a', '/b', '/c'], shown: ['/c', '/a']}), [
+        {path: '/a', shown: true, first: true, last: false},
+        {path: '/b', shown: false, first: false, last: false},
+        {path: '/c', shown: true, first: false, last: true},
+    ]);
+});
+
+test('rows can all be hidden, and an empty list has no rows', () => {
+    assert.deepEqual(accountRows({accounts: ['/a'], shown: []}), [{path: '/a', shown: false, first: true, last: true}]);
+    assert.deepEqual(accountRows({accounts: [], shown: []}), []);
+});
+
+test('a Claude Code directory is recognised by any file Claude Code leaves in it', () => {
+    assert.deepEqual(markerPaths('/srv/claude', HOME), [
+        '/srv/claude/.claude.json', '/srv/claude/.credentials.json', '/srv/claude/settings.json', '/srv/claude/projects',
+    ]);
+});
+
+test('the default directory is also recognised by the config Claude Code keeps in home', () => {
+    assert.ok(markerPaths(defaultDir(HOME), HOME).includes('/home/ada/.claude.json'));
+});
+
+function state(overrides) {
+    return dirState({exists: true, marked: true, signedIn: false, broken: false, isDefault: false, ...overrides});
+}
+
+test('a credentials file holding no readable token is broken, the default directory included', () => {
+    assert.equal(state({broken: true}), 'broken');
+    assert.equal(state({broken: true, isDefault: true}), 'broken');
+});
+
+test('a directory holding a login is signed in', () => {
+    assert.equal(state({signedIn: true}), 'signed-in');
+});
+
+test('a Claude Code directory with no login is signed out', () => {
+    assert.equal(state({}), 'signed-out');
+});
+
+test('a folder Claude Code never used is not a Claude Code directory', () => {
+    assert.equal(state({marked: false}), 'not-claude');
+});
+
+test('a folder that is gone is missing', () => {
+    assert.equal(state({exists: false, marked: false}), 'missing');
+});
+
+test('the default directory is signed out, never invalid, even missing or empty', () => {
+    assert.equal(state({isDefault: true, exists: false, marked: false}), 'signed-out');
+    assert.equal(state({isDefault: true, marked: false}), 'signed-out');
+});
+
+test('only signed-in and signed-out directories can be used', () => {
+    assert.deepEqual(['signed-in', 'signed-out', 'not-claude', 'missing', 'broken'].map(isUsable), [true, true, false, false, false]);
+});
+
+test('a list holding only the default directory is not the empty list', () => {
+    assert.equal(sameSettings([''], []), false);
+    assert.equal(sameSettings([], ['']), false);
+});
+
+test('lists are the same only with the same settings in the same order', () => {
+    assert.equal(sameSettings(['', '/srv/a'], ['', '/srv/a']), true);
+    assert.equal(sameSettings(['/srv/a', ''], ['', '/srv/a']), false);
 });

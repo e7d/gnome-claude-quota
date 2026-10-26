@@ -1,6 +1,7 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 
+import {NOT_FOUND, NO_LOGIN, describe} from '../lib/errors.js';
 import {adoptShared, applyResult} from '../lib/state.js';
 
 const NOW = new Date('2026-08-14T12:00:00Z');
@@ -195,4 +196,36 @@ test('adoptShared takes a fresher payload and asks for a save and an alert sync'
     assert.equal(next.service, null);
     assert.equal(effects.save, true);
     assert.equal(effects.syncAlerts, true);
+});
+
+const HELD = {
+    limits: [{kind: 'session', percent: 40}],
+    quotas: [{key: 'session', percent: 40}],
+    fetchedAt: new Date('2026-08-14T11:58:00Z'),
+};
+
+function signedOutResult(desc) {
+    return {...ok(), error: desc.message, payload: null, desc};
+}
+
+test('losing the login drops the quotas it held, which nothing can refresh any more', () => {
+    const {state: next, effects} = applyResult({state: state(HELD), result: signedOutResult(describe(NO_LOGIN)), now: NOW});
+    assert.deepEqual([next.limits, next.quotas, next.fetchedAt], [[], [], null]);
+    assert.equal(next.error.msgid, NO_LOGIN);
+    assert.equal(effects.syncAlerts, true);
+});
+
+test('a folder that is gone drops its quotas the same way', () => {
+    const {state: next} = applyResult({state: state(HELD), result: signedOutResult(describe(NOT_FOUND, {path: '/srv/a'})), now: NOW});
+    assert.deepEqual(next.quotas, []);
+});
+
+test('losing the login leaves the cache on disk for the next sign-in to replace', () => {
+    const {effects} = applyResult({state: state(HELD), result: signedOutResult(describe(NO_LOGIN)), now: NOW});
+    assert.equal(effects.save, false);
+});
+
+test('an ordinary failure keeps the quotas it held', () => {
+    const {state: next} = applyResult({state: state(HELD), result: signedOutResult(describe('Cannot reach api.anthropic.com')), now: NOW});
+    assert.deepEqual(next.quotas, HELD.quotas);
 });

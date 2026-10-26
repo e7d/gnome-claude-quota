@@ -3,8 +3,18 @@
   <schema id="org.gnome.shell.extensions.claude-quota" path="/org/gnome/shell/extensions/claude-quota/">
     <key name="claude-config-dir" type="s">
       <default>''</default>
-      <summary>Claude directory</summary>
-      <description>Claude Code configuration directory holding the login to read, as an absolute path, or empty for ~/.claude.</description>
+      <summary>Claude directory (superseded)</summary>
+      <description>The single directory releases before multi-account read. Carried over into account-dirs and shown-account-dirs at startup, then cleared.</description>
+    </key>
+    <key name="account-dirs" type="as">
+      <default>['']</default>
+      <summary>Accounts</summary>
+      <description>Claude Code configuration directories the extension follows, in the order their indicators take in the top bar, as absolute paths, an empty string standing for ~/.claude.</description>
+    </key>
+    <key name="shown-account-dirs" type="as">
+      <default>['']</default>
+      <summary>Accounts shown in the top bar</summary>
+      <description>The entries of account-dirs that have an indicator, written the same way. Their order carries no meaning.</description>
     </key>
     <key name="language" type="s">
       <default>''</default>

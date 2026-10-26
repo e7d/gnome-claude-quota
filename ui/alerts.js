@@ -4,7 +4,6 @@ import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
-import {_} from '../lib/i18n.js';
 import {alertPlan, alertRefresh, refreshDelayMs} from '../lib/notify.js';
 
 const URGENCY = {
@@ -13,8 +12,9 @@ const URGENCY = {
 };
 
 export class Alerts {
-    constructor({iconPath, onActivate, onTick}) {
+    constructor({iconPath, title, onActivate, onTick}) {
         this._iconPath = iconPath;
+        this._title = title;
         this._onActivate = onActivate;
         this._onTick = onTick;
         this._live = new Map();
@@ -29,7 +29,7 @@ export class Alerts {
         if (this._source !== null)
             return this._source;
         this._source = new MessageTray.Source({
-            title: _('Claude Quota'),
+            title: this._title(),
             icon: Gio.icon_new_for_string(this._iconPath),
         });
         this._source.connect('destroy', () => {

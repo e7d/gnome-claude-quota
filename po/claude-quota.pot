@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-quota\n"
 "Report-Msgid-Bugs-To: michael@e7d.io\n"
-"POT-Creation-Date: 2026-10-21 14:53+0200\n"
+"POT-Creation-Date: 2026-10-26 11:41+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,84 +18,85 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: extension.js:33 extension.js:211 ui/alerts.js:32
+#: extension.js:36 extension.js:188 extension.js:189 ui/empty-indicator.js:26
+#: ui/empty-indicator.js:71
 msgid "Claude Quota"
 msgstr ""
 
-#: prefs.js:21
+#: prefs.js:16
 msgid "High usage threshold"
 msgstr ""
 
-#: prefs.js:22
+#: prefs.js:17
 msgid "Critical usage threshold"
 msgstr ""
 
-#: prefs.js:26
+#: prefs.js:21
 msgid "Notify at high usage"
 msgstr ""
 
-#: prefs.js:27
+#: prefs.js:22
 msgid "Notify at critical usage"
 msgstr ""
 
-#: prefs.js:33
+#: prefs.js:28 ui/accounts-group.js:322
 msgid "Restore the default"
 msgstr ""
 
-#: prefs.js:71
+#: prefs.js:66
 msgid "Language"
 msgstr ""
 
-#: prefs.js:72
+#: prefs.js:67
 msgid "Automatic"
 msgstr ""
 
-#: prefs.js:120
-msgid "Choose folder…"
+#: prefs.js:89
+msgid "Display"
 msgstr ""
 
-#: prefs.js:126 prefs.js:205
-msgid "Claude directory"
-msgstr ""
-
-#: prefs.js:149
-msgid "No Claude login in {path}"
-msgstr ""
-
-#: prefs.js:229 lib/format.js:94
-msgid "Account"
-msgstr ""
-
-#: prefs.js:230
+#: prefs.js:90
 msgid "Display active account"
 msgstr ""
 
-#: prefs.js:231
+#: prefs.js:91
 msgid "Display plan"
 msgstr ""
 
-#: prefs.js:237
+#: prefs.js:97
 msgid "Show in top bar"
 msgstr ""
 
-#: prefs.js:238
+#: prefs.js:98
 msgid "Show in menu"
 msgstr ""
 
-#: prefs.js:256
+#: prefs.js:116
 msgid "Thresholds"
 msgstr ""
 
-#: prefs.js:268
+#: prefs.js:128
 msgid "General"
 msgstr ""
 
-#: prefs.js:275
+#: prefs.js:136
 msgid "Quotas"
 msgstr ""
 
 #: lib/errors.js:3
 msgid "No active Claude login, run Claude Code to sign in."
+msgstr ""
+
+#: lib/errors.js:4
+msgid "Folder {path} not found."
+msgstr ""
+
+#: lib/errors.js:5
+msgid "{path} is not a Claude Code directory."
+msgstr ""
+
+#: lib/errors.js:6
+msgid "No Claude token in {path}"
 msgstr ""
 
 #: lib/format.js:29
@@ -124,6 +125,10 @@ msgstr[1] ""
 msgid "Last refresh: {time}"
 msgstr ""
 
+#: lib/format.js:94
+msgid "Account"
+msgstr ""
+
 #: lib/format.js:98
 msgid "Plan"
 msgstr ""
@@ -140,7 +145,7 @@ msgstr ""
 msgid "until {time}"
 msgstr ""
 
-#: lib/format.js:119 lib/usage.js:128
+#: lib/format.js:119 lib/usage.js:148
 msgid "Rate limited"
 msgstr ""
 
@@ -190,27 +195,23 @@ msgstr ""
 msgid "Model-specific"
 msgstr ""
 
-#: lib/usage.js:29
+#: lib/usage.js:52
 msgid "Cannot read {path}"
 msgstr ""
 
-#: lib/usage.js:33
-msgid "No Claude token in {path}"
-msgstr ""
-
-#: lib/usage.js:102 lib/usage.js:125
+#: lib/usage.js:122 lib/usage.js:145
 msgid "Token expired, run Claude Code once"
 msgstr ""
 
-#: lib/usage.js:114
+#: lib/usage.js:134
 msgid "Cannot reach api.anthropic.com"
 msgstr ""
 
-#: lib/usage.js:135
+#: lib/usage.js:155
 msgid "Usage request failed (HTTP {status})"
 msgstr ""
 
-#: lib/usage.js:142
+#: lib/usage.js:162
 msgid "Unexpected response from the usage endpoint"
 msgstr ""
 
@@ -224,4 +225,72 @@ msgstr ""
 
 #: lib/view.js:38
 msgid "Loading…"
+msgstr ""
+
+#: ui/accounts-group.js:79
+msgid "Undo"
+msgstr ""
+
+#: ui/accounts-group.js:90
+msgid "{account} removed"
+msgstr ""
+
+#: ui/accounts-group.js:101
+msgid "Accounts restored to ~/.claude"
+msgstr ""
+
+#: ui/accounts-group.js:123
+msgid "Claude directory"
+msgstr ""
+
+#: ui/accounts-group.js:157
+msgid "Choose Folder…"
+msgstr ""
+
+#: ui/accounts-group.js:173
+msgid "Signed out"
+msgstr ""
+
+#: ui/accounts-group.js:204
+msgid "Move Up"
+msgstr ""
+
+#: ui/accounts-group.js:204
+msgid "Move Down"
+msgstr ""
+
+#: ui/accounts-group.js:242
+msgid "Folder not found"
+msgstr ""
+
+#: ui/accounts-group.js:243
+msgid "Not a Claude Code directory"
+msgstr ""
+
+#: ui/accounts-group.js:244
+msgid "Invalid login file"
+msgstr ""
+
+#: ui/accounts-group.js:268
+msgid "Remove"
+msgstr ""
+
+#: ui/accounts-group.js:317
+msgid "Add an account"
+msgstr ""
+
+#: ui/accounts-group.js:333 ui/empty-indicator.js:16
+msgid "No Claude account is followed."
+msgstr ""
+
+#: ui/accounts-group.js:334
+msgid "Add one with the + button."
+msgstr ""
+
+#: ui/accounts-group.js:355
+msgid "Accounts"
+msgstr ""
+
+#: ui/empty-indicator.js:17
+msgid "No Claude account is shown in the top bar."
 msgstr ""

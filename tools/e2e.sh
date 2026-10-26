@@ -113,6 +113,10 @@ shoots() {
 }
 
 IND="Main.panel.statusArea['$UUID']"
+EXT="Main.extensionManager.lookup('$UUID').stateObj"
+STATUS="$EXT._status"
+OTHER_DIR_NAME='.claude-other'
+OTHER_IND="Main.panel.statusArea['$UUID:' + imports.gi.GLib.get_home_dir() + '/$OTHER_DIR_NAME']"
 BLOCK_ROWS="$IND._popup._blocks.flatMap(b => [b._name.text, b._percent.text, b._caption.text])"
 PANEL_LABELS="$IND._panel._cells.map(c => c.label.text)"
 PANEL_QUOTAS="$IND._panel._cells
@@ -199,6 +203,9 @@ assert_incident_within_popup() {
 # own switch: <name>, the popup's row property, the indicator's state field, the schema
 # key, and the msgid its label must carry.
 NO_LOGIN='No active Claude login, run Claude Code to sign in.'
+NONE_SHOWN='No Claude account is shown in the top bar.'
+NOT_CLAUDE='{path} is not a Claude Code directory.'
+NO_ACCOUNT='No Claude account is followed.'
 
 assert_detail_row() {
     local label
@@ -829,8 +836,8 @@ prove_state() {
         "shell_eval \"delete $IND._render; $IND._render(); 'ok'\" >/dev/null" \
         assert_hidden_note_offers_settings_probe
     prove 'a forced language reaches the popup' \
-        "shell_eval \"$IND._keptApply = $IND._applyLanguage; $IND._applyLanguage = () => {}; 'ok'\" >/dev/null" \
-        "shell_eval \"$IND._applyLanguage = $IND._keptApply; delete $IND._keptApply; 'ok'\" >/dev/null" \
+        "shell_eval \"$EXT._keptApply = $EXT._applyLanguage; $EXT._applyLanguage = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"$EXT._applyLanguage = $EXT._keptApply; delete $EXT._keptApply; 'ok'\" >/dev/null" \
         assert_language_forces_either_probe
     prove 'no Claude login leaves only the icon' \
         "shell_eval \"$IND._panel._box.visible = true; $IND._render = () => {}; 'ok'\" >/dev/null" \
@@ -1171,6 +1178,7 @@ stub_attempt_log() {
     ATTEMPTS_LOG="$(mktemp -t claude-quota-attempts.XXXXXX)"
     shell_eval "delete $IND._refresh;
         $IND._store.attemptsPath = () => '$ATTEMPTS_LOG';
+        $STATUS._store.attemptsPath = () => '$ATTEMPTS_LOG';
         $IND._poller._client.fetch = () => Promise.reject(Object.assign(new Error('Rate limited'),
             {rateLimited: true, retryAfter: 1, status: 429,
              headers: {'authorization': 'Bearer sk-ant-oat01-STUB',
@@ -1181,7 +1189,9 @@ stub_attempt_log() {
 
 restore_attempt_log() {
     shell_eval "delete $IND._poller._client.fetch;
+        delete $IND._signedIn;
         delete $IND._store.attemptsPath;
+        delete $STATUS._store.attemptsPath;
         $IND._block = null;
         $IND._refresh = () => {};
         $IND._render();
@@ -1305,12 +1315,14 @@ stub_shared_usage() {
                   resets_at: new Date(Date.now() + 3600000).toISOString(), scope: null}],
     });
     $IND._block = null; $IND._lastRequestAt = null; $IND._fetchedAt = new Date(Date.now() - 3600000);
+    $IND._signedIn = () => true;
     'ok'" >/dev/null
 }
 
 stub_stale_shared_usage() {
     shell_eval "$IND._sharedUsage = () => null;
     $IND._block = null; $IND._lastRequestAt = null; $IND._fetchedAt = new Date(Date.now() - 3600000);
+    $IND._signedIn = () => true;
     'ok'" >/dev/null
 }
 
@@ -1328,7 +1340,7 @@ assert_shared_adopted() {
 }
 
 restore_shared_usage() {
-    shell_eval "delete $IND._sharedUsage; $IND._block = null; 'ok'" >/dev/null
+    shell_eval "delete $IND._sharedUsage; delete $IND._signedIn; $IND._block = null; 'ok'" >/dev/null
 }
 
 prove_shared_adoption() {
@@ -1343,6 +1355,7 @@ stub_reachable_endpoint() {
     shell_eval "$IND._poller._client.fetch = () => Promise.reject(Object.assign(
         new Error('Cannot reach api.anthropic.com'),
         {status: null, headers: {}, body: null, durationMs: 7, expiresAt: null}));
+        $IND._signedIn = () => true;
         'ok'" >/dev/null
 }
 
@@ -1386,14 +1399,18 @@ status_attempts() {
     echo "${count:-0}"
 }
 
+# Readable, so it counts as a login and opens the status poll; expired since 1970, so
+# the usage fetch declines it before a socket opens.
+EXPIRED_LOGIN='{"claudeAiOauth":{"accessToken":"e2e-placeholder","expiresAt":1}}'
+
 # The break stubs the status client before it plants a token, or the poll it unblocks
 # reaches status.claude.com for real — which is the thing being fixed.
 plant_credentials() {
-    shell_eval "$IND._poller._status.fetch = () => Promise.resolve({value: null, status: null,
+    shell_eval "$STATUS._client.fetch = () => Promise.resolve({value: null, status: null,
         headers: {}, body: null, durationMs: 3, error: 'Cannot reach status.claude.com'});
-        $IND._poller._statusPolling = false; 'ok'" >/dev/null
+        $STATUS._polling = false; 'ok'" >/dev/null
     mkdir -p "$SANDBOX_HOME/.claude"
-    printf '{}\n' > "$SANDBOX_HOME/.claude/.credentials.json"
+    printf '%s\n' "$EXPIRED_LOGIN" > "$SANDBOX_HOME/.claude/.credentials.json"
 }
 
 remove_token() {
@@ -1402,16 +1419,16 @@ remove_token() {
 
 drop_credentials() {
     remove_token
-    shell_eval "$IND._poller._statusPolling = false; 'ok'" >/dev/null
+    shell_eval "$STATUS._polling = false; 'ok'" >/dev/null
 }
 
 # Without a token the poll never leaves, so the teardown assertions on the status
 # timer and its cancellable would otherwise hold over objects that never existed.
 arm_status_poll() {
     plant_credentials
-    shell_eval "$IND._poller._pollStatus(); 'ok'" >/dev/null
+    shell_eval "$STATUS.poll(); 'ok'" >/dev/null
     for _ in $(seq 50); do
-        [ "$(probe "$IND._poller._statusTimerId !== 0")" = 'true' ] && return 0
+        [ "$(probe "$STATUS._timerId !== 0")" = 'true' ] && return 0
         sleep 0.1
     done
     die 'the status poll never armed its timer'
@@ -1420,7 +1437,7 @@ arm_status_poll() {
 assert_status_poll_needs_credentials() {
     local before after
     before="$(status_attempts)"
-    shell_eval "$IND._poller._pollStatus(); 'ok'" >/dev/null
+    shell_eval "$STATUS.poll(); 'ok'" >/dev/null
     sleep 1
     after="$(status_attempts)"
     assert_eq 'a status poll with no token is never sent' "$before" "$after"
@@ -1432,7 +1449,7 @@ prove_status_needs_credentials() {
         plant_credentials \
         drop_credentials \
         assert_status_poll_needs_credentials
-    shell_eval "delete $IND._poller._status.fetch; 'ok'" >/dev/null
+    shell_eval "delete $STATUS._client.fetch; 'ok'" >/dev/null
 }
 
 prove_credentials_recovery() {
@@ -1448,40 +1465,101 @@ prove_credentials_recovery() {
         assert_credentials_wake
 }
 
-# The switch runs the real refresh, which the empty directory refuses before a socket
-# opens — that refusal is what puts the no-login message on screen.
-switch_to_empty_dir() {
-    mkdir -p "$SANDBOX_HOME/.claude-other"
-    render_state normal
-    shell_eval "delete $IND._refresh;
-        $IND._prefs.set_string('claude-config-dir', '$SANDBOX_HOME/.claude-other'); 'ok'" >/dev/null
+# The new indicator runs the real refresh, which the empty directory refuses before a
+# socket opens — that refusal is what puts the no-login message on its popup.
+show_accounts() {
+    shell_eval "$EXT._prefs.set_strv('account-dirs', $1);
+        $EXT._prefs.set_strv('shown-account-dirs', $1); 'ok'" >/dev/null
     sleep 1
 }
 
-leave_other_dir() {
-    shell_eval "$IND._refresh = () => {}; $IND._prefs.set_string('claude-config-dir', ''); 'ok'" >/dev/null
+# A new indicator starts from the service status the extension last heard, and an
+# earlier group may have left a stubbed answer there that outranks the no-login message.
+show_other_account() {
+    mkdir -p "$SANDBOX_HOME/$OTHER_DIR_NAME"
+    freeze
+    render_state normal
+    shell_eval "$EXT._service = null; 'ok'" >/dev/null
+    show_accounts "['', '$SANDBOX_HOME/$OTHER_DIR_NAME']"
 }
 
-assert_switch_forgets_account() {
-    switch_to_empty_dir
-    local message
-    message="$(js_string "$(catalog_msg "$NO_LOGIN")")"
-    assert_eq "$1 the watcher follows the selected directory" 'true' \
-        "$(probe "$IND._poller._dir === '$SANDBOX_HOME/.claude-other'")"
-    assert_eq "$1 the previous account's quotas are dropped" '0' "$(probe "$IND._quotas.length")"
-    assert_eq "$1 the popup says the selected directory holds no login" 'true' \
-        "$(probe "$IND._popup._messageLabel.text === $message && $IND._popup._message.visible")"
-    assert_eq "$1 the switch spent no request" 'true' "$(probe "$IND._lastRequestAt === null")"
-    leave_other_dir
+OTHER_OFFSET="(() => {
+    const kids = $IND.container.get_parent().get_children();
+    return kids.indexOf($OTHER_IND.container) - kids.indexOf($IND.container);
+})()"
+
+# Hiding an account can rebuild the default one's indicator, and every group after this
+# one fabricates its states on an indicator whose own refresh is frozen.
+hide_other_account() {
+    shell_eval "$EXT._prefs.reset('shown-account-dirs'); $EXT._prefs.reset('account-dirs'); 'ok'" >/dev/null
+    freeze
 }
 
-assert_switch_forgets_account_probe() { assert_switch_forgets_account control; }
+assert_other_account_shown() {
+    show_other_account
+    local message shown
+    # shellcheck disable=SC2088
+    shown="~/$OTHER_DIR_NAME"
+    message="$(catalog_msg "$NOT_CLAUDE")"
+    message="$(js_string "${message//\{path\}/$shown}")"
+    assert_eq "$1 the other account gets an indicator of its own" 'true' \
+        "$(probe "$OTHER_IND._dir === '$SANDBOX_HOME/$OTHER_DIR_NAME'")"
+    assert_eq "$1 the other account sits right of the first, as listed" '1' "$(probe "$OTHER_OFFSET")"
+    show_accounts "['$SANDBOX_HOME/$OTHER_DIR_NAME', '']"
+    assert_eq "$1 listing it first moves it left of the first" '-1' "$(probe "$OTHER_OFFSET")"
+    assert_eq "$1 its notifications name the account" 'true' \
+        "$(probe "$OTHER_IND._title() === $IND._title().split(' · ')[0] + ' · ~/$OTHER_DIR_NAME' &&
+            $IND._title().endsWith(' · ' + $IND._accountEmail)")"
+    assert_eq "$1 the first account keeps its quotas" '2' "$(probe "$IND._quotas.length")"
+    assert_eq "$1 the other popup says its empty folder is not a Claude Code directory" 'true' \
+        "$(probe "$OTHER_IND._popup._messageLabel.text === $message && $OTHER_IND._popup._message.visible")"
+    assert_eq "$1 showing it spent no request" 'true' "$(probe "$OTHER_IND._lastRequestAt === null")"
+    shell_eval "const prefs = $EXT._prefs;
+        prefs.set_strv('shown-account-dirs', ['$SANDBOX_HOME/$OTHER_DIR_NAME']);
+        prefs.set_strv('shown-account-dirs', ['', '$SANDBOX_HOME/$OTHER_DIR_NAME']); 'ok'" >/dev/null
+    assert_eq "$1 hiding and showing an account leaves its place in the order" '-1' "$(probe "$OTHER_OFFSET")"
+    hide_other_account
+    assert_eq "$1 hiding it takes its indicator away" 'true' \
+        "$(probe "!$OTHER_IND")"
+}
 
-prove_config_dir_switch() {
-    prove 'selecting another directory forgets the previous account' \
-        "shell_eval \"$IND._switchConfigDir = () => {}; 'ok'\" >/dev/null" \
-        "shell_eval \"delete $IND._switchConfigDir; 'ok'\" >/dev/null" \
-        assert_switch_forgets_account_probe
+assert_other_account_shown_probe() { assert_other_account_shown control; }
+
+OUR_ENTRIES="Object.keys(Main.panel.statusArea).filter(k => k.startsWith('$UUID')).length"
+
+placeholder_says() {
+    probe "!!$IND._prefsButton && !$IND._poller && $IND._messageLabel.text === $(js_string "$(catalog_msg "$1")")"
+}
+
+assert_empty_state() {
+    shell_eval "$EXT._prefs.set_strv('shown-account-dirs', []); 'ok'" >/dev/null
+    sleep 0.5
+    assert_eq "$1 nothing shown leaves a single indicator" '1' "$(probe "$OUR_ENTRIES")"
+    assert_eq "$1 it says no account is shown" 'true' "$(placeholder_says "$NONE_SHOWN")"
+    assert_eq "$1 it keeps the panel icon and nothing else" 'true' \
+        "$(probe "$IND._icon.visible && $IND.get_first_child().get_n_children() === 1")"
+    shell_eval "$EXT._prefs.set_strv('account-dirs', []); 'ok'" >/dev/null
+    sleep 0.5
+    assert_eq "$1 an empty list says no account is followed" 'true' "$(placeholder_says "$NO_ACCOUNT")"
+    assert_eq "$1 its popup offers the settings, and nothing else to act on" 'true' \
+        "$(probe "!!$IND._prefsButton && $IND.menu._getMenuItems().length === 1")"
+    hide_other_account
+}
+
+assert_empty_state_probe() { assert_empty_state control; }
+
+prove_empty_state() {
+    prove 'an extension with no account shown keeps a placeholder' \
+        "shell_eval \"$EXT._syncPlaceholder = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $EXT._syncPlaceholder; 'ok'\" >/dev/null" \
+        assert_empty_state_probe
+}
+
+prove_other_account() {
+    prove 'showing another account adds an indicator beside the first' \
+        "shell_eval \"$EXT._syncIndicators = () => {}; 'ok'\" >/dev/null" \
+        "shell_eval \"delete $EXT._syncIndicators; 'ok'\" >/dev/null" \
+        assert_other_account_shown_probe
 }
 
 restore_credentials_stubs() {
@@ -1549,8 +1627,10 @@ group_refresh() {
     assert_credentials_wake
     restore_credentials_stubs
     restore_attempt_log
-    prove_config_dir_switch
-    assert_switch_forgets_account config-dir
+    prove_other_account
+    assert_other_account_shown accounts
+    prove_empty_state
+    assert_empty_state accounts
 }
 
 LIVE_ALERTS="[...$IND._alerts._live.keys()].sort()"
@@ -1890,6 +1970,7 @@ prove_arc() {
 
 park_indicator() {
     shell_eval "globalThis._parked = $IND;
+        globalThis._parkedStatus = $STATUS;
         globalThis._parkedSource = $IND._alerts._source; 'ok'" >/dev/null
 }
 
@@ -1924,11 +2005,11 @@ assert_teardown_complete() {
     assert_eq 'timer released on disable' 'null' "$(probe "globalThis._parked._poller._timerId")"
     assert_eq 'indicator marked destroyed' 'true' "$(probe "globalThis._parked._destroyed")"
     assert_eq 'status timer released on disable' '0' \
-        "$(probe "globalThis._parked._poller._statusTimerId")"
+        "$(probe "globalThis._parkedStatus._timerId")"
     assert_eq 'in-flight fetch cancelled' 'true' \
         "$(probe "globalThis._parked._poller._cancellable?.is_cancelled() ?? true")"
     assert_eq 'in-flight status fetch cancelled' 'true' \
-        "$(probe "globalThis._parked._poller._statusCancellable?.is_cancelled() ?? true")"
+        "$(probe "globalThis._parkedStatus._cancellable?.is_cancelled() ?? true")"
     assert_eq 'panel entry removed' 'false' \
         "$(probe "Object.keys(Main.panel.statusArea).includes('$UUID')")"
 }

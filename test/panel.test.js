@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {availableWidth, fittingCount} from '../lib/panel.js';
+import {availableWidth, fittingCount, peersWidth} from '../lib/panel.js';
 
 const LADDER = [0, 60, 130, 200];
 
@@ -60,4 +60,26 @@ test('fittingCount measures only as far as the first fit', () => {
 
 test('fittingCount reports nothing to show for an empty panel', () => {
     assert.equal(fittingCount(0, 500, () => 0), 0);
+});
+
+const STRIPS = [{width: 150, iconWidth: 30}, {width: 120, iconWidth: 30}, {width: 100, iconWidth: 30}];
+
+test('one strip alone counts every other right-box item and nothing of its own', () => {
+    assert.equal(peersWidth({rightWidth: 400, strips: [{width: 150, iconWidth: 30}], index: 0}), 250);
+});
+
+test('the leftmost strip only leaves room for the icons right of it', () => {
+    assert.equal(peersWidth({rightWidth: 600, strips: STRIPS, index: 0}), 600 - 370 + 60);
+});
+
+test('a strip further right counts the strips left of it at their full width', () => {
+    assert.equal(peersWidth({rightWidth: 600, strips: STRIPS, index: 1}), 600 - 370 + 150 + 30);
+    assert.equal(peersWidth({rightWidth: 600, strips: STRIPS, index: 2}), 600 - 370 + 270);
+});
+
+test('a strip on the left is measured the same whatever the strips right of it show', () => {
+    const wide = [STRIPS[0], {width: 300, iconWidth: 30}];
+    const narrow = [STRIPS[0], {width: 30, iconWidth: 30}];
+    assert.equal(peersWidth({rightWidth: 600 + 300, strips: wide, index: 0}),
+        peersWidth({rightWidth: 600 + 30, strips: narrow, index: 0}));
 });

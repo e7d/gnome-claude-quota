@@ -2,35 +2,27 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {attemptRecord, outcomeFor} from '../lib/attempts.js';
-import {STATUS_POLL_SECONDS} from '../lib/policy.js';
-import {UNKNOWN_SERVICE} from '../lib/state.js';
 import {credentialsFile} from '../lib/config-dir.js';
-import {StatusClient, UsageClient, credentialExpiry, credentialsExist} from '../lib/usage.js';
+import {UsageClient, credentialExpiry} from '../lib/usage.js';
 
 const CREDENTIALS_SETTLE_SECONDS = 2;
 
 export class Poller {
-    constructor({dir, store, onResult, onServiceStatus, onCredentials, onDue, onSent}) {
+    constructor({dir, store, onResult, onCredentials, onDue, onSent}) {
         this._dir = dir;
         this._store = store;
         this._onResult = onResult;
-        this._onServiceStatus = onServiceStatus;
         this._onCredentials = onCredentials;
         this._onDue = onDue;
         this._onSent = onSent;
         this._client = new UsageClient();
-        this._status = new StatusClient();
         this._cancellable = null;
         this._timerId = null;
         this._credentialsMonitor = null;
         this._credentialsSignal = 0;
         this._credentialsSettleId = 0;
         this._destroyed = false;
-        this._statusCancellable = null;
-        this._statusTimerId = 0;
-        this._statusPolling = false;
         this._watchCredentials();
-        this._pollStatus();
     }
 
     schedule(seconds) {
@@ -43,17 +35,6 @@ export class Poller {
             this._onDue();
             return GLib.SOURCE_REMOVE;
         });
-    }
-
-    // A refresh still in flight was sent with the previous directory's token, so its
-    // answer describes the other account and must not land on this one.
-    useDir(dir) {
-        this._dir = dir;
-        this._cancellable?.cancel();
-        this._unwatchCredentials();
-        this._watchCredentials();
-        if (!this._statusTimerId)
-            this._pollStatus();
     }
 
     // Claude Code replaces the file rather than editing it in place, and a monitor
@@ -92,8 +73,6 @@ export class Poller {
 
     _onCredentialsWritten() {
         this._onCredentials(this.credentialExpiry());
-        if (!this._statusTimerId)
-            this._pollStatus();
     }
 
     async _fetchResult(cancellable, trigger) {
@@ -133,24 +112,13 @@ export class Poller {
         }
     }
 
-    async _refreshServiceStatus(cancellable, trigger) {
-        let result;
-        try {
-            result = await this._status.fetch(cancellable);
-        } catch {
-            return UNKNOWN_SERVICE;
-        }
-        this._recordAttempt({...result, expired: false, retryAfter: null, rateLimited: false}, trigger, 'status');
-        return result.value ?? UNKNOWN_SERVICE;
-    }
-
-    _recordAttempt(result, trigger, endpoint = 'usage') {
-        if (endpoint === 'usage' && result.durationMs !== null)
+    _recordAttempt(result, trigger) {
+        if (result.durationMs !== null)
             this._onSent();
         this._store.appendAttempt(attemptRecord({
             now: new Date(),
             trigger,
-            endpoint,
+            endpoint: 'usage',
             outcome: outcomeFor(result),
             status: result.status,
             retryAfter: result.retryAfter,
@@ -176,45 +144,6 @@ export class Poller {
         return this._cancellable === cancellable;
     }
 
-    // A checkout with no token has no quotas to explain, and the nested sessions the
-    // tooling runs are exactly that — so this is also what keeps a dev shell off the
-    // network, the same way a missing token already refuses the usage fetch.
-    _pollStatus() {
-        if (!credentialsExist(this._dir) || this._statusPolling)
-            return;
-        const cancellable = new Gio.Cancellable();
-        this._statusCancellable?.cancel();
-        this._statusCancellable = cancellable;
-        this._statusPolling = true;
-        this._statusRound(cancellable);
-    }
-
-    // The next round is armed whatever this one did. A poller that stops on its first bad
-    // answer looks exactly like one with nothing to report, and the badge it feeds is the
-    // only thing on screen that would have said otherwise.
-    async _statusRound(cancellable) {
-        try {
-            const service = await this._refreshServiceStatus(cancellable, 'status-timer');
-            if (!this._destroyed && this._statusCancellable === cancellable)
-                this._onServiceStatus(service);
-        } catch (error) {
-            logError(error);
-        } finally {
-            this._statusPolling = false;
-        }
-        if (!this._destroyed && this._statusCancellable === cancellable)
-            this._scheduleStatus();
-    }
-
-    _scheduleStatus() {
-        this._statusTimerId = GLib.timeout_add_seconds(
-            GLib.PRIORITY_LOW, STATUS_POLL_SECONDS, () => {
-                this._statusTimerId = 0;
-                this._pollStatus();
-                return GLib.SOURCE_REMOVE;
-            });
-    }
-
     _unwatchCredentials() {
         if (this._credentialsSettleId) {
             GLib.Source.remove(this._credentialsSettleId);
@@ -234,13 +163,7 @@ export class Poller {
             this._timerId = null;
         }
         this._unwatchCredentials();
-        if (this._statusTimerId) {
-            GLib.Source.remove(this._statusTimerId);
-            this._statusTimerId = 0;
-        }
         this._cancellable?.cancel();
-        this._statusCancellable?.cancel();
         this._client.destroy();
-        this._status.destroy();
     }
 }

@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-import {ACCOUNT_KEY, CONFIG_DIR_KEY, KEYS, LANGUAGE_KEY, PLAN_KEY, SCOPES, SCOPE_IDS, THRESHOLDS, readSettings, scopeForKind} from '../lib/settings.js';
+import {
+    ACCOUNT_DIRS_KEY, ACCOUNT_KEY, KEYS, LANGUAGE_KEY, LEGACY_CONFIG_DIR_KEY, PLAN_KEY, SCOPES, SCOPE_IDS, SHOWN_DIRS_KEY,
+    THRESHOLDS, migrateConfigDir, readSettings, scopeForKind,
+} from '../lib/settings.js';
 
 function schemaKeys() {
     const xml = readFileSync(new URL('../schemas/org.gnome.shell.extensions.claude-quota.gschema.xml',
@@ -36,12 +39,13 @@ test('every key the table names exists in the committed schema', () => {
     assert.ok(keys.includes(ACCOUNT_KEY), `${ACCOUNT_KEY} missing from schema`);
     assert.ok(keys.includes(PLAN_KEY), `${PLAN_KEY} missing from schema`);
     assert.ok(keys.includes(LANGUAGE_KEY), `${LANGUAGE_KEY} missing from schema`);
-    assert.ok(keys.includes(CONFIG_DIR_KEY), `${CONFIG_DIR_KEY} missing from schema`);
+    [LEGACY_CONFIG_DIR_KEY, ACCOUNT_DIRS_KEY, SHOWN_DIRS_KEY].forEach(key =>
+        assert.ok(keys.includes(key), `${key} missing from schema`));
 });
 
 test('the schema names no key the table does not', () => {
     const named = new Set(THRESHOLDS.flatMap(level => [level.percentKey, level.notifyKey])
-        .concat(SCOPES.flatMap(scope => [scope.barKey, scope.menuKey]), [ACCOUNT_KEY, CONFIG_DIR_KEY, PLAN_KEY, LANGUAGE_KEY]));
+        .concat(SCOPES.flatMap(scope => [scope.barKey, scope.menuKey]), [ACCOUNT_DIRS_KEY, ACCOUNT_KEY, LEGACY_CONFIG_DIR_KEY, PLAN_KEY, LANGUAGE_KEY, SHOWN_DIRS_KEY]));
     schemaKeys().forEach(key => assert.ok(named.has(key), `${key} is in the schema and not in the table`));
 });
 
@@ -84,14 +88,46 @@ test('the language key is not among the keys that re-plan alerts', () => {
     assert.ok(!KEYS.includes(LANGUAGE_KEY));
 });
 
-test('the config directory key is not among the keys that re-plan alerts', () => {
-    assert.ok(!KEYS.includes(CONFIG_DIR_KEY));
+test('the directory keys are not among the keys that re-plan alerts', () => {
+    [LEGACY_CONFIG_DIR_KEY, ACCOUNT_DIRS_KEY, SHOWN_DIRS_KEY].forEach(key => assert.ok(!KEYS.includes(key)));
 });
 
-test('the login is read from the default directory unless the key says otherwise', () => {
+test('only the default directory is listed and shown unless the keys say otherwise', () => {
     const xml = readFileSync(new URL('../schemas/org.gnome.shell.extensions.claude-quota.gschema.xml',
         import.meta.url), 'utf8');
-    assert.match(xml, new RegExp(`<key name="${CONFIG_DIR_KEY}" type="s">\\s*<default>''</default>`));
+    [ACCOUNT_DIRS_KEY, SHOWN_DIRS_KEY].forEach(key =>
+        assert.match(xml, new RegExp(`<key name="${key}" type="as">\\s*<default>\\[''\\]</default>`)));
+    assert.match(xml, new RegExp(`<key name="${LEGACY_CONFIG_DIR_KEY}" type="s">\\s*<default>''</default>`));
+});
+
+function memoryStore(values) {
+    const data = {[LEGACY_CONFIG_DIR_KEY]: '', [ACCOUNT_DIRS_KEY]: [''], [SHOWN_DIRS_KEY]: [''], ...values};
+    return {
+        data,
+        string: key => data[key],
+        strv: key => data[key],
+        setStrv: (key, value) => {
+            data[key] = value;
+        },
+        reset: key => {
+            data[key] = '';
+        },
+    };
+}
+
+test('the directory an earlier release showed is the one shown after the upgrade', () => {
+    const store = memoryStore({[LEGACY_CONFIG_DIR_KEY]: '/srv/claude'});
+    assert.equal(migrateConfigDir(store), true);
+    assert.deepEqual(store.data[ACCOUNT_DIRS_KEY], ['/srv/claude', '']);
+    assert.deepEqual(store.data[SHOWN_DIRS_KEY], ['/srv/claude']);
+    assert.equal(store.data[LEGACY_CONFIG_DIR_KEY], '');
+});
+
+test('the migration runs once: a cleared legacy key leaves the new keys alone', () => {
+    const store = memoryStore({[ACCOUNT_DIRS_KEY]: ['/srv/claude', ''], [SHOWN_DIRS_KEY]: ['']});
+    assert.equal(migrateConfigDir(store), false);
+    assert.deepEqual(store.data[ACCOUNT_DIRS_KEY], ['/srv/claude', '']);
+    assert.deepEqual(store.data[SHOWN_DIRS_KEY], ['']);
 });
 
 test('the language follows the system unless the key says otherwise', () => {

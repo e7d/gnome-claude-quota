@@ -3,19 +3,14 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
-import Pango from 'gi://Pango';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import {choiceLabel, configDir, directoryChoices, displayPath, isCandidateName, settingFor} from './lib/config-dir.js';
-import {_, format} from './lib/i18n.js';
+import {_} from './lib/i18n.js';
 import {choiceAt, choiceIndex, installLanguage, languageChoices} from './lib/language.js';
-import {ACCOUNT_KEY, CONFIG_DIR_KEY, LANGUAGE_KEY, PLAN_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
-import {parseAccountEmail} from './lib/shared-usage.js';
-import {credentialsExist, readClaudeConfig} from './lib/usage.js';
+import {ACCOUNT_KEY, LANGUAGE_KEY, PLAN_KEY, SCOPES, THRESHOLDS} from './lib/settings.js';
+import {accountsGroup} from './ui/accounts-group.js';
 import {catalogFiles} from './ui/catalog-files.js';
-
-const DIRECTORY_LABEL_CHARS = 48;
 
 const TITLES = {
     warning: () => _('High usage threshold'),
@@ -84,149 +79,14 @@ function languageRow(settings, catalogs) {
     return row;
 }
 
-function homeDirectoryNames(home) {
-    const names = [];
-    try {
-        const entries = Gio.File.new_for_path(home).enumerate_children(
-            'standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
-        let info;
-        while ((info = entries.next_file(null)) !== null) {
-            if (info.get_file_type() === Gio.FileType.DIRECTORY)
-                names.push(info.get_name());
-        }
-        entries.close(null);
-    } catch (error) {
-        logError(error);
-    }
-    return names;
-}
-
-function accountEmail(dir) {
-    const text = readClaudeConfig(dir);
-    return text === null ? null : parseAccountEmail(text);
-}
-
-function foundConfigDirs(home) {
-    return homeDirectoryNames(home)
-        .filter(isCandidateName)
-        .map(name => GLib.build_filenamev([home, name]))
-        .filter(dir => credentialsExist(dir))
-        .map(path => ({path, email: accountEmail(path)}));
-}
-
-function chooseFolderButton(settings, home) {
-    const button = new Gtk.Button({
-        icon_name: 'folder-open-symbolic',
-        tooltip_text: _('Choose folder…'),
-        valign: Gtk.Align.CENTER,
-        has_frame: false,
-    });
-    button.connect('clicked', () => {
-        const window = button.get_root();
-        const dialog = new Gtk.FileDialog({title: _('Claude directory'), initial_folder: Gio.File.new_for_path(home)});
-        dialog.select_folder(window, null, (source, result) => {
-            const path = pickedFolder(source, result);
-            if (path !== null)
-                adoptFolder({settings, home, window, path});
-        });
-    });
-    return button;
-}
-
-function pickedFolder(dialog, result) {
-    try {
-        return dialog.select_folder_finish(result).get_path();
-    } catch {
-        return null;
-    }
-}
-
-function adoptFolder({settings, home, window, path}) {
-    if (credentialsExist(path)) {
-        settings.set_string(CONFIG_DIR_KEY, settingFor(path, home));
-        return;
-    }
-    window.add_toast(new Adw.Toast({title: format(_('No Claude login in {path}'), {path: displayPath(path, home)})}));
-}
-
-// libadwaita's own popover items cap their label at 20 characters, which cuts every
-// address short; this is the same label and checkmark with room for a path and an email.
-function directoryItem() {
-    const box = new Gtk.Box();
-    box.append(new Gtk.Label({
-        xalign: 0, ellipsize: Pango.EllipsizeMode.END, max_width_chars: DIRECTORY_LABEL_CHARS,
-        width_chars: 1, valign: Gtk.Align.CENTER,
-    }));
-    box.append(new Gtk.Image({icon_name: 'object-select-symbolic', accessible_role: Gtk.AccessibleRole.PRESENTATION}));
-    return box;
-}
-
-function bindDirectoryItem(row, listItem, handlers) {
-    const box = listItem.get_child();
-    box.get_first_child().label = listItem.get_item().string;
-    const check = () => {
-        box.get_last_child().opacity = row.selected_item === listItem.get_item() ? 1 : 0;
-    };
-    check();
-    handlers.set(listItem, row.connect('notify::selected-item', check));
-}
-
-function directoryListFactory(row) {
-    const handlers = new Map();
-    const factory = new Gtk.SignalListItemFactory();
-    factory.connect('setup', (source, listItem) => listItem.set_child(directoryItem()));
-    factory.connect('bind', (source, listItem) => bindDirectoryItem(row, listItem, handlers));
-    factory.connect('unbind', (source, listItem) => {
-        row.disconnect(handlers.get(listItem));
-        handlers.delete(listItem);
-    });
-    return factory;
-}
-
-// A pick from the list writes the key while the dropdown's popover is still alive, and
-// replacing the model under it kills the preferences process. So the list only grows,
-// and the model is replaced only when it does, which only the folder picker can cause.
-function syncDirectoryRow(row, state, current) {
-    const choices = directoryChoices({found: state.choices, current, home: state.home});
-    state.syncing = true;
-    if (choices.length !== state.choices.length) {
-        state.choices = choices;
-        row.model = Gtk.StringList.new(choices.map(choice => choiceLabel(choice, state.home)));
-    }
-    const index = choices.findIndex(choice => choice.path === current);
-    if (row.selected !== index)
-        row.selected = index;
-    state.syncing = false;
-}
-
-function configDirRow(settings) {
-    const home = GLib.get_home_dir();
-    const current = () => configDir(settings.get_string(CONFIG_DIR_KEY), home);
-    const row = new Adw.ComboRow({title: _('Claude directory'), use_subtitle: true});
-    row.list_factory = directoryListFactory(row);
-    const state = {home, choices: foundConfigDirs(home), syncing: false};
-    state.choices = directoryChoices({found: state.choices, current: current(), home});
-    row.model = Gtk.StringList.new(state.choices.map(choice => choiceLabel(choice, home)));
-    syncDirectoryRow(row, state, current());
-    row.connect('notify::selected', () => {
-        if (!state.syncing)
-            settings.set_string(CONFIG_DIR_KEY, settingFor(state.choices[row.selected].path, home));
-    });
-    settings.connect(`changed::${CONFIG_DIR_KEY}`, () => syncDirectoryRow(row, state, current()));
-    row.add_suffix(chooseFolderButton(settings, home));
-    row.add_suffix(resetButton(settings, CONFIG_DIR_KEY));
-    return row;
-}
-
 function languageGroup(settings, catalogs) {
     const group = new Adw.PreferencesGroup();
-    group.add(configDirRow(settings));
     group.add(languageRow(settings, catalogs));
     return group;
 }
 
-function accountGroup(settings) {
-    const group = new Adw.PreferencesGroup({title: _('Account')});
+function displayGroup(settings) {
+    const group = new Adw.PreferencesGroup({title: _('Display')});
     group.add(visibilityRow(settings, {title: _('Display active account'), key: ACCOUNT_KEY}));
     group.add(visibilityRow(settings, {title: _('Display plan'), key: PLAN_KEY}));
     return group;
@@ -267,7 +127,8 @@ function thresholdsGroup(settings) {
 function generalPage(settings, catalogs) {
     const page = new Adw.PreferencesPage({name: 'general', title: _('General'), icon_name: 'preferences-system-symbolic'});
     page.add(languageGroup(settings, catalogs));
-    page.add(accountGroup(settings));
+    page.add(accountsGroup(settings));
+    page.add(displayGroup(settings));
     return page;
 }
 
