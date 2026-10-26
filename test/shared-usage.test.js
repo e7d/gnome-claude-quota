@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {fresherThan, loggedInConfig, parseAccountEmail, parseAccountPlan, parseSharedUsage} from '../lib/shared-usage.js';
+import {
+    accountDetailsFrom, fresherThan, loggedInConfig, parseAccountEmail, parseAccountPlan, parseSharedUsage,
+} from '../lib/shared-usage.js';
 
 const ACCOUNT = '3e1c3aca-0000-4000-8000-000000000000';
 const LIMITS = [
@@ -167,4 +169,30 @@ test('missing, unreadable and login-less configs yield none', () => {
     const noAccount = JSON.stringify({oauthAccount: null});
     assert.equal(loggedInConfig([null, 'not json', STUB, noAccount]), null);
     assert.equal(loggedInConfig([]), null);
+});
+
+const PARTIAL = JSON.stringify({oauthAccount: {accountUuid: ACCOUNT, emailAddress: 'jane.doe@example.org'}});
+const FULL = JSON.stringify({oauthAccount: {
+    accountUuid: ACCOUNT, emailAddress: 'jane.doe@example.org', organizationType: 'claude_team'}});
+
+test('the plan is read past a copy of the login that lacks the organisation', () => {
+    assert.deepEqual(accountDetailsFrom([PARTIAL, FULL]), {email: 'jane.doe@example.org', plan: 'Team'});
+});
+
+test('the address is read past a copy of the login that lacks it', () => {
+    const noEmail = JSON.stringify({oauthAccount: {accountUuid: ACCOUNT, organizationType: 'claude_pro'}});
+    assert.deepEqual(accountDetailsFrom([noEmail, FULL]), {email: 'jane.doe@example.org', plan: 'Pro'});
+});
+
+test('a detail is never borrowed from another account', () => {
+    const other = JSON.stringify({oauthAccount: {accountUuid: 'someone-else', organizationType: 'claude_max'}});
+    assert.deepEqual(accountDetailsFrom([PARTIAL, other]), {email: 'jane.doe@example.org', plan: null});
+});
+
+test('the first file holding a login decides the account, as for the usage block', () => {
+    assert.deepEqual(accountDetailsFrom([STUB, FULL]), {email: 'jane.doe@example.org', plan: 'Team'});
+});
+
+test('no login anywhere yields no details', () => {
+    assert.deepEqual(accountDetailsFrom([null, 'not json', STUB]), {email: null, plan: null});
 });
