@@ -32,8 +32,8 @@ runs:
         docker exec "$C" bash -c 'mkdir -p ~/.local/share/gnome-shell/extensions && ln -sfn /work ~/.local/share/gnome-shell/extensions/'"$UUID"
         docker exec -u root "$C" .github/logind-stub.sh
 
-    # The base image is a rolling one on purpose — the point is to run against the GNOME
-    # the distribution ships today — so what a run was measured against is worth a line.
+    # A forge reuses the image until the pin moves and another builds it fresh, so they can
+    # test different GNOMEs, and what a run was measured against is worth a line.
     - name: toolchain
       shell: bash
       run: docker exec "$C" bash -c 'gnome-shell --version; node --version; npm --version'

@@ -19,9 +19,9 @@ env:
   UUID: claude-quota@e7d.io
 
 jobs:
-  # The one place the image is chosen and built. It asks Arch which gnome-shell is current
-  # once, publishes the image under that version if the registry lacks it, and hands the tag to
-  # every other job, so a run tests one GNOME and seven jobs never race to push the same layers.
+  # The one place the image is chosen and built. It publishes the image under the Dockerfile's
+  # digest if the registry lacks it, and hands the tag to every other job, so a run tests one
+  # GNOME and seven jobs never race to push the same layers.
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 30

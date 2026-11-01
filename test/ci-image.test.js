@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
@@ -12,18 +13,20 @@ function run(command, env = {}) {
 }
 
 test('a tag handed down by the image job is used as it is', () => {
-    const result = run('resolve', {GIVEN: 'git.example/o/r-ci:0123456789abcdef-gnome-1_51.1-1'});
+    const result = run('resolve', {GIVEN: 'git.example/o/r-ci:0123456789abcdef'});
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, 'IMAGE=git.example/o/r-ci:0123456789abcdef-gnome-1_51.1-1\nGNOME=1:51.1-1\n');
+    assert.equal(result.stdout, 'IMAGE=git.example/o/r-ci:0123456789abcdef\n');
 });
 
-test('the epoch separator is restored from the tag, and absent when there is none', () => {
-    assert.equal(run('resolve', {GIVEN: 'r-ci:abc-gnome-51.1-1'}).stdout, 'IMAGE=r-ci:abc-gnome-51.1-1\nGNOME=51.1-1\n');
-    assert.equal(run('resolve', {GIVEN: 'r-ci:abc-gnome-2_52.0-3'}).stdout.split('\n')[1], 'GNOME=2:52.0-3');
+test('with no tag handed down, the tag is the digest of the Dockerfile', () => {
+    const digest = createHash('sha256').update(readFileSync('.github/ci.Dockerfile')).digest('hex');
+    const result = run('resolve', {REGISTRY: 'git.example', GITHUB_REPOSITORY: 'o/r'});
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, `IMAGE=git.example/o/r-ci:${digest.slice(0, 16)}\n`);
 });
 
 test('with no registry there is nothing to publish and nothing is attempted', () => {
-    const result = run('publish', {IMAGE: 'r-ci:abc-gnome-1_51.1-1', GNOME: '1:51.1-1'});
+    const result = run('publish', {IMAGE: 'r-ci:abc'});
     assert.equal(result.status, 0);
     assert.match(result.stdout, /no registry to share an image through/);
 });
@@ -48,15 +51,16 @@ function withFakeDocker(output, body) {
     }
 }
 
-const TAGGED = {IMAGE: 'r-ci:abc-gnome-1_51.1-1', GNOME: '1:51.1-1', REGISTRY: ''};
+const TAGGED = {IMAGE: 'r-ci:abc', REGISTRY: ''};
 
-test('use refuses an image that holds another gnome-shell, whatever its tag says', () => {
-    const result = withFakeDocker('gnome-shell 1:50.4-1', path => run('use', {...TAGGED, PATH: path}));
+test('use refuses an image that holds no gnome-shell', () => {
+    const result = withFakeDocker('', path => run('use', {...TAGGED, PATH: path}));
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /holds gnome-shell 1:50\.4-1, not 1:51\.1-1/);
+    assert.match(result.stderr, /r-ci:abc holds no gnome-shell/);
 });
 
-test('use accepts an image that holds the version the tag names', () => {
+test('use accepts an image holding gnome-shell, and says which version', () => {
     const result = withFakeDocker('gnome-shell 1:51.1-1', path => run('use', {...TAGGED, PATH: path}));
     assert.equal(result.status, 0);
+    assert.match(result.stdout, /r-ci:abc holds gnome-shell 1:51\.1-1/);
 });

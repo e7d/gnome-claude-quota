@@ -1,10 +1,7 @@
 FROM archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
 
-ARG GNOME_VERSION=unset
-
 RUN --mount=type=cache,target=/var/cache/pacman/pkg \
-    echo "building for gnome-shell ${GNOME_VERSION}" \
-    && pacman -Syu --noconfirm --needed \
+    pacman -Syu --noconfirm --needed \
         adwaita-icon-theme \
         cantarell-fonts \
         dbus \

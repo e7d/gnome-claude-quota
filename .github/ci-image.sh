@@ -1,41 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-gnome_version() {
-    local package
-    package="$(curl -fsS --max-time 20 --retry 5 --retry-all-errors --retry-delay 3 \
-        https://archlinux.org/packages/extra/x86_64/gnome-shell/json/)"
-    jq -r '(if .epoch == 0 then "" else "\(.epoch):" end) + .pkgver + "-" + .pkgrel' <<< "$package"
-}
-
 image_tag() {
-    echo "${REGISTRY:+$REGISTRY/}${GITHUB_REPOSITORY}-ci:$(sha256sum .github/ci.Dockerfile | cut -c1-16)-gnome-${1//:/_}"
+    echo "${REGISTRY:+$REGISTRY/}${GITHUB_REPOSITORY}-ci:$(sha256sum .github/ci.Dockerfile | cut -c1-16)"
 }
 
 resolve() {
-    local gnome image
-    if [ -n "${GIVEN:-}" ]; then
-        image="$GIVEN"
-        gnome="${GIVEN##*-gnome-}"
-        gnome="${gnome//_/:}"
-    else
-        gnome="$(gnome_version)"
-        case "$gnome" in
-            ''|*null*) echo "cannot tell which gnome-shell Arch ships today" >&2; return 1 ;;
-        esac
-        image="$(image_tag "$gnome")"
-    fi
-    printf 'IMAGE=%s\nGNOME=%s\n' "$image" "$gnome"
+    printf 'IMAGE=%s\n' "${GIVEN:-$(image_tag)}"
 }
 
 verify() {
     local installed
     installed="$(docker run --rm "${IMAGE:?}" pacman -Q gnome-shell | cut -d' ' -f2)"
-    [ "$installed" = "${GNOME:?}" ] || { echo "$IMAGE holds gnome-shell $installed, not $GNOME" >&2; return 1; }
+    [ -n "$installed" ] || { echo "$IMAGE holds no gnome-shell" >&2; return 1; }
+    echo "$IMAGE holds gnome-shell $installed"
 }
 
 build() {
-    docker build --pull --build-arg "GNOME_VERSION=$GNOME" -f .github/ci.Dockerfile -t "$IMAGE" .github
+    docker build --pull -f .github/ci.Dockerfile -t "$IMAGE" .github
 }
 
 retry() {
