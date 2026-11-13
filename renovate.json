@@ -1,15 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
-  ],
+  "extends": ["local>e7db/renovate-config"],
   "enabledManagers": [
     "dockerfile"
   ],
-  "timezone": "Europe/Paris",
   "schedule": [
     "* 0-5 1-7 * 1"
-  ],
-  "prConcurrentLimit": 0,
-  "prHourlyLimit": 0
+  ]
 }
